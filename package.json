@@ -1,0 +1,70 @@
+{
+  "name": "react-space-router",
+  "description": "Space router bindings for React.",
+  "version": "0.1.0",
+  "main": "dist/cjs",
+  "module": "dist/esm",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/KidkArolis/space-router.git"
+  },
+  "keywords": [
+    "browser",
+    "router",
+    "small",
+    "clientside",
+    "universal",
+    "history",
+    "location",
+    "url"
+  ],
+  "author": "Karolis Narkevicius",
+  "scripts": {
+    "test": "healthier && prettier --check '**/*.{js,css,yml}' && nyc ava",
+    "format": "prettier --write '**/*.{js,css,yml}'",
+    "coverage": "nyc --reporter=html ava",
+    "build": "node ./tasks/build.js",
+    "watch": "node ./tasks/build.js -w",
+    "version": "npm run build",
+    "release": "np",
+    "release:beta": "np --tag=beta",
+    "release:docs": "hugo -s docs && gh-pages -d docs/public"
+  },
+  "devDependencies": {
+    "@babel/cli": "^7.15.7",
+    "@babel/plugin-transform-react-jsx": "^7.14.9",
+    "@babel/preset-env": "^7.15.8",
+    "@babel/register": "^7.15.3",
+    "ava": "^3.15.0",
+    "esm": "^3.2.25",
+    "healthier": "^4.0.0",
+    "jsdom": "^18.0.0",
+    "np": "^7.5.0",
+    "nyc": "^15.1.0",
+    "prettier": "^2.4.1",
+    "react": "^17.0.2",
+    "react-dom": "^17.0.2"
+  },
+  "healthier": {
+    "global": [
+      "location",
+      "history",
+      "requestAnimationFrame"
+    ],
+    "ignore": [
+      "examples"
+    ]
+  },
+  "ava": {
+    "files": [
+      "test/*.test.js"
+    ],
+    "require": [
+      "@babel/register"
+    ]
+  },
+  "dependencies": {
+    "space-router": "^0.8.0"
+  }
+}

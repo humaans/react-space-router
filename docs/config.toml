@@ -1,0 +1,9 @@
+baseURL = "https://humaans.github.io/react-space-router"
+languageCode = "en-us"
+title = "React Space Router"
+description = "A web router with all the essentials."
+
+[markup]
+  [markup.highlight]
+    noClasses = false
+    tabWidth = 4
