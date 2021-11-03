@@ -4,135 +4,182 @@ import { createRouter } from 'space-router'
 export { qs } from 'space-router'
 
 const RouterContext = createContext()
-const RouterStoreContext = createContext()
+const CurrRouteContext = createContext()
+const NextRouteContext = createContext()
 
+/**
+ * Hook for getting the space router instance
+ */
 export function useRouter() {
-  return useContext(RouterContext).router
+  const router = useContext(RouterContext).router
+
+  if (!router) {
+    throw new Error('Application must be wrapped in <Router />')
+  }
+
+  return router
 }
 
+/**
+ * Hook for getting the currently active route
+ */
 export function useRoute() {
   return useContext(RouterContext).useRoute()
 }
 
-export function useNavigate() {
-  return useRouter().navigate
+/**
+ * Hook for getting the route being navigated to
+ */
+export function useNextRoute() {
+  return useContext(RouterContext).useNextRoute()
 }
 
 /**
- * useLink hook can be used instead of Link component
- * for more flexibility or when more convenient
+ * A hook for navigating around the app
  */
-export function useLink(href, { direct, replace, onClick: onLinkClick } = {}) {
-  const { pathname } = useRoute()
-  const navigate = useNavigate()
-  const router = useRouter()
+export function useNavigate() {
+  const route = useRoute()
+  const navigate = useRouter().navigate
+  return withMerge(navigate, route)
+}
 
-  if (!href) return { onClick: onLinkClick }
-
-  let isCurrent = false
-  if (typeof href === 'string' ? pathname === href.split('?')[0] : pathname === href.pathname) {
-    isCurrent = true
-  }
-
-  function onClick(event) {
-    onLinkClick && onLinkClick(event)
-
-    if (shouldNavigate(event)) {
-      event.preventDefault()
-      if (typeof href === 'string') {
-        navigate({ url: href, replace })
-      } else {
-        navigate({ ...href, replace })
-      }
+/**
+ * Since React Space Router allows async
+ * route navigation, we make sure that the
+ * currently active route that's displayed
+ * on the screen gets used instead of the next
+ * route that will be rendered, when merge: true
+ * is used
+ * Note: with Suspense this will not work the same,
+ * as we will trigger onNavigated right away, so I'm
+ * not sure how to handle the state in that case, not
+ * sure how to access the pre-suspension state (??),
+ * but this will work correctly for now if async
+ * resolvers are used to resolve the components
+ */
+function withMerge(navigate, route) {
+  return (to) => {
+    // we replace merge true, with the current route,
+    // so that the router.href() inside navigation
+    // correctly merges the right current route
+    if (to.merge === true) {
+      to = { ...to, merge: route }
     }
-  }
-
-  return {
-    href: typeof href === 'string' ? href : router.href(href),
-    'aria-current': isCurrent ? 'page' : undefined,
-    onClick: direct ? onLinkClick : onClick,
+    return navigate(to)
   }
 }
 
-function useRouteDefault() {
-  return useContext(RouterStoreContext)
+/**
+ * When router state is not stored in an external store
+ * by default, we read the current route from the CurrRouteContext
+ */
+function defaultUseRoute() {
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  return useContext(CurrRouteContext)
 }
 
+/**
+ * When router state is not stored in an external store
+ * by default, we read the next route from the NextRouteContext
+ */
+function defaultUseNextRoute() {
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  return useContext(NextRouteContext)
+}
+
+function makeRouter(routerOpts) {
+  return { router: createRouter(routerOpts), routerOpts }
+}
+
+/**
+ * The application must be wrapped in a Router component,
+ * this is what provides all of the required context for accessing
+ * the navigation function and the router state
+ */
 export function Router({
+  // history | hash | memory
   mode,
+  // custom query string parser/stringifier
   qs,
+  // setting sync to true will rerender synchronously
   sync,
   // a hook for subscribing to the current route in the external store
-  useRoute = useRouteDefault,
+  useRoute,
+  // a hook for subscribing to the next route in the external store
+  useNextRoute,
   // callback for when navigation starts
   onNavigating,
   // callback for when navigation completed
   onNavigated,
   children,
 }) {
-  const [currentRoute, setCurrentRoute] = useState()
-  const [router, setRouter] = useState(() => {
-    const router = createRouter({ mode, qs, sync })
-    router._mode = mode
-    router._qs = qs
-    router._sync = sync
-    return router
+  // we create the space router instance on the initial mount
+  // and we'll recreate it later only if some of the props changed
+  const [{ router, routerOpts }, setRouter] = useState(() => {
+    return makeRouter({ mode, qs, sync })
   })
-  const connectedRouter = useMemo(() => {
-    return { router, useRoute, onNavigating, onNavigated: onNavigated || setCurrentRoute }
-  }, [router, useRoute, onNavigating, onNavigated])
 
+  // store current and next routes in the state
+  const [currRoute, setCurrRoute] = useState(null)
+  const [nextRoute, setNextRoute] = useState(null)
+
+  // create a "connected" router, this is what allows us
+  // to externalise the state in case useRoute/useNextRoute
+  // are provided, we put this wrapped (or "connected") router
+  //
+  const connectedRouter = useMemo(
+    () => ({
+      router,
+      useRoute: useRoute || defaultUseRoute,
+      useNextRoute: useNextRoute || defaultUseNextRoute,
+      onNavigating(nextRoute) {
+        if (!useNextRoute) {
+          setNextRoute(nextRoute)
+        }
+      },
+      onNavigated(currRoute) {
+        if (!useRoute) {
+          setCurrRoute(currRoute)
+        }
+        if (!useNextRoute) {
+          setNextRoute(null)
+        }
+      },
+    }),
+    [router, useRoute, useNextRoute, onNavigating, onNavigated]
+  )
+
+  // recreate the router if any of it's options are changed
   useEffect(() => {
-    if (router._mode !== mode || router._qs !== qs || router._sync !== sync) {
-      setRouter(createRouter({ mode, qs, sync }))
+    if (routerOpts.mode !== mode || routerOpts.qs !== qs || routerOpts.sync !== sync) {
+      setRouter(makeRouter({ mode, qs, sync }))
     }
-  }, [router, mode, qs, sync])
+  }, [routerOpts, mode, qs, sync])
 
   return (
     <RouterContext.Provider value={connectedRouter}>
-      <RouterStoreContext.Provider value={currentRoute}>{children}</RouterStoreContext.Provider>
+      <CurrRouteContext.Provider value={currRoute}>
+        <NextRouteContext.Provider value={nextRoute}>{children}</NextRouteContext.Provider>
+      </CurrRouteContext.Provider>
     </RouterContext.Provider>
   )
 }
 
 /**
- * Routes component:
- * - creates the router
- * - adds it to Moonwave context
- * - renders the matching routes
- * - binds the router transitions to atom
+ * Routes component subscribes to the route changes
+ * and renders the route's components in a nested way
  */
 export function Routes({ routes }) {
   const { router, onNavigating, onNavigated } = useContext(RouterContext)
   const route = useRoute()
-  const prevRoutes = useRef(routes)
-  const prevScrollGroup = useRef()
-  const seq = useRef(0)
+  const onlyLatest = useOnlyLatest()
+  useScrollToTop()
 
   useEffect(() => {
-    if (!router) {
-      throw new Error('Wrap your application in <Router />')
-    }
-  }, [])
-
-  useEffect(() => {
-    if (!router) {
-      return
-    }
-
     const transition = (route) => {
-      // during hot reloading of route config module
-      // the reference of the routes changes...
-      // special casing swapping of routes, we don't
-      // want to dispatch any actions in this case since
-      // we've not changed the route, we've only updated
-      // the route config. This is relevant for hot reloading.
-      const routesSwapped = prevRoutes.current !== routes
-      prevRoutes.current = routes
-
-      latest(seq, async (isLatest) => {
+      onlyLatest(async (isLatest) => {
         if (route.data.find((r) => !r.component)) {
-          !routesSwapped && onNavigating && onNavigating(route)
+          onNavigating && onNavigating(route)
           await Promise.all(
             route.data.map(async (routeData) => {
               if (!routeData.component && routeData.resolver) {
@@ -142,30 +189,15 @@ export function Routes({ routes }) {
           )
         }
         if (isLatest()) {
-          !routesSwapped && onNavigated && onNavigated(route)
+          onNavigated && onNavigated(route)
         }
       })
     }
     return router.listen(routes, transition)
   }, [router, routes, onNavigating, onNavigated])
 
-  useEffect(() => {
-    if (!router || !route) {
-      return
-    }
-
-    const routeDatas = route.data
-    const routeData = routeDatas[routeDatas.length - 1]
-    const scrollGroup = routeData.scrollGroup || route.pattern
-    if (prevScrollGroup.current === scrollGroup) return
-    prevScrollGroup.current = scrollGroup
-    if (typeof window !== 'undefined') {
-      window.scrollTo(0, 0)
-    }
-  }, [router, route && route.pattern])
-
   return useMemo(() => {
-    if (!router || !route) {
+    if (!route) {
       return null
     }
 
@@ -173,50 +205,129 @@ export function Routes({ routes }) {
       const Component = component ? component.default || component : null
       return Component ? <Component {...props}>{children}</Component> : null
     }, null)
-  }, [router, route])
+  }, [router, route && route.pathname])
+}
+
+/**
+ * We use this to scroll to top after each navigation,
+ * while taking into account any custom scrollGroups as
+ * configured as part of the route data
+ */
+function useScrollToTop(route) {
+  const prevScrollGroup = useRef()
+
+  useEffect(() => {
+    if (!route) {
+      return
+    }
+
+    const datas = route.data
+    const data = datas[datas.length - 1]
+    const scrollGroup = data.scrollGroup || route.pathname
+    if (prevScrollGroup.current !== scrollGroup) {
+      prevScrollGroup.current = scrollGroup
+      if (typeof window !== 'undefined') {
+        window.scrollTo(0, 0)
+      }
+    }
+  }, [route && route.pathname])
+}
+
+/**
+ * useLink hook can be used instead of Link component
+ * for more flexibility or when more convenient
+ */
+export function useLink(to, { replace, onClick: onLinkClick } = {}) {
+  const route = useRoute()
+  const navigate = useNavigate()
+  const router = useRouter()
+
+  if (!to) {
+    return { onClick: onLinkClick }
+  }
+
+  // normalize a string to into an object to
+  to = typeof to === 'string' ? { url: to, replace } : { ...to, replace }
+
+  // replace merge true with the current route, so that the router.href()
+  // correctly computes the merged route based on the correct current route
+  // this is relevant when we transition into async routes
+  if (to.merge === true) to.merge = route
+
+  // to compute if route is active, we resolve the full url
+  const href = to.url ? to.url : router.href(to)
+  const isActive = route.pathname === href.replace(/^#/, '').split('?')[0]
+
+  function onClick(event) {
+    onLinkClick && onLinkClick(event)
+
+    if (shouldNavigate(event)) {
+      event.preventDefault()
+      if (typeof to === 'string') {
+        navigate({ url: to })
+      } else {
+        navigate({ ...to })
+      }
+    }
+  }
+
+  return {
+    href,
+    'aria-current': isActive ? 'page' : undefined,
+    onClick: onClick,
+  }
 }
 
 /**
  * Link component
  */
-export function Link(props) {
-  const { href, direct, replace, activeStyle, activeClassName, children, ...anchorProps } = props
-  const linkProps = useLink(href, { direct, replace })
-  const isCurrent = linkProps['aria-current'] === 'page'
-  const style = isCurrent ? { ...anchorProps.style, ...activeStyle } : anchorProps.style
-  const className = isCurrent ? classNames(anchorProps.className, activeClassName) : anchorProps.className
+export function Link({ href: to, replace, className, style, children, ...anchorProps }) {
+  const linkProps = useLink(to, { replace })
+  const isActive = linkProps['aria-current'] === 'page'
+  const evaluate = (valOrFn) => (typeof valOrFn === 'function' ? valOrFn(isActive) : valOrFn)
   return (
-    <a {...anchorProps} {...linkProps} style={style} className={className}>
+    <a {...anchorProps} {...linkProps} className={evaluate(className)} style={evaluate(style)}>
       {children}
     </a>
   )
 }
 
+/**
+ * Navigate component is used to declaratively redirect
+ */
+export function Navigate({ to }) {
+  const navigate = useNavigate()
+  const nextRoute = useNextRoute()
+  const isNavigating = !!nextRoute
+
+  useEffect(() => {
+    if (!isNavigating) {
+      navigate(to)
+    }
+  }, [isNavigating])
+
+  return null
+}
+
+/**
+ * Check if this link click event should be navigated
+ * using the router, or whether we should yield to the
+ * default browser navigation behaviour
+ */
 export function shouldNavigate(e) {
   return !e.defaultPrevented && e.button === 0 && !(e.metaKey || e.altKey || e.ctrlKey || e.shiftKey)
 }
 
-function classNames(...c) {
-  return c.filter(Boolean).join(' ')
-}
-
 /**
- * A small helper to make sure we can execute
- * async logic in a safe way by checking if
- * we are still the latest async function
- * processing something
+ * A helper to make sure we can execute async logic in a safe way by checking if
+ * we are still the latest async function processing something
  */
-function latest(seq, fn) {
-  seq.current += 1
-  const curr = seq.current
-  return fn(() => seq.current === curr)
-}
+function useOnlyLatest() {
+  const seq = useRef(0)
 
-// TODO - reimplement merge in an async safe way
-export function merge(curr, to) {
-  const pathname = to.pathname || curr.pattern
-  const params = Object.assign({}, curr.params, to.params)
-  const query = to.query === null ? null : Object.assign({}, curr.query, to.query)
-  const hash = to.hash === null ? null : to.hash || curr.hash || ''
-  return { pathname, params, query, hash }
+  return (fn) => {
+    seq.current += 1
+    const curr = seq.current
+    return fn(() => seq.current === curr)
+  }
 }

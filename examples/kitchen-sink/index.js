@@ -1,10 +1,10 @@
 /* eslint-disable react/jsx-no-bind */
 
-import React from 'react'
+import React, { useState, useEffect } from 'react'
 import ReactDOM from 'react-dom'
 import './styles.css'
 
-import { Router, Routes, Link, useRouter, useRoute, useLink, useNavigate } from '../../src'
+import { Router, Routes, Link, Navigate, useRouter, useRoute, useLink, useNavigate } from '../../src'
 
 const routes = [
   {
@@ -34,7 +34,7 @@ function Chrome({ children }) {
         <Link href='#/'>Home</Link>
         <Link href='#/kitchen'>Kitchen</Link>
         <Link href='#/sink?pa=1&ra=2'>Sink</Link>
-        <Link href='#/asink'>Asink</Link>
+        <Link href='#/asink?hello=1'>Asink</Link>
       </nav>
       <div className='Chrome-container'>
         <div className='Chrome-content'>{children}</div>
@@ -63,25 +63,42 @@ function Asink() {
 }
 
 function Toys() {
+  const { pathname } = useRoute()
   const router = useRouter()
   const navigate = useNavigate()
   const linkProps = useLink({ query: { rnd: Math.random(Math.random() * 1000) }, merge: true })
 
+  const [navigateWithComponent, setNavigateWithComponent] = useState()
+
   function delayedNavToKitchen() {
-    setTimeout(() => {
-      navigate({ url: '/kitchen' })
-    }, 1000)
+    navigate({ url: '/' })
   }
 
   function delayedHomeUsingRouter() {
     router.navigate({ url: '/' })
   }
 
+  function navigateUsingNavigate() {
+    setNavigateWithComponent(true)
+  }
+
+  function navigateWithMerge() {
+    navigate({ pathname: '/', merge: true })
+  }
+
+  useEffect(() => {
+    setNavigateWithComponent(false)
+  }, [pathname])
+
   return (
     <div className='Toys'>
       <a {...linkProps}>Navigate to random query param</a>
-      <button onClick={delayedNavToKitchen}>Navigate to Kitchen in 1s</button>
-      <button onClick={delayedHomeUsingRouter}>Navigate Home using router</button>
+      <button onClick={delayedNavToKitchen}>Navigate /home using useNavigate()</button>
+      <button onClick={delayedHomeUsingRouter}>Navigate /home using useRouter()</button>
+      <button onClick={navigateUsingNavigate}>Navigate /home using {`<Navigate />`} component</button>
+      <button onClick={navigateWithMerge}>Navigate /home with merge: true</button>
+
+      {navigateWithComponent && <Navigate to={{ pathname: '/' }} />}
     </div>
   )
 }
