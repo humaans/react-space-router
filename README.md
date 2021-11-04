@@ -1,21 +1,29 @@
-# React Space Router
+<p align="center">
+  <img width="360" src="https://user-images.githubusercontent.com/324440/140424786-813d7ace-6ec6-45ad-af6e-9318180786c5.png" alt="react space router logo, a skeleton floating in space with a react logo for the head" title="react-space-router">
+</p>
 
-> Space router bindings for React
+<h1 align="center">React Space Router</h1>
+<h4 align="center"><a href="https://github.com/KidkArolis/space-router">Space Router bindings for React</a></h4>
+<br />
 
-Space Router packs all the features you need to keep your app in sync with the url. It's distinct from many other routers in that there is only **a single callback**. This callback can be used to re-render your applocation, update a store and perform other actions on each url change. Space Router is also **stateless**, it doesn't store the current route leaving state completely up to you to handle.
+React Space Router is a set of hooks and components for keeping your app in sync with the url and performing page navigations. A library built by and used at [Humaans](https://humaans.io/).
 
-In summary, Space Router:
+- React hooks based
+- Nested and async routes
+- Support for external stores for router state
+- Scrolls to top after navigation
+- Preserves cmd + click, mouse middle click and similar behaviours
 
-- listens to url changes using popstate or hashchange event
-- extracts url parameters and parses query strings
-- supports nested routes and arbitrary route metadata
-- fits into a wide range of application architectures and frameworks
-- has no dependencies and weighs less than 2kb
+## Why
+
+"Perfection is achieved when there is nothing left to take away." React Space Router is built upon Space Router, a framework agnostic tiny core that handles url listening, route matching and navigation. React Space Router wraps that core into an idiomatic set of React components and hooks. The hope is you'll find React Space Router refreshingly simple compared to the existing alternatives.
 
 ## Install
 
-    npm i react-space-router
+```sh
+$ npm install react-space-router
+```
 
 ## API
 
-See the [API Docs](https://humaans.github.io/react-space-router) for more details.
+See the [API Docs](https://humaans.github.io/react-space-router/) for more details.

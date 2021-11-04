@@ -6,19 +6,19 @@ toc: true
 
 # React Space Router
 
-> [Space router](https://github.com/KidkArolis/space-router) bindings for React
+> [Space Router](https://kidkarolis.github.io/space-router/) bindings for React
 
-React Space Router is a set of hooks and components for keeping your app in sync with the url and performing page navigations.
+React Space Router is a set of hooks and components for keeping your app in sync with the url and performing page navigations. A library built by and used at [Humaans](https://humaans.io/).
 
-Built by [Humaans](https://humaans.io/).
+- React hooks based
+- Nested and async routes
+- Support for external stores for router state
+- Scrolls to top after navigation
+- Preserves cmd + click, mouse middle click and similar behaviours
 
 ## Why
 
-The idea behind React Space Router is simple - what is the minimum set of features you need to have a router that is useful for building most real world apps. "Perfection is achieved when there is nothing left to take away."
-
-React Space Router is built upon Space Router, a framework agnostic tiny core that handles url listening, route matching and navigation, where React Space Router wraps that core into an idiomatic set of React components and hooks.
-
-The hope here is for you to find this router super simple to use compared to the existing alternatives, all while not missing any capabilities that you couldn't purpose build in your own app.
+"Perfection is achieved when there is nothing left to take away." React Space Router is built upon Space Router, a framework agnostic tiny core that handles url listening, route matching and navigation. React Space Router wraps that core into an idiomatic set of React components and hooks. The hope is you'll find React Space Router refreshingly simple compared to the existing alternatives.
 
 ## Install
 
@@ -34,10 +34,13 @@ import { Router, Routes, Link, useRoute, useNavigate } from 'react-space-router'
 
 const routes = [
   { path: '/', component: Home },
-  { component: SettingsContainer, children: [
-    { path: '/settings', component: Settings }
-    { path: '/settings/billing', component: Billing }
-  ] }
+  {
+    component: SettingsContainer,
+    routes: [
+      { path: '/settings', component: Settings },
+      { path: '/settings/billing', component: Billing },
+    ],
+  },
 ]
 
 function App() {
@@ -53,7 +56,7 @@ function Home() {
   return (
     <div>
       <h1>Home</h1>
-      <Link url="/settings">Settings</Link>
+      <Link href='/settings'>Settings</Link>
     </div>
   )
 }
@@ -62,13 +65,13 @@ function Settings({ tag }) {
   const navigate = useNavigate()
 
   useEffect(() => {
-    navigate('/settings/billing')
+    navigate({ url: '/settings/billing' })
   }, [])
 
   return (
     <div>
       <h1>Settings</h1>
-      <Link url="/">Home</Link>
+      <Link href='/'>Home</Link>
     </div>
   )
 }
@@ -76,81 +79,124 @@ function Settings({ tag }) {
 
 ## API
 
-### `createRouter`
+### `<Router />`
 
 ```js
-const router = createRouter(options)
+<Router />
 ```
 
-Creates the router object.
+Wrap your application in this component. It provides the router navigation and state.
 
-- `options` object
-  - `mode` - one of `history`, `hash`, `memory`, default is `history`
-  - `qs` - a custom query string parser, an object of shape `{ parse, stringify }`
+- `mode` - one of `history`, `hash`, `memory`, default is `history`
+- `qs` - a custom query string parser, an object of shape `{ parse, stringify }`
+- `disableScrollToTop` - disable the scroll to top behaviour after each navigation
+- `useRoute` - a custom hook for subscribing to current route state. If this is provided, the router will assume you're storing the latest router state passed to you via `onNavigated` callback and will allow subscribing to this state via this custom hook
+- `useNextRoute` - a custom hook for subscribing to the next route state. If this is provided, the router will assume you're storing the next router state passed to you via `onNavigating` callback and will allow subscribing to this state via this custom hook, make sure to return `null` if the navigation completed, that is clear the next route in your store when `onNavigated` is called
+- `onNavigating(route)` - called when navigation starts
+- `onNavigated(route)` - called when navigation completed
 
-### `listen`
+### `<Routes />`
 
 ```js
-const dispose = router.listen(routes, onChange)
+const routes = [{ path: '/', component: Home }]
+<Routes routes={routes}>
 ```
 
-Starts listening to url changes. Every time the url changes via back/forward button or by performing programmatic navigations, the `onChange` callback will get called with the matched `route` object.
+Takes the route config and renders the components that match the current route.
 
-Note, calling listen will immediately call `onChange` based on the current URL when in `history` or `hash` modes. This does not happen in `memory` mode so that you could perform the initial navigation yourself since there is no URL to read from in that case.
-
-- `routes` an array of arrays of route definitions, where each route is an object of shape `{ path, redirect, routes, ...metadata }`
+- `routes` an array of arrays of route definitions, where each route is an object of shape `{ path, component, resolver, props, redirect, scrollGroup, routes, ...metadata }`
   - `path` is the URL pattern to match that can include named parameters as segments
+  - `component` a react component to render, can be a component wrapped in React.lazy
+  - `resolver` an async function that will return the component, for when you want to load routes async without opting into Suspense, only called once and cached
+  - `props` props to be passed to the component
   - `redirect` can be a string or a function that redirects upon entering that route
-  - `routes` is a nested object of nested route definitions
+  - `scrollGroup` a string that can group a set of routes, such that navigating between them does not scroll to top, by default each route is in it's own scroll group
+  - `routes` is an array of nested route definitions
   - `...metadata` all other other keys can be chosen by you
-- `onChange` is called with `(route)`
-  - `route` is an object of shape `{ pattern, href, pathname, params, query, search, hash }`
-  - `data` is an array of datas associated with this route
 
-Listen returns a `dispose` function that stops listening to url changes.
-
-### `navigate`
+### `<Link />`
 
 ```js
-router.navigate(to)
+<Link href='/profile/32' className='nav' replace />
 ```
 
-Navigates to a URL described.
+Renders an `<a>` link with a correct `href` and `onClick` handler that will intercept the click and push a history entry to avoid full page reload. Preserves cmd + click behaviour
 
-- `to` - navigation target
-  - `url` a relative url string or a route pattern
+- `href` navigation target, can be a string or a `to` object with:
   - `pathname` the pathname portion of the target url, which can include named segments
   - `params` params to interpolate into the named pathname segments
   - `query` the query object that will be passed through `qs.stringify`
   - `hash` the hash fragment to append to the url of the url
-  - `replace` set to true to replace the current entry in the navigation stack instead of pushing
+  - `merge` merge partial `to` object into the current route
+- `replace` set to true to replace the current entry in the navigation stack instead of pushing
+- `className` can be a function that takes `isActive` if the current route is active
+- `style` can be a function that takes `isActive` if the current route is active
+- `extraProps` a function that takes `isActive` if the current route is active
 
-Note, if `url` option is provided, the `pathname`, `params`, `query` and `hash` will be ignored.
+The rest of the props are spread onto the `<a>` element.
 
-### `match`
-
-```js
-const route = router.match(url)
-```
-
-Match the url against the routes and return the matching route object. Useful in server side rendering to translate the request URL to a matching route.
-
-### `href`
+### `<Navigate />`
 
 ```js
-const url = router.href(to)
+<Navigate to={{ pathname: '/' }} />
 ```
 
-Create a relative URL string to use in `<a href>` attribute.
+Redirects to the target url.
 
-- `to` object of shape `{ pathname, params, query, hash }`. The `params` will be interpolated into the pathname if the pathname contains any parametrised segments. The `query` is an object that will be passed through `qs.stringify`.
+- `to` can be a string or an object (refer to Link's `href` prop)
 
-### `getUrl`
+### `useRouter`
 
 ```js
-const url = router.getUrl()
+const router = useRouter()
 ```
 
-Get the current URL string. Note, this only includes the path and does not not include the protocol and host.
+Returns the Space Router instance. See [space-router docs](https://kidkarolis.github.io/space-router/) for details.
 
-You shouldn't need to read this most of the time since the updates to URL changes and the matching route will be provided in the `listen` callback. Be especially careful if you're performing asynchronous logic in your callback, such as lazily importing some modules, where you're then constructing links based on the current url - use route provided to your listener instead of calling `getUrl` as the URL might already have been updated to another value in the meantime.
+### `useRoute`
+
+```js
+const route = useRoute()
+```
+
+Returns the current route, which is an object of shape `{ pattern, href, pathname, params, query, search, hash, data }`. Data is an array of all the matched nested routes and includes components and any other metadata you've set in your route config.
+
+### `useNextRoute`
+
+```js
+const route = useNextRoute()
+```
+
+Returns the next route being navigated to. This normally will be very short lived and is mostly useful in case async routes are being used, so that you can tell that the next route is being loaded. Once the navigation completes, this will return `null`.
+
+### `useNavigate`
+
+```js
+const navigate = useNavigate()
+```
+
+Returns a function that can be called to perform navigation. Navigate takes one param - `to`, same kind of object used in `<Link href />`. An object of shape `{ url, pathname, params, query, hash, merge, replace }`.
+
+### `useLink`
+
+```js
+const linkProps = useLink(href, { replace, onClick })
+```
+
+Returns linkProps, an object of shape `{ href, aria-current, onClick}` that you can spread onto your own links. Note if no `href` is passed, then `linkProps` will only return `{ onClick }`.
+
+- `href` refer to `<Link />` href
+- `replace` whether clicking this link should replace rather than push a history entry
+- `onClick` a click handler to be called before the navigation takes place
+
+### `shouldNavigate`
+
+```js
+shouldNavigate(e)
+```
+
+Checks if the current click event should cause a history push, or should be handled by the browser. Used internally by the `<Link />` component when intercepting `click` events to let browser handle:
+
+- cmd/ctrl/alt/shift + click
+- middle mouse click
+- stop navigation if `e.defaultPrevented` is true

@@ -204,6 +204,7 @@ h1 {
 
 #TOC {
   padding: 32px;
+  margin-top: 24px;
 
   @media (min-width: 768px) {
     color: rgb(26, 26, 26);
@@ -231,8 +232,9 @@ h1 {
   margin: 0;
   list-style: none;
 }
-#TOC ul > ul {
+#TOC ul  ul {
   margin: 0;
+  margin-top: 12px;
 }
 #TOC ul {
   list-style: none;
@@ -259,7 +261,8 @@ h1 {
 }
 
 #TOC > nav > ul > li > a {
-  font-weight: bold;
+  font-size: 20px;
+  font-weight: 500;
   margin-top: 12px;
 }
 
@@ -1351,10 +1354,14 @@ tr.border-none td {
   pointer-events: none;
   width: 100%;
   height: 100%;
-  --gradient-color-1: #00aee0;
-  --gradient-color-2: #04294f;
-  --gradient-color-3: #ffb400;
-  --gradient-color-4: #ff3a00;
+  --gradient-color-1: #2636e0;
+  --gradient-color-2: #3a2388;
+  --gradient-color-3: #ff8f65;
+  --gradient-color-4: #fff67e;
   z-index: -1;
   opacity: 0.5;
+
+  @media (min-width: 768px) {
+    display: block;
+  }
 }

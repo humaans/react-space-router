@@ -23,15 +23,15 @@ export function useRouter() {
 /**
  * Hook for getting the currently active route
  */
-export function useRoute() {
-  return useContext(RouterContext).useRoute()
+export function useRoute(selector) {
+  return useContext(RouterContext).useRoute(selector)
 }
 
 /**
  * Hook for getting the route being navigated to
  */
-export function useNextRoute() {
-  return useContext(RouterContext).useNextRoute()
+export function useNextRoute(selector) {
+  return useContext(RouterContext).useNextRoute(selector)
 }
 
 /**
@@ -88,7 +88,9 @@ function defaultUseNextRoute() {
 }
 
 function makeRouter(routerOpts) {
-  return { router: createRouter(routerOpts), routerOpts }
+  const router = createRouter(routerOpts)
+  router.disableScrollToTop = routerOpts.disableScrollToTop
+  return { router, routerOpts }
 }
 
 /**
@@ -103,6 +105,8 @@ export function Router({
   qs,
   // setting sync to true will rerender synchronously
   sync,
+  // disable scroll to top behaviour after navigations
+  disableScrollToTop,
   // a hook for subscribing to the current route in the external store
   useRoute,
   // a hook for subscribing to the next route in the external store
@@ -116,7 +120,7 @@ export function Router({
   // we create the space router instance on the initial mount
   // and we'll recreate it later only if some of the props changed
   const [{ router, routerOpts }, setRouter] = useState(() => {
-    return makeRouter({ mode, qs, sync })
+    return makeRouter({ mode, qs, sync, disableScrollToTop })
   })
 
   // store current and next routes in the state
@@ -152,9 +156,9 @@ export function Router({
   // recreate the router if any of it's options are changed
   useEffect(() => {
     if (routerOpts.mode !== mode || routerOpts.qs !== qs || routerOpts.sync !== sync) {
-      setRouter(makeRouter({ mode, qs, sync }))
+      setRouter(makeRouter({ mode, qs, sync, disableScrollToTop }))
     }
-  }, [routerOpts, mode, qs, sync])
+  }, [routerOpts, mode, qs, sync, disableScrollToTop])
 
   return (
     <RouterContext.Provider value={connectedRouter}>
@@ -173,7 +177,7 @@ export function Routes({ routes }) {
   const { router, onNavigating, onNavigated } = useContext(RouterContext)
   const route = useRoute()
   const onlyLatest = useOnlyLatest()
-  useScrollToTop()
+  useScrollToTop(route, router.disableScrollToTop)
 
   useEffect(() => {
     const transition = (route) => {
@@ -213,11 +217,11 @@ export function Routes({ routes }) {
  * while taking into account any custom scrollGroups as
  * configured as part of the route data
  */
-function useScrollToTop(route) {
+function useScrollToTop(route, disabled) {
   const prevScrollGroup = useRef()
 
   useEffect(() => {
-    if (!route) {
+    if (!route || disabled) {
       return
     }
 
@@ -230,7 +234,7 @@ function useScrollToTop(route) {
         window.scrollTo(0, 0)
       }
     }
-  }, [route && route.pathname])
+  }, [route && route.pathname, disabled])
 }
 
 /**
@@ -281,12 +285,21 @@ export function useLink(to, { replace, onClick: onLinkClick } = {}) {
 /**
  * Link component
  */
-export function Link({ href: to, replace, className, style, children, ...anchorProps }) {
+export function Link({ href: to, replace, className, style, extraProps, children, ...anchorProps }) {
   const linkProps = useLink(to, { replace })
   const isActive = linkProps['aria-current'] === 'page'
   const evaluate = (valOrFn) => (typeof valOrFn === 'function' ? valOrFn(isActive) : valOrFn)
   return (
-    <a {...anchorProps} {...linkProps} className={evaluate(className)} style={evaluate(style)}>
+    <a
+      aria-current={linkProps['aria-current']}
+      {...anchorProps}
+      className={evaluate(className)}
+      style={evaluate(style)}
+      {...(extraProps ? extraProps(isActive) : {})}
+      href={linkProps.href}
+      // eslint-disable-next-line react/jsx-handler-names
+      onClick={linkProps.onClick}
+    >
       {children}
     </a>
   )
@@ -310,17 +323,17 @@ export function Navigate({ to }) {
 }
 
 /**
- * Check if this link click event should be navigated
- * using the router, or whether we should yield to the
- * default browser navigation behaviour
+ * Check if this link click event should be navigated using the router,
+ * or if we should yield to the default browser navigation behaviour
  */
 export function shouldNavigate(e) {
   return !e.defaultPrevented && e.button === 0 && !(e.metaKey || e.altKey || e.ctrlKey || e.shiftKey)
 }
 
 /**
- * A helper to make sure we can execute async logic in a safe way by checking if
- * we are still the latest async function processing something
+ * A helper hook for safely executing async logic where isLatest()
+ * can be called to check if the function is still the latest one
+ * being executed
  */
 function useOnlyLatest() {
   const seq = useRef(0)
@@ -328,6 +341,7 @@ function useOnlyLatest() {
   return (fn) => {
     seq.current += 1
     const curr = seq.current
-    return fn(() => seq.current === curr)
+    const isLatest = () => seq.current === curr
+    return fn(isLatest)
   }
 }
