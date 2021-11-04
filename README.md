@@ -3,7 +3,7 @@
 </p>
 
 <h1 align="center">React Space Router</h1>
-<h4 align="center"><a href="https://github.com/KidkArolis/space-router">Space Router bindings for React</a></h4>
+<h4 align="center"><a href="https://github.com/KidkArolis/space-router">Space Router</a> bindings for React</a></h4>
 <br />
 
 React Space Router is a set of hooks and components for keeping your app in sync with the url and performing page navigations. A library built by and used at [Humaans](https://humaans.io/).
@@ -16,7 +16,7 @@ React Space Router is a set of hooks and components for keeping your app in sync
 
 ## Why
 
-"Perfection is achieved when there is nothing left to take away." React Space Router is built upon Space Router, a framework agnostic tiny core that handles url listening, route matching and navigation. React Space Router wraps that core into an idiomatic set of React components and hooks. The hope is you'll find React Space Router refreshingly simple compared to the existing alternatives.
+"Perfection is achieved when there is nothing left to take away." React Space Router is built upon [Space Router](https://github.com/KidkArolis/space-router), a framework agnostic tiny core that handles url listening, route matching and navigation. React Space Router wraps that core into an idiomatic set of React components and hooks. The hope is you'll find React Space Router refreshingly simple compared to the existing alternatives.
 
 ## Install
 
