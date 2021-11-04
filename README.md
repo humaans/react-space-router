@@ -12,7 +12,7 @@ React Space Router is a set of hooks and components for keeping your app in sync
 - Nested and async routes
 - Support for external stores for router state
 - Scrolls to top after navigation
-- Preserves cmd + click, mouse middle click and similar behaviours
+- Preserves cmd/ctrl/alt/shift click and mouse middle click
 
 ## Why
 
