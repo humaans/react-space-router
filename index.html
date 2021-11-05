@@ -91,7 +91,7 @@
 <p>React Space Router is a set of hooks and components for keeping your app in sync with the url and performing page navigations. A library built by and used at <a href="https://humaans.io/">Humaans</a>.</p>
 <ul>
 <li>React hooks based</li>
-<li>Nested routes and async route loading</li>
+<li>Nested routes</li>
 <li>Async navigation middleware</li>
 <li>Support for external stores for router state</li>
 <li>Scrolls to top after navigation</li>
@@ -156,9 +156,7 @@
 <li><code>mode</code> one of <code>history</code>, <code>hash</code>, <code>memory</code>, default is <code>history</code></li>
 <li><code>qs</code> a custom query string parser, an object of shape `{ parse, stringify }</li>
 <li><code>useRoute</code> a custom hook for subscribing to current route state. If this is provided, the router will assume you&rsquo;re storing the latest router state passed to you via <code>onNavigated</code> callback and will allow subscribing to this state via this custom hook</li>
-<li><code>useNextRoute</code> a custom hook for subscribing to the next route state. If this is provided, the router will assume you&rsquo;re storing the next router state passed to you via <code>onNavigating</code> or <code>onResolving</code> callback and will allow subscribing to this state via this custom hook, make sure to return <code>null</code> if the navigation completed, that is clear the next route in your store when <code>onNavigated</code> is called</li>
-<li><code>onNavigating(nextRoute)</code> called when navigation starts</li>
-<li><code>onResolving(nextRoute)</code> called when async route loading starts</li>
+<li><code>onNavigating(nextRoute)</code> called when navigation starts, can be an async function which case the router will await before proceeding to finalise the transition and call <code>onNavigated</code>, note if a new navigation is started while this function is processing, <code>onNavigated</code> will no longer be called for this specific navigation, instead the next navigation kicks on and repeats the same sequence</li>
 <li><code>onNavigated(route)</code> called when navigation completed</li>
 </ul>
 <h3 id="routes-"><code>&lt;Routes /&gt;</code></h3>
@@ -166,11 +164,10 @@
 <span class="o">&lt;</span><span class="nx">Routes</span> <span class="nx">routes</span><span class="o">=</span><span class="p">{</span><span class="nx">routes</span><span class="p">}</span><span class="o">&gt;</span>
 </code></pre></div><p>Takes the route config and renders the components that match the current route.</p>
 <ul>
-<li><code>routes</code> an array of arrays of route definitions, where each route is an object of shape <code>{ path, component, resolver, props, redirect, scrollGroup, routes, ...metadata }</code>
+<li><code>routes</code> an array of arrays of route definitions, where each route is an object of shape <code>{ path, component, props, redirect, scrollGroup, routes, ...metadata }</code>
 <ul>
 <li><code>path</code> is the URL pattern to match that can include named parameters as segments</li>
 <li><code>component</code> a react component to render, can be a component wrapped in React.lazy</li>
-<li><code>resolver</code> an async function that will return the component, for when you want to load routes async without opting into Suspense, only called once and cached</li>
 <li><code>props</code> props to be passed to the component</li>
 <li><code>redirect</code> can be a string or a function that redirects upon entering that route</li>
 <li><code>scrollGroup</code> a string that can group a set of routes, such that navigating between them does not scroll to top, by default each route is in it&rsquo;s own scroll group</li>
@@ -211,9 +208,6 @@
 <h3 id="useroute"><code>useRoute</code></h3>
 <div class="highlight"><pre class="chroma"><code class="language-js" data-lang="js"><span class="kr">const</span> <span class="nx">route</span> <span class="o">=</span> <span class="nx">useRoute</span><span class="p">()</span>
 </code></pre></div><p>Returns the current route, which is an object of shape <code>{ pattern, href, pathname, params, query, search, hash, data }</code>. Data is an array of all the matched nested routes and includes components and any other metadata you&rsquo;ve set in your route config.</p>
-<h3 id="usenextroute"><code>useNextRoute</code></h3>
-<div class="highlight"><pre class="chroma"><code class="language-js" data-lang="js"><span class="kr">const</span> <span class="nx">route</span> <span class="o">=</span> <span class="nx">useNextRoute</span><span class="p">()</span>
-</code></pre></div><p>Returns the next route being navigated to. This normally will be very short lived and is mostly useful in case async routes are being used, so that you can tell that the next route is being loaded. Once the navigation completes, this will return <code>null</code>.</p>
 <h3 id="usenavigate"><code>useNavigate</code></h3>
 <div class="highlight"><pre class="chroma"><code class="language-js" data-lang="js"><span class="kr">const</span> <span class="nx">navigate</span> <span class="o">=</span> <span class="nx">useNavigate</span><span class="p">()</span>
 </code></pre></div><p>Returns a function that can be called to perform navigation. Navigate takes one param - <code>to</code>, same kind of object used in <code>&lt;Link href /&gt;</code>. An object of shape <code>{ url, pathname, params, query, hash, merge, replace }</code>.</p>
@@ -251,7 +245,6 @@
         <li><a href="#navigate-"><code>&lt;Navigate /&gt;</code></a></li>
         <li><a href="#userouter"><code>useRouter</code></a></li>
         <li><a href="#useroute"><code>useRoute</code></a></li>
-        <li><a href="#usenextroute"><code>useNextRoute</code></a></li>
         <li><a href="#usenavigate"><code>useNavigate</code></a></li>
         <li><a href="#uselink"><code>useLink</code></a></li>
         <li><a href="#shouldnavigate"><code>shouldNavigate</code></a></li>
