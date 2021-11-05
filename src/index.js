@@ -44,18 +44,13 @@ export function useNavigate() {
 }
 
 /**
- * Since React Space Router allows async
- * route navigation, we make sure that the
- * currently active route that's displayed
- * on the screen gets used instead of the next
- * route that will be rendered, when merge: true
- * is used
- * Note: with Suspense this will not work the same,
- * as we will trigger onNavigated right away, so I'm
- * not sure how to handle the state in that case, not
- * sure how to access the pre-suspension state (??),
- * but this will work correctly for now if async
- * resolvers are used to resolve the components
+ * Since React Space Router allows async route loading/processing, we make sure that the
+ * currently active route that's displayed on the screen gets used instead of the next
+ * route that will be rendered, when merge: true is used to compute hrefs
+ *
+ * Note: with Suspense this will not work the same, as we will trigger onNavigated right away,
+ * so I'm not sure how to handle the state in that case, not sure how to access the pre-suspension
+ * state, but this will work correctly for now if onNavigating is async and blocking
  */
 function withMerge(navigate, route) {
   return (to) => {
@@ -109,8 +104,10 @@ export function Router({
   useRoute,
   // a hook for subscribing to the next route in the external store
   useNextRoute,
-  // callback for when navigation starts
+  // callback for when navigation starts, by default, noop
   onNavigating,
+  // callback for when async route loadig starts
+  onResolving,
   // callback for when navigation completed
   onNavigated,
   children,
@@ -134,7 +131,8 @@ export function Router({
       router,
       useRoute: useRoute || defaultUseRoute,
       useNextRoute: useNextRoute || defaultUseNextRoute,
-      onNavigating(nextRoute) {
+      onNavigating,
+      onResolving() {
         if (!useNextRoute) {
           setNextRoute(nextRoute)
         }
@@ -177,7 +175,7 @@ export function Routes({
   // disable scroll to top behaviour after navigations
   disableScrollToTop,
 }) {
-  const { router, onNavigating, onNavigated } = useContext(RouterContext)
+  const { router, onNavigating, onResolving, onNavigated } = useContext(RouterContext)
   const route = useRoute()
   const onlyLatest = useOnlyLatest()
   useScrollToTop(route, disableScrollToTop)
@@ -185,16 +183,21 @@ export function Routes({
   useEffect(() => {
     const transition = (route) => {
       onlyLatest(async (isLatest) => {
-        if (route.data.find((r) => !r.component)) {
-          onNavigating && onNavigating(route)
-          await Promise.all(
-            route.data.map(async (routeData) => {
-              if (!routeData.component && routeData.resolver) {
-                routeData.component = await routeData.resolver()
-              }
-            })
-          )
+        await (onNavigating && onNavigating(route))
+
+        if (isLatest()) {
+          if (route.data.find((r) => !r.component)) {
+            onResolving && onResolving(route)
+            await Promise.all(
+              route.data.map(async (routeData) => {
+                if (!routeData.component && routeData.resolver) {
+                  routeData.component = await routeData.resolver()
+                }
+              })
+            )
+          }
         }
+
         if (isLatest()) {
           onNavigated && onNavigated(route)
         }

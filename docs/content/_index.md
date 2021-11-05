@@ -11,14 +11,15 @@ toc: true
 React Space Router is a set of hooks and components for keeping your app in sync with the url and performing page navigations. A library built by and used at [Humaans](https://humaans.io/).
 
 - React hooks based
-- Nested and async routes
+- Nested routes and async route loading
+- Async navigation middleware
 - Support for external stores for router state
 - Scrolls to top after navigation
 - Preserves cmd/ctrl/alt/shift click and mouse middle click
 
 ## Why
 
-"Perfection is achieved when there is nothing left to take away." React Space Router is built upon Space Router, a framework agnostic tiny core that handles url listening, route matching and navigation. React Space Router wraps that core into an idiomatic set of React components and hooks. The hope is you'll find React Space Router refreshingly simple compared to the existing alternatives.
+"Perfection is achieved when there is nothing left to take away." React Space Router is built upon Space Router, a framework agnostic tiny core that handles url listening, route matching and navigation. React Space Router wraps that core into an idiomatic set of React components and hooks. The hope is you'll find React Space Router refreshingly simple compared to the existing alternatives, with the right level of extensibility.
 
 ## Install
 
@@ -90,8 +91,9 @@ Wrap your application in this component. It provides the router navigation and s
 - `mode` one of `history`, `hash`, `memory`, default is `history`
 - `qs` a custom query string parser, an object of shape `{ parse, stringify }
 - `useRoute` a custom hook for subscribing to current route state. If this is provided, the router will assume you're storing the latest router state passed to you via `onNavigated` callback and will allow subscribing to this state via this custom hook
-- `useNextRoute` a custom hook for subscribing to the next route state. If this is provided, the router will assume you're storing the next router state passed to you via `onNavigating` callback and will allow subscribing to this state via this custom hook, make sure to return `null` if the navigation completed, that is clear the next route in your store when `onNavigated` is called
-- `onNavigating(route)` called when navigation starts
+- `useNextRoute` a custom hook for subscribing to the next route state. If this is provided, the router will assume you're storing the next router state passed to you via `onNavigating` or `onResolving` callback and will allow subscribing to this state via this custom hook, make sure to return `null` if the navigation completed, that is clear the next route in your store when `onNavigated` is called
+- `onNavigating(nextRoute)` called when navigation starts
+- `onResolving(nextRoute)` called when async route loading starts
 - `onNavigated(route)` called when navigation completed
 
 ### `<Routes />`
