@@ -93,6 +93,7 @@ function Toys() {
   return (
     <div className='Toys'>
       <a {...linkProps}>Navigate to random query param</a>
+      <Link href={{ query: { mm: 'foo' }, merge: true }}>Merges in ?mm=foo</Link>
       <button onClick={delayedNavToKitchen}>Navigate /home using useNavigate()</button>
       <button onClick={delayedHomeUsingRouter}>Navigate /home using useRouter()</button>
       <button onClick={navigateUsingNavigate}>Navigate /home using {`<Navigate />`} component</button>
