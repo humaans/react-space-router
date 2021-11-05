@@ -42,16 +42,16 @@
 
   <link rel="canonical" href="https://humaans.github.io/react-space-router/">  
 
-  <meta name="twitter:title" content="Figbird">
-  <meta name="twitter:description" content="Effortless realtime data management for React + Feathers applications.">
+  <meta name="twitter:title" content="React Space Router">
+  <meta name="twitter:description" content="Space Router bindings for React">
   <meta name="twitter:card" content="summary"/>
-  <meta name="twitter:image" content="https://humaans.github.io/figbird/figbird.jpg"/>
-  <meta name="twitter:image:alt" content="Figbird"/>
+  <meta name="twitter:image" content="https://humaans.github.io/react-space-router/react-space.jpg"/>
+  <meta name="twitter:image:alt" content="React Space Router"/>
 
-  <meta property="og:title" content="Figbird" />
-  <meta property="og:description" content="Effortless realtime data management for React + Feathers applications.">
-  <meta property="og:url" content="https://humaans.github.io/figbird/" />
-  <meta property="og:image" content="https://humaans.github.io/figbird/figbird.jpg" />
+  <meta property="og:title" content="React Space Router" />
+  <meta property="og:description" content="Space Router bindings for React">
+  <meta property="og:url" content="https://humaans.github.io/react-space-router/" />
+  <meta property="og:image" content="https://humaans.github.io/react-space-router/react-space.jpg" />
 
   <link
   rel="shortcut icon"
@@ -91,13 +91,14 @@
 <p>React Space Router is a set of hooks and components for keeping your app in sync with the url and performing page navigations. A library built by and used at <a href="https://humaans.io/">Humaans</a>.</p>
 <ul>
 <li>React hooks based</li>
-<li>Nested and async routes</li>
+<li>Nested routes and async route loading</li>
+<li>Async navigation middleware</li>
 <li>Support for external stores for router state</li>
 <li>Scrolls to top after navigation</li>
 <li>Preserves cmd/ctrl/alt/shift click and mouse middle click</li>
 </ul>
 <h2 id="why">Why</h2>
-<p>&ldquo;Perfection is achieved when there is nothing left to take away.&rdquo; React Space Router is built upon Space Router, a framework agnostic tiny core that handles url listening, route matching and navigation. React Space Router wraps that core into an idiomatic set of React components and hooks. The hope is you&rsquo;ll find React Space Router refreshingly simple compared to the existing alternatives.</p>
+<p>&ldquo;Perfection is achieved when there is nothing left to take away.&rdquo; React Space Router is built upon Space Router, a framework agnostic tiny core that handles url listening, route matching and navigation. React Space Router wraps that core into an idiomatic set of React components and hooks. The hope is you&rsquo;ll find React Space Router refreshingly simple compared to the existing alternatives, with the right level of extensibility.</p>
 <h2 id="install">Install</h2>
 <div class="highlight"><pre class="chroma"><code class="language-sh" data-lang="sh">$ npm install react-space-router
 </code></pre></div><h2 id="example">Example</h2>
@@ -152,13 +153,13 @@
 <div class="highlight"><pre class="chroma"><code class="language-js" data-lang="js"><span class="o">&lt;</span><span class="nx">Router</span> <span class="o">/&gt;</span>
 </code></pre></div><p>Wrap your application in this component. It provides the router navigation and state.</p>
 <ul>
-<li><code>mode</code> - one of <code>history</code>, <code>hash</code>, <code>memory</code>, default is <code>history</code></li>
-<li><code>qs</code> - a custom query string parser, an object of shape <code>{ parse, stringify }</code></li>
-<li><code>disableScrollToTop</code> - disable the scroll to top behaviour after each navigation</li>
-<li><code>useRoute</code> - a custom hook for subscribing to current route state. If this is provided, the router will assume you&rsquo;re storing the latest router state passed to you via <code>onNavigated</code> callback and will allow subscribing to this state via this custom hook</li>
-<li><code>useNextRoute</code> - a custom hook for subscribing to the next route state. If this is provided, the router will assume you&rsquo;re storing the next router state passed to you via <code>onNavigating</code> callback and will allow subscribing to this state via this custom hook, make sure to return <code>null</code> if the navigation completed, that is clear the next route in your store when <code>onNavigated</code> is called</li>
-<li><code>onNavigating(route)</code> - called when navigation starts</li>
-<li><code>onNavigated(route)</code> - called when navigation completed</li>
+<li><code>mode</code> one of <code>history</code>, <code>hash</code>, <code>memory</code>, default is <code>history</code></li>
+<li><code>qs</code> a custom query string parser, an object of shape `{ parse, stringify }</li>
+<li><code>useRoute</code> a custom hook for subscribing to current route state. If this is provided, the router will assume you&rsquo;re storing the latest router state passed to you via <code>onNavigated</code> callback and will allow subscribing to this state via this custom hook</li>
+<li><code>useNextRoute</code> a custom hook for subscribing to the next route state. If this is provided, the router will assume you&rsquo;re storing the next router state passed to you via <code>onNavigating</code> or <code>onResolving</code> callback and will allow subscribing to this state via this custom hook, make sure to return <code>null</code> if the navigation completed, that is clear the next route in your store when <code>onNavigated</code> is called</li>
+<li><code>onNavigating(nextRoute)</code> called when navigation starts</li>
+<li><code>onResolving(nextRoute)</code> called when async route loading starts</li>
+<li><code>onNavigated(route)</code> called when navigation completed</li>
 </ul>
 <h3 id="routes-"><code>&lt;Routes /&gt;</code></h3>
 <div class="highlight"><pre class="chroma"><code class="language-js" data-lang="js"><span class="kr">const</span> <span class="nx">routes</span> <span class="o">=</span> <span class="p">[{</span> <span class="nx">path</span><span class="o">:</span> <span class="s1">&#39;/&#39;</span><span class="p">,</span> <span class="nx">component</span><span class="o">:</span> <span class="nx">Home</span> <span class="p">}]</span>
@@ -177,6 +178,7 @@
 <li><code>...metadata</code> all other other keys can be chosen by you</li>
 </ul>
 </li>
+<li><code>disableScrollToTop</code> disable the scroll to top behaviour after each navigation</li>
 </ul>
 <h3 id="link-"><code>&lt;Link /&gt;</code></h3>
 <div class="highlight"><pre class="chroma"><code class="language-js" data-lang="js"><span class="o">&lt;</span><span class="nx">Link</span> <span class="nx">href</span><span class="o">=</span><span class="s1">&#39;/profile/32&#39;</span> <span class="nx">className</span><span class="o">=</span><span class="s1">&#39;nav&#39;</span> <span class="nx">replace</span> <span class="o">/&gt;</span>
