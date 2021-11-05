@@ -23,15 +23,15 @@ export function useRouter() {
 /**
  * Hook for getting the currently active route
  */
-export function useRoute(selector) {
-  return useContext(RouterContext).useRoute(selector)
+export function useRoute(...args) {
+  return useContext(RouterContext).useRoute(...args)
 }
 
 /**
  * Hook for getting the route being navigated to
  */
-export function useNextRoute(selector) {
-  return useContext(RouterContext).useNextRoute(selector)
+export function useNextRoute(...args) {
+  return useContext(RouterContext).useNextRoute(...args)
 }
 
 /**
