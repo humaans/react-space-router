@@ -319,15 +319,15 @@ export function Link({ href: to, replace, className, style, extraProps, children
  * Navigate component is used to declaratively redirect
  */
 export function Navigate({ to }) {
+  const [navigated, setNavigated] = useState(false)
   const navigate = useNavigate()
-  const nextRoute = useNextRoute()
-  const isNavigating = !!nextRoute
 
   useEffect(() => {
-    if (!isNavigating) {
+    if (!navigated) {
       navigate(to)
+      setNavigated(true)
     }
-  }, [isNavigating])
+  }, [navigated])
 
   return null
 }
