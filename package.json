@@ -31,7 +31,7 @@
     "release:docs": "hugo -s docs && gh-pages -d docs/public"
   },
   "dependencies": {
-    "space-router": "^0.8.1"
+    "space-router": "^0.8.2"
   },
   "devDependencies": {
     "@babel/cli": "^7.16.0",
