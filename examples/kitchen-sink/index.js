@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react'
 import ReactDOM from 'react-dom'
 import './styles.css'
 
-import { Router, Routes, Link, Navigate, useRouter, useRoute, useLink, useNavigate } from '../../src'
+import { Router, Routes, Link, Navigate, useRouter, useRoute, useLink, useNavigate } from '../..'
 
 const routes = [
   {
