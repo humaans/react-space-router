@@ -105,8 +105,6 @@ export function Router({
   qs,
   // setting sync to true will rerender synchronously
   sync,
-  // disable scroll to top behaviour after navigations
-  disableScrollToTop,
   // a hook for subscribing to the current route in the external store
   useRoute,
   // a hook for subscribing to the next route in the external store
@@ -120,7 +118,7 @@ export function Router({
   // we create the space router instance on the initial mount
   // and we'll recreate it later only if some of the props changed
   const [{ router, routerOpts }, setRouter] = useState(() => {
-    return makeRouter({ mode, qs, sync, disableScrollToTop })
+    return makeRouter({ mode, qs, sync })
   })
 
   // store current and next routes in the state
@@ -156,9 +154,9 @@ export function Router({
   // recreate the router if any of it's options are changed
   useEffect(() => {
     if (routerOpts.mode !== mode || routerOpts.qs !== qs || routerOpts.sync !== sync) {
-      setRouter(makeRouter({ mode, qs, sync, disableScrollToTop }))
+      setRouter(makeRouter({ mode, qs, sync }))
     }
-  }, [routerOpts, mode, qs, sync, disableScrollToTop])
+  }, [routerOpts, mode, qs, sync])
 
   return (
     <RouterContext.Provider value={connectedRouter}>
@@ -173,11 +171,16 @@ export function Router({
  * Routes component subscribes to the route changes
  * and renders the route's components in a nested way
  */
-export function Routes({ routes }) {
+export function Routes({
+  // route config
+  routes,
+  // disable scroll to top behaviour after navigations
+  disableScrollToTop,
+}) {
   const { router, onNavigating, onNavigated } = useContext(RouterContext)
   const route = useRoute()
   const onlyLatest = useOnlyLatest()
-  useScrollToTop(route, router.disableScrollToTop)
+  useScrollToTop(route, disableScrollToTop)
 
   useEffect(() => {
     const transition = (route) => {

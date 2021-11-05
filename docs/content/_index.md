@@ -87,13 +87,12 @@ function Settings({ tag }) {
 
 Wrap your application in this component. It provides the router navigation and state.
 
-- `mode` - one of `history`, `hash`, `memory`, default is `history`
-- `qs` - a custom query string parser, an object of shape `{ parse, stringify }`
-- `disableScrollToTop` - disable the scroll to top behaviour after each navigation
-- `useRoute` - a custom hook for subscribing to current route state. If this is provided, the router will assume you're storing the latest router state passed to you via `onNavigated` callback and will allow subscribing to this state via this custom hook
-- `useNextRoute` - a custom hook for subscribing to the next route state. If this is provided, the router will assume you're storing the next router state passed to you via `onNavigating` callback and will allow subscribing to this state via this custom hook, make sure to return `null` if the navigation completed, that is clear the next route in your store when `onNavigated` is called
-- `onNavigating(route)` - called when navigation starts
-- `onNavigated(route)` - called when navigation completed
+- `mode` one of `history`, `hash`, `memory`, default is `history`
+- `qs` a custom query string parser, an object of shape `{ parse, stringify }
+- `useRoute` a custom hook for subscribing to current route state. If this is provided, the router will assume you're storing the latest router state passed to you via `onNavigated` callback and will allow subscribing to this state via this custom hook
+- `useNextRoute` a custom hook for subscribing to the next route state. If this is provided, the router will assume you're storing the next router state passed to you via `onNavigating` callback and will allow subscribing to this state via this custom hook, make sure to return `null` if the navigation completed, that is clear the next route in your store when `onNavigated` is called
+- `onNavigating(route)` called when navigation starts
+- `onNavigated(route)` called when navigation completed
 
 ### `<Routes />`
 
@@ -113,6 +112,7 @@ Takes the route config and renders the components that match the current route.
   - `scrollGroup` a string that can group a set of routes, such that navigating between them does not scroll to top, by default each route is in it's own scroll group
   - `routes` is an array of nested route definitions
   - `...metadata` all other other keys can be chosen by you
+- `disableScrollToTop` disable the scroll to top behaviour after each navigation
 
 ### `<Link />`
 
