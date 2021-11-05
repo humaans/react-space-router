@@ -132,10 +132,11 @@ export function Router({
       useRoute: useRoute || defaultUseRoute,
       useNextRoute: useNextRoute || defaultUseNextRoute,
       onNavigating,
-      onResolving() {
+      onResolving(nextRoute) {
         if (!useNextRoute) {
           setNextRoute(nextRoute)
         }
+        onResolving(nextRoute)
       },
       onNavigated(currRoute) {
         if (!useRoute) {
@@ -144,6 +145,7 @@ export function Router({
         if (!useNextRoute) {
           setNextRoute(null)
         }
+        onNavigated(currRoute)
       },
     }),
     [router, useRoute, useNextRoute, onNavigating, onResolving, onNavigated]
