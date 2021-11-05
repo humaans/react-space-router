@@ -1,3 +1,9 @@
+## 0.2.0
+
+- Remove async route `resolver` feature and `useNextRoute` - can be implemented in userland. Previously, `useNextRoute` was used in `<Navigate />` to know if the router is in the process of navigating, but now we use local state for that. This allowed removing `useNextRoute`, and so `resolver` can now be more easily implemented in userland via `onNavigating`, which can block and allows processing matched routes in any way, such as awaiting on `data.component = await data.resolver()`. All in all, removing API surface is great, less is more, and async route resolving is getting superseded by Suspense anyway.
+- Fix the webpack bundling issues caused by `setImmediate` usage in `space-router`.
+- Fix `onNavigated` callback, which wasn't getting called correctly previously.
+
 ## 0.1.0
 
 Ladies and gentlemen we are floating in space

@@ -11,7 +11,7 @@ toc: true
 React Space Router is a set of hooks and components for keeping your app in sync with the url and performing page navigations. A library built by and used at [Humaans](https://humaans.io/).
 
 - React hooks based
-- Nested routes and async route loading
+- Nested routes
 - Async navigation middleware
 - Support for external stores for router state
 - Scrolls to top after navigation
@@ -91,9 +91,7 @@ Wrap your application in this component. It provides the router navigation and s
 - `mode` one of `history`, `hash`, `memory`, default is `history`
 - `qs` a custom query string parser, an object of shape `{ parse, stringify }
 - `useRoute` a custom hook for subscribing to current route state. If this is provided, the router will assume you're storing the latest router state passed to you via `onNavigated` callback and will allow subscribing to this state via this custom hook
-- `useNextRoute` a custom hook for subscribing to the next route state. If this is provided, the router will assume you're storing the next router state passed to you via `onNavigating` or `onResolving` callback and will allow subscribing to this state via this custom hook, make sure to return `null` if the navigation completed, that is clear the next route in your store when `onNavigated` is called
-- `onNavigating(nextRoute)` called when navigation starts
-- `onResolving(nextRoute)` called when async route loading starts
+- `onNavigating(nextRoute)` called when navigation starts, can be an async function which case the router will await before proceeding to finalise the transition and call `onNavigated`, note if a new navigation is started while this function is processing, `onNavigated` will no longer be called for this specific navigation, instead the next navigation kicks on and repeats the same sequence
 - `onNavigated(route)` called when navigation completed
 
 ### `<Routes />`
@@ -105,10 +103,9 @@ const routes = [{ path: '/', component: Home }]
 
 Takes the route config and renders the components that match the current route.
 
-- `routes` an array of arrays of route definitions, where each route is an object of shape `{ path, component, resolver, props, redirect, scrollGroup, routes, ...metadata }`
+- `routes` an array of arrays of route definitions, where each route is an object of shape `{ path, component, props, redirect, scrollGroup, routes, ...metadata }`
   - `path` is the URL pattern to match that can include named parameters as segments
   - `component` a react component to render, can be a component wrapped in React.lazy
-  - `resolver` an async function that will return the component, for when you want to load routes async without opting into Suspense, only called once and cached
   - `props` props to be passed to the component
   - `redirect` can be a string or a function that redirects upon entering that route
   - `scrollGroup` a string that can group a set of routes, such that navigating between them does not scroll to top, by default each route is in it's own scroll group
@@ -162,14 +159,6 @@ const route = useRoute()
 ```
 
 Returns the current route, which is an object of shape `{ pattern, href, pathname, params, query, search, hash, data }`. Data is an array of all the matched nested routes and includes components and any other metadata you've set in your route config.
-
-### `useNextRoute`
-
-```js
-const route = useNextRoute()
-```
-
-Returns the next route being navigated to. This normally will be very short lived and is mostly useful in case async routes are being used, so that you can tell that the next route is being loaded. Once the navigation completes, this will return `null`.
 
 ### `useNavigate`
 

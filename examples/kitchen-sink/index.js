@@ -1,6 +1,6 @@
 /* eslint-disable react/jsx-no-bind */
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import ReactDOM from 'react-dom'
 import './styles.css'
 
@@ -21,7 +21,20 @@ const routes = [
 
 function App() {
   return (
-    <Router mode='hash'>
+    <Router
+      mode='hash'
+      onNavigating={useCallback(async (route) => {
+        if (route.data.find((r) => !r.component)) {
+          await Promise.all(
+            route.data.map(async (routeData) => {
+              if (!routeData.component && routeData.resolver) {
+                routeData.component = await routeData.resolver()
+              }
+            })
+          )
+        }
+      }, [])}
+    >
       <Routes routes={routes} />
     </Router>
   )

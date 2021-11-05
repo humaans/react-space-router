@@ -3,9 +3,8 @@ import { createRouter } from 'space-router'
 
 export { qs } from 'space-router'
 
-const RouterContext = createContext()
-const CurrRouteContext = createContext()
-const NextRouteContext = createContext()
+export const RouterContext = createContext()
+export const CurrRouteContext = createContext()
 
 /**
  * Hook for getting the space router instance
@@ -25,13 +24,6 @@ export function useRouter() {
  */
 export function useRoute(...args) {
   return useContext(RouterContext).useRoute(...args)
-}
-
-/**
- * Hook for getting the route being navigated to
- */
-export function useNextRoute(...args) {
-  return useContext(RouterContext).useNextRoute(...args)
 }
 
 /**
@@ -73,15 +65,6 @@ function defaultUseRoute() {
   return useContext(CurrRouteContext)
 }
 
-/**
- * When router state is not stored in an external store
- * by default, we read the next route from the NextRouteContext
- */
-function defaultUseNextRoute() {
-  // eslint-disable-next-line react-hooks/rules-of-hooks
-  return useContext(NextRouteContext)
-}
-
 function makeRouter(routerOpts) {
   const router = createRouter(routerOpts)
   router.disableScrollToTop = routerOpts.disableScrollToTop
@@ -102,14 +85,11 @@ export function Router({
   sync,
   // a hook for subscribing to the current route in the external store
   useRoute,
-  // a hook for subscribing to the next route in the external store
-  useNextRoute,
   // callback for when navigation starts, by default, noop
   onNavigating,
-  // callback for when async route loadig starts
-  onResolving,
   // callback for when navigation completed
   onNavigated,
+  // the rest of the app
   children,
 }) {
   // we create the space router instance on the initial mount
@@ -120,35 +100,23 @@ export function Router({
 
   // store current and next routes in the state
   const [currRoute, setCurrRoute] = useState(null)
-  const [nextRoute, setNextRoute] = useState(null)
 
   // create a "connected" router, this is what allows us
-  // to externalise the state in case useRoute/useNextRoute
-  // are provided, we put this wrapped (or "connected") router
-  //
+  // to externalise the state in case when useRoute is provided
+  // this wrapped (or "connected") router is what we put into context
   const connectedRouter = useMemo(
     () => ({
       router,
       useRoute: useRoute || defaultUseRoute,
-      useNextRoute: useNextRoute || defaultUseNextRoute,
       onNavigating,
-      onResolving(nextRoute) {
-        if (!useNextRoute) {
-          setNextRoute(nextRoute)
-        }
-        onResolving(nextRoute)
-      },
       onNavigated(currRoute) {
         if (!useRoute) {
           setCurrRoute(currRoute)
         }
-        if (!useNextRoute) {
-          setNextRoute(null)
-        }
-        onNavigated(currRoute)
+        onNavigated && onNavigated(currRoute)
       },
     }),
-    [router, useRoute, useNextRoute, onNavigating, onResolving, onNavigated]
+    [router, useRoute, onNavigating, onNavigated]
   )
 
   // recreate the router if any of it's options are changed
@@ -160,9 +128,7 @@ export function Router({
 
   return (
     <RouterContext.Provider value={connectedRouter}>
-      <CurrRouteContext.Provider value={currRoute}>
-        <NextRouteContext.Provider value={nextRoute}>{children}</NextRouteContext.Provider>
-      </CurrRouteContext.Provider>
+      <CurrRouteContext.Provider value={currRoute}>{children}</CurrRouteContext.Provider>
     </RouterContext.Provider>
   )
 }
@@ -177,7 +143,7 @@ export function Routes({
   // disable scroll to top behaviour after navigations
   disableScrollToTop,
 }) {
-  const { router, onNavigating, onResolving, onNavigated } = useContext(RouterContext)
+  const { router, onNavigating, onNavigated } = useContext(RouterContext)
   const route = useRoute()
   const onlyLatest = useOnlyLatest()
   useScrollToTop(route, disableScrollToTop)
@@ -185,30 +151,16 @@ export function Routes({
   useEffect(() => {
     const transition = (route) => {
       onlyLatest(async (isLatest) => {
-        if (onNavigating) {
-          onNavigating && onNavigating(route)
+        if (isLatest() && onNavigating) {
+          await onNavigating(route)
         }
-
         if (isLatest()) {
-          if (route.data.find((r) => !r.component)) {
-            onResolving && onResolving(route)
-            await Promise.all(
-              route.data.map(async (routeData) => {
-                if (!routeData.component && routeData.resolver) {
-                  routeData.component = await routeData.resolver()
-                }
-              })
-            )
-          }
-        }
-
-        if (isLatest()) {
-          onNavigated && onNavigated(route)
+          onNavigated(route)
         }
       })
     }
     return router.listen(routes, transition)
-  }, [router, routes, onNavigating, onResolving, onNavigated])
+  }, [router, routes, onNavigating, onNavigated])
 
   return useMemo(() => {
     if (!route) {

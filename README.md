@@ -9,7 +9,7 @@
 React Space Router is a set of hooks and components for keeping your app in sync with the url and performing page navigations. A library built by and used at [Humaans](https://humaans.io/).
 
 - React hooks based
-- Nested routes and async route loading
+- Nested routes
 - Async navigation middleware
 - Support for external stores for router state
 - Scrolls to top after navigation
