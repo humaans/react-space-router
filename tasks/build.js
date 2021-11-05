@@ -12,6 +12,6 @@ const w = watch ? ' -w' : ''
   const pkg = require('../package.json')
 
   const babel = './node_modules/.bin/babel'
-  await sh(`${babel}${w} --no-babelrc src -d ${pkg.main} --config-file=./.babelrc-cjs`)
-  await sh(`${babel}${w} --no-babelrc src -d ${pkg.module} --config-file=./.babelrc-esm`)
+  sh(`${babel}${w} --no-babelrc src -d ${pkg.main} --config-file=./.babelrc-cjs`)
+  sh(`${babel}${w} --no-babelrc src -d ${pkg.module} --config-file=./.babelrc-esm`)
 })()
