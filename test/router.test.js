@@ -44,9 +44,6 @@ test.serial('usage', async function (t) {
 
     useEffect(() => {
       router = _router
-      // setTimeout(() => {
-      //   router.navigate({ url: '/' })
-      // }, 100)
     }, [])
 
     return null
@@ -65,18 +62,11 @@ test.serial('usage', async function (t) {
     ReactDOM.render(<App />, root)
   })
 
-  // await new Promise(resolve => setTimeout(() => {
   t.is(window.document.body.innerHTML, '<div id="root"><div>Hello</div></div>')
-  //   resolve()
-  // }, 1000))
 
   act(() => {
     router.navigate({ url: '/stuff' })
   })
-
-  // await new Promise(resolve => setTimeout(() => {
-  //   resolve()
-  // }, 1000))
 
   t.is(window.document.body.innerHTML, '<div id="root"><div>Stuff</div></div>')
 })

@@ -146,7 +146,7 @@ export function Router({
         }
       },
     }),
-    [router, useRoute, useNextRoute, onNavigating, onNavigated]
+    [router, useRoute, useNextRoute, onNavigating, onResolving, onNavigated]
   )
 
   // recreate the router if any of it's options are changed
@@ -183,7 +183,9 @@ export function Routes({
   useEffect(() => {
     const transition = (route) => {
       onlyLatest(async (isLatest) => {
-        await (onNavigating && onNavigating(route))
+        if (onNavigating) {
+          onNavigating && onNavigating(route)
+        }
 
         if (isLatest()) {
           if (route.data.find((r) => !r.component)) {
@@ -204,7 +206,7 @@ export function Routes({
       })
     }
     return router.listen(routes, transition)
-  }, [router, routes, onNavigating, onNavigated])
+  }, [router, routes, onNavigating, onResolving, onNavigated])
 
   return useMemo(() => {
     if (!route) {
