@@ -13,13 +13,14 @@ React Space Router is a set of hooks and components for keeping your app in sync
 - React hooks based
 - Nested routes
 - Async navigation middleware
-- Support for external stores for router state
+- Built in query string parser
+- Supports external stores for router state
 - Scrolls to top after navigation
 - Preserves cmd/ctrl/alt/shift click and mouse middle click
 
 ## Why
 
-"Perfection is achieved when there is nothing left to take away." React Space Router is built upon Space Router, a framework agnostic tiny core that handles url listening, route matching and navigation. React Space Router wraps that core into an idiomatic set of React components and hooks. The hope is you'll find React Space Router refreshingly simple compared to the existing alternatives, with the right level of extensibility.
+"Perfection is achieved when there is nothing left to take away." React Space Router is built upon Space Router, a framework agnostic tiny core that handles url listening, route matching and navigation. React Space Router wraps that core into an idiomatic set of React components and hooks. The hope is you'll find React Space Router refreshingly simple compared to the existing alternatives, while still offering enough extensibility.
 
 ## Install
 
@@ -82,11 +83,9 @@ function Settings({ tag }) {
 
 ### `<Router />`
 
-```js
-<Router />
-```
+The application needs to be wrapped in the Router component to provides the router context and state.
 
-Wrap your application in this component. It provides the router navigation and state.
+Props:
 
 - `mode` one of `history`, `hash`, `memory`, default is `history`
 - `qs` a custom query string parser, an object of shape `{ parse, stringify }
@@ -97,11 +96,12 @@ Wrap your application in this component. It provides the router navigation and s
 ### `<Routes />`
 
 ```js
-const routes = [{ path: '/', component: Home }]
-<Routes routes={routes}>
+<Routes routes={[{ path: '/', component: Home }]}>
 ```
 
-Takes the route config and renders the components that match the current route.
+Render the components that match the current route based on the route config.
+
+Props:
 
 - `routes` an array of arrays of route definitions, where each route is an object of shape `{ path, component, props, redirect, scrollGroup, routes, ...metadata }`
   - `path` is the URL pattern to match that can include named parameters as segments
@@ -119,9 +119,11 @@ Takes the route config and renders the components that match the current route.
 <Link href='/profile/32' className='nav' replace />
 ```
 
-Renders an `<a>` link with a correct `href` and `onClick` handler that will intercept the click and push a history entry to avoid full page reload. Preserves cmd + click behaviour
+Renders an `<a>` link with a correct `href` and `onClick` handler that will intercept the click and push a history entry to avoid full page reload. Preserves cmd + click behaviour.
 
-- `href` navigation target, can be a string or a `to` object with:
+Props:
+
+- `href` navigation target, can be a `string` or an `object` with:
   - `pathname` the pathname portion of the target url, which can include named segments
   - `params` params to interpolate into the named pathname segments
   - `query` the query object that will be passed through `qs.stringify`
@@ -140,9 +142,11 @@ The rest of the props are spread onto the `<a>` element.
 <Navigate to={{ pathname: '/' }} />
 ```
 
-Redirects to the target url.
+Redirect to the target url upon rendering this component.
 
-- `to` can be a string or an object (refer to Link's `href` prop)
+Props:
+
+- `to` can be a `string` or an `object` (refer to `navigate` below)
 
 ### `useRouter`
 
@@ -150,7 +154,7 @@ Redirects to the target url.
 const router = useRouter()
 ```
 
-Returns the Space Router instance. See [space-router docs](https://kidkarolis.github.io/space-router/) for details.
+Get the Space Router instance. See [space-router docs](https://kidkarolis.github.io/space-router/) for details.
 
 ### `useRoute`
 
@@ -158,26 +162,41 @@ Returns the Space Router instance. See [space-router docs](https://kidkarolis.gi
 const route = useRoute()
 ```
 
-Returns the current route, which is an object of shape `{ pattern, href, pathname, params, query, search, hash, data }`. Data is an array of all the matched nested routes and includes components and any other metadata you've set in your route config.
+Subscribe to the current route. Route is an object of shape `{ pattern, href, pathname, params, query, search, hash, data }`. Data is an array of all the matched nested routes and includes components and any other metadata you've set in your route config.
 
 ### `useNavigate`
 
 ```js
 const navigate = useNavigate()
+navigate(to)
 ```
 
-Returns a function that can be called to perform navigation. Navigate takes one param - `to`, same kind of object used in `<Link href />`. An object of shape `{ url, pathname, params, query, hash, merge, replace }`.
+Get the `navigate` function for performing navigations. Navigate takes a `string` url or an `object` of shape:
+
+- `pathname` the pathname portion of the target url, which can include named segments
+- `params` params to interpolate into the named pathname segments
+- `query` the query object that will be passed through `qs.stringify`
+- `hash` the hash fragment to append to the url of the url
+- `merge` merge partial `to` object into the current route
+- `replace` set to true to replace the current entry in the navigation stack instead of pushing
 
 ### `useLink`
 
 ```js
-const linkProps = useLink(href, { replace, onClick })
+const linkProps = useLink(to)
+<a {...linkProps} />
 ```
 
-Returns linkProps, an object of shape `{ href, aria-current, onClick}` that you can spread onto your own links. Note if no `href` is passed, then `linkProps` will only return `{ onClick }`.
+Get linkProps that you can spread onto your own links to make them render both `href`, but also handle clicks to perform navigations using the router. Link props is an object of shape `{ href, aria-current, onClick}`.
 
-- `href` refer to `<Link />` href
-- `replace` whether clicking this link should replace rather than push a history entry
+Takes a `string` url or an `object` of shape:
+
+- `pathname` the pathname portion of the target url, which can include named segments
+- `params` params to interpolate into the named pathname segments
+- `query` the query object that will be passed through `qs.stringify`
+- `hash` the hash fragment to append to the url of the url
+- `merge` merge partial `to` object into the current route
+- `replace` set to true to replace the current entry in the navigation stack instead of pushing
 - `onClick` a click handler to be called before the navigation takes place
 
 ### `shouldNavigate`
@@ -186,7 +205,7 @@ Returns linkProps, an object of shape `{ href, aria-current, onClick}` that you 
 shouldNavigate(e)
 ```
 
-Checks if the current click event should cause a history push, or should be handled by the browser. Used internally by the `<Link />` component when intercepting `click` events to let browser handle:
+Check if the current click event should cause a history push, or should be handled by the browser. Used internally by the `<Link />` component when intercepting `click` events to let browser handle:
 
 - cmd/ctrl/alt/shift + click
 - middle mouse click

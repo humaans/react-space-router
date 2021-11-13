@@ -11,13 +11,14 @@ React Space Router is a set of hooks and components for keeping your app in sync
 - React hooks based
 - Nested routes
 - Async navigation middleware
-- Support for external stores for router state
+- Built in query string parser
+- Supports external stores for router state
 - Scrolls to top after navigation
 - Preserves cmd/ctrl/alt/shift click and mouse middle click
 
 ## Why
 
-"Perfection is achieved when there is nothing left to take away." React Space Router is built upon Space Router, a framework agnostic tiny core that handles url listening, route matching and navigation. React Space Router wraps that core into an idiomatic set of React components and hooks. The hope is you'll find React Space Router refreshingly simple compared to the existing alternatives, with the right level of extensibility.
+"Perfection is achieved when there is nothing left to take away." React Space Router is built upon Space Router, a framework agnostic tiny core that handles url listening, route matching and navigation. React Space Router wraps that core into an idiomatic set of React components and hooks. The hope is you'll find React Space Router refreshingly simple compared to the existing alternatives, while still offering enough extensibility.
 
 ## Install
 

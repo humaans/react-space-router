@@ -65,7 +65,7 @@ test.serial('usage', async function (t) {
   t.is(window.document.body.innerHTML, '<div id="root"><div>Hello</div></div>')
 
   act(() => {
-    router.navigate({ url: '/stuff' })
+    router.navigate('/stuff')
   })
 
   t.is(window.document.body.innerHTML, '<div id="root"><div>Stuff</div></div>')

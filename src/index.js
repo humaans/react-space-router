@@ -49,7 +49,7 @@ function withMerge(navigate, route) {
     // we replace merge true, with the current route,
     // so that the router.href() inside navigation
     // correctly merges the right current route
-    if (to.merge === true) {
+    if (typeof to !== 'string' && to.merge === true) {
       to = { ...to, merge: route }
     }
     return navigate(to)
@@ -203,21 +203,18 @@ function useScrollToTop(route, disabled) {
  * useLink hook can be used instead of Link component
  * for more flexibility or when more convenient
  */
-export function useLink(to, { replace, onClick: onLinkClick } = {}) {
+export function useLink(to) {
+  if (typeof to === 'string') {
+    to = { url: to }
+  }
+
   const route = useRoute()
   const navigate = useNavigate()
   const router = useRouter()
 
-  if (!to) {
-    return { onClick: onLinkClick }
-  }
-
-  // normalize a string to into an object to
-  to = typeof to === 'string' ? { url: to, replace } : { ...to, replace }
-
   // replace merge true with the current route, so that the router.href()
   // correctly computes the merged route based on the correct current route
-  // this is relevant when we transition into async routes
+  // this is relevant if we are in the middle of transitioning into an async route
   if (to.merge === true) to.merge = route
 
   // to compute if route is active, we resolve the full url
@@ -225,15 +222,11 @@ export function useLink(to, { replace, onClick: onLinkClick } = {}) {
   const isActive = route.pathname === href.replace(/^#/, '').split('?')[0]
 
   function onClick(event) {
-    onLinkClick && onLinkClick(event)
+    to.onClick && to.onClick(event)
 
     if (shouldNavigate(event)) {
       event.preventDefault()
-      if (typeof to === 'string') {
-        navigate({ url: to })
-      } else {
-        navigate({ ...to })
-      }
+      navigate(to)
     }
   }
 
@@ -248,7 +241,10 @@ export function useLink(to, { replace, onClick: onLinkClick } = {}) {
  * Link component
  */
 export function Link({ href: to, replace, className, style, extraProps, children, ...anchorProps }) {
-  const linkProps = useLink(to, { replace })
+  if (typeof to === 'string') {
+    to = { url: to }
+  }
+  const linkProps = useLink({ ...to, replace })
   const isActive = linkProps['aria-current'] === 'page'
   const evaluate = (valOrFn) => (typeof valOrFn === 'function' ? valOrFn(isActive) : valOrFn)
   return (
