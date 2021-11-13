@@ -93,12 +93,13 @@
 <li>React hooks based</li>
 <li>Nested routes</li>
 <li>Async navigation middleware</li>
-<li>Support for external stores for router state</li>
+<li>Built in query string parser</li>
+<li>Supports external stores for router state</li>
 <li>Scrolls to top after navigation</li>
 <li>Preserves cmd/ctrl/alt/shift click and mouse middle click</li>
 </ul>
 <h2 id="why">Why</h2>
-<p>&ldquo;Perfection is achieved when there is nothing left to take away.&rdquo; React Space Router is built upon Space Router, a framework agnostic tiny core that handles url listening, route matching and navigation. React Space Router wraps that core into an idiomatic set of React components and hooks. The hope is you&rsquo;ll find React Space Router refreshingly simple compared to the existing alternatives, with the right level of extensibility.</p>
+<p>&ldquo;Perfection is achieved when there is nothing left to take away.&rdquo; React Space Router is built upon Space Router, a framework agnostic tiny core that handles url listening, route matching and navigation. React Space Router wraps that core into an idiomatic set of React components and hooks. The hope is you&rsquo;ll find React Space Router refreshingly simple compared to the existing alternatives, while still offering enough extensibility.</p>
 <h2 id="install">Install</h2>
 <div class="highlight"><pre class="chroma"><code class="language-sh" data-lang="sh">$ npm install react-space-router
 </code></pre></div><h2 id="example">Example</h2>
@@ -150,8 +151,8 @@
 <span class="p">}</span>
 </code></pre></div><h2 id="api">API</h2>
 <h3 id="router-"><code>&lt;Router /&gt;</code></h3>
-<div class="highlight"><pre class="chroma"><code class="language-js" data-lang="js"><span class="o">&lt;</span><span class="nx">Router</span> <span class="o">/&gt;</span>
-</code></pre></div><p>Wrap your application in this component. It provides the router navigation and state.</p>
+<p>The application needs to be wrapped in the Router component to provides the router context and state.</p>
+<p>Props:</p>
 <ul>
 <li><code>mode</code> one of <code>history</code>, <code>hash</code>, <code>memory</code>, default is <code>history</code></li>
 <li><code>qs</code> a custom query string parser, an object of shape `{ parse, stringify }</li>
@@ -160,9 +161,9 @@
 <li><code>onNavigated(route)</code> called when navigation completed</li>
 </ul>
 <h3 id="routes-"><code>&lt;Routes /&gt;</code></h3>
-<div class="highlight"><pre class="chroma"><code class="language-js" data-lang="js"><span class="kr">const</span> <span class="nx">routes</span> <span class="o">=</span> <span class="p">[{</span> <span class="nx">path</span><span class="o">:</span> <span class="s1">&#39;/&#39;</span><span class="p">,</span> <span class="nx">component</span><span class="o">:</span> <span class="nx">Home</span> <span class="p">}]</span>
-<span class="o">&lt;</span><span class="nx">Routes</span> <span class="nx">routes</span><span class="o">=</span><span class="p">{</span><span class="nx">routes</span><span class="p">}</span><span class="o">&gt;</span>
-</code></pre></div><p>Takes the route config and renders the components that match the current route.</p>
+<div class="highlight"><pre class="chroma"><code class="language-js" data-lang="js"><span class="o">&lt;</span><span class="nx">Routes</span> <span class="nx">routes</span><span class="o">=</span><span class="p">{[{</span> <span class="nx">path</span><span class="o">:</span> <span class="s1">&#39;/&#39;</span><span class="p">,</span> <span class="nx">component</span><span class="o">:</span> <span class="nx">Home</span> <span class="p">}]}</span><span class="o">&gt;</span>
+</code></pre></div><p>Render the components that match the current route based on the route config.</p>
+<p>Props:</p>
 <ul>
 <li><code>routes</code> an array of arrays of route definitions, where each route is an object of shape <code>{ path, component, props, redirect, scrollGroup, routes, ...metadata }</code>
 <ul>
@@ -179,9 +180,10 @@
 </ul>
 <h3 id="link-"><code>&lt;Link /&gt;</code></h3>
 <div class="highlight"><pre class="chroma"><code class="language-js" data-lang="js"><span class="o">&lt;</span><span class="nx">Link</span> <span class="nx">href</span><span class="o">=</span><span class="s1">&#39;/profile/32&#39;</span> <span class="nx">className</span><span class="o">=</span><span class="s1">&#39;nav&#39;</span> <span class="nx">replace</span> <span class="o">/&gt;</span>
-</code></pre></div><p>Renders an <code>&lt;a&gt;</code> link with a correct <code>href</code> and <code>onClick</code> handler that will intercept the click and push a history entry to avoid full page reload. Preserves cmd + click behaviour</p>
+</code></pre></div><p>Renders an <code>&lt;a&gt;</code> link with a correct <code>href</code> and <code>onClick</code> handler that will intercept the click and push a history entry to avoid full page reload. Preserves cmd + click behaviour.</p>
+<p>Props:</p>
 <ul>
-<li><code>href</code> navigation target, can be a string or a <code>to</code> object with:
+<li><code>href</code> navigation target, can be a <code>string</code> or an <code>object</code> with:
 <ul>
 <li><code>pathname</code> the pathname portion of the target url, which can include named segments</li>
 <li><code>params</code> params to interpolate into the named pathname segments</li>
@@ -198,30 +200,46 @@
 <p>The rest of the props are spread onto the <code>&lt;a&gt;</code> element.</p>
 <h3 id="navigate-"><code>&lt;Navigate /&gt;</code></h3>
 <div class="highlight"><pre class="chroma"><code class="language-js" data-lang="js"><span class="o">&lt;</span><span class="nx">Navigate</span> <span class="nx">to</span><span class="o">=</span><span class="p">{{</span> <span class="nx">pathname</span><span class="o">:</span> <span class="s1">&#39;/&#39;</span> <span class="p">}}</span> <span class="o">/&gt;</span>
-</code></pre></div><p>Redirects to the target url.</p>
+</code></pre></div><p>Redirect to the target url upon rendering this component.</p>
+<p>Props:</p>
 <ul>
-<li><code>to</code> can be a string or an object (refer to Link&rsquo;s <code>href</code> prop)</li>
+<li><code>to</code> can be a <code>string</code> or an <code>object</code> (refer to <code>navigate</code> below)</li>
 </ul>
 <h3 id="userouter"><code>useRouter</code></h3>
 <div class="highlight"><pre class="chroma"><code class="language-js" data-lang="js"><span class="kr">const</span> <span class="nx">router</span> <span class="o">=</span> <span class="nx">useRouter</span><span class="p">()</span>
-</code></pre></div><p>Returns the Space Router instance. See <a href="https://kidkarolis.github.io/space-router/">space-router docs</a> for details.</p>
+</code></pre></div><p>Get the Space Router instance. See <a href="https://kidkarolis.github.io/space-router/">space-router docs</a> for details.</p>
 <h3 id="useroute"><code>useRoute</code></h3>
 <div class="highlight"><pre class="chroma"><code class="language-js" data-lang="js"><span class="kr">const</span> <span class="nx">route</span> <span class="o">=</span> <span class="nx">useRoute</span><span class="p">()</span>
-</code></pre></div><p>Returns the current route, which is an object of shape <code>{ pattern, href, pathname, params, query, search, hash, data }</code>. Data is an array of all the matched nested routes and includes components and any other metadata you&rsquo;ve set in your route config.</p>
+</code></pre></div><p>Subscribe to the current route. Route is an object of shape <code>{ pattern, href, pathname, params, query, search, hash, data }</code>. Data is an array of all the matched nested routes and includes components and any other metadata you&rsquo;ve set in your route config.</p>
 <h3 id="usenavigate"><code>useNavigate</code></h3>
 <div class="highlight"><pre class="chroma"><code class="language-js" data-lang="js"><span class="kr">const</span> <span class="nx">navigate</span> <span class="o">=</span> <span class="nx">useNavigate</span><span class="p">()</span>
-</code></pre></div><p>Returns a function that can be called to perform navigation. Navigate takes one param - <code>to</code>, same kind of object used in <code>&lt;Link href /&gt;</code>. An object of shape <code>{ url, pathname, params, query, hash, merge, replace }</code>.</p>
-<h3 id="uselink"><code>useLink</code></h3>
-<div class="highlight"><pre class="chroma"><code class="language-js" data-lang="js"><span class="kr">const</span> <span class="nx">linkProps</span> <span class="o">=</span> <span class="nx">useLink</span><span class="p">(</span><span class="nx">href</span><span class="p">,</span> <span class="p">{</span> <span class="nx">replace</span><span class="p">,</span> <span class="nx">onClick</span> <span class="p">})</span>
-</code></pre></div><p>Returns linkProps, an object of shape <code>{ href, aria-current, onClick}</code> that you can spread onto your own links. Note if no <code>href</code> is passed, then <code>linkProps</code> will only return <code>{ onClick }</code>.</p>
+<span class="nx">navigate</span><span class="p">(</span><span class="nx">to</span><span class="p">)</span>
+</code></pre></div><p>Get the <code>navigate</code> function for performing navigations. Navigate takes a <code>string</code> url or an <code>object</code> of shape:</p>
 <ul>
-<li><code>href</code> refer to <code>&lt;Link /&gt;</code> href</li>
-<li><code>replace</code> whether clicking this link should replace rather than push a history entry</li>
+<li><code>pathname</code> the pathname portion of the target url, which can include named segments</li>
+<li><code>params</code> params to interpolate into the named pathname segments</li>
+<li><code>query</code> the query object that will be passed through <code>qs.stringify</code></li>
+<li><code>hash</code> the hash fragment to append to the url of the url</li>
+<li><code>merge</code> merge partial <code>to</code> object into the current route</li>
+<li><code>replace</code> set to true to replace the current entry in the navigation stack instead of pushing</li>
+</ul>
+<h3 id="uselink"><code>useLink</code></h3>
+<div class="highlight"><pre class="chroma"><code class="language-js" data-lang="js"><span class="kr">const</span> <span class="nx">linkProps</span> <span class="o">=</span> <span class="nx">useLink</span><span class="p">(</span><span class="nx">to</span><span class="p">)</span>
+<span class="o">&lt;</span><span class="nx">a</span> <span class="p">{...</span><span class="nx">linkProps</span><span class="p">}</span> <span class="o">/&gt;</span>
+</code></pre></div><p>Get linkProps that you can spread onto your own links to make them render both <code>href</code>, but also handle clicks to perform navigations using the router. Link props is an object of shape <code>{ href, aria-current, onClick}</code>.</p>
+<p>Takes a <code>string</code> url or an <code>object</code> of shape:</p>
+<ul>
+<li><code>pathname</code> the pathname portion of the target url, which can include named segments</li>
+<li><code>params</code> params to interpolate into the named pathname segments</li>
+<li><code>query</code> the query object that will be passed through <code>qs.stringify</code></li>
+<li><code>hash</code> the hash fragment to append to the url of the url</li>
+<li><code>merge</code> merge partial <code>to</code> object into the current route</li>
+<li><code>replace</code> set to true to replace the current entry in the navigation stack instead of pushing</li>
 <li><code>onClick</code> a click handler to be called before the navigation takes place</li>
 </ul>
 <h3 id="shouldnavigate"><code>shouldNavigate</code></h3>
 <div class="highlight"><pre class="chroma"><code class="language-js" data-lang="js"><span class="nx">shouldNavigate</span><span class="p">(</span><span class="nx">e</span><span class="p">)</span>
-</code></pre></div><p>Checks if the current click event should cause a history push, or should be handled by the browser. Used internally by the <code>&lt;Link /&gt;</code> component when intercepting <code>click</code> events to let browser handle:</p>
+</code></pre></div><p>Check if the current click event should cause a history push, or should be handled by the browser. Used internally by the <code>&lt;Link /&gt;</code> component when intercepting <code>click</code> events to let browser handle:</p>
 <ul>
 <li>cmd/ctrl/alt/shift + click</li>
 <li>middle mouse click</li>
