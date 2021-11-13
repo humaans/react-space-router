@@ -1202,6 +1202,7 @@ tr.border-none td {
     .Image {
       margin: 0; } }
 #gradient-canvas {
+  display: none;
   position: fixed;
   top: 0;
   left: 0;
