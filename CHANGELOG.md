@@ -1,3 +1,9 @@
+## 0.4.0
+
+- Add `useMakeHref` that returns `makeHref` function for creating hrefs
+- **Breaking**: rename `useLink` to `useLinkProps`
+- **Breaking**: rename `useRouter` to `useInternalRouterInstance` to discourage use of it
+
 ## 0.3.0
 
 - Upgrade to the latest `space-router` which allows `navigate` to take a `string` url

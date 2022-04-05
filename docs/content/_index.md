@@ -148,13 +148,13 @@ Props:
 
 - `to` can be a `string` or an `object` (refer to `navigate` below)
 
-### `useRouter`
+### `useInternalRouterInstance`
 
 ```js
-const router = useRouter()
+const router = useInternalRouterInstance()
 ```
 
-Get the Space Router instance. See [space-router docs](https://kidkarolis.github.io/space-router/) for details.
+Get the Space Router instance. See [space-router docs](https://kidkarolis.github.io/space-router/) for details. Should typically not be necessary to use it directly. All relevant functionality is available via the other hooks.
 
 ### `useRoute`
 
@@ -162,13 +162,29 @@ Get the Space Router instance. See [space-router docs](https://kidkarolis.github
 const route = useRoute()
 ```
 
-Subscribe to the current route. Route is an object of shape `{ pattern, href, pathname, params, query, search, hash, data }`. Data is an array of all the matched nested routes and includes components and any other metadata you've set in your route config.
+Subscribe to the current route. Route is an object of shape `{ url, pathname, params, query, search, hash, pattern, data }`.
+
+- `url` full relative url string including query string and hash if any
+- `pathname` the pathname portion of the target url, which can include named segments
+- `params` params extracted from the named pathname segments
+- `query` query object that was parsed with `qs.parse`
+- `search` full unparsed query string
+- `hash` hash fragment
+- `pattern` the matched route pattern as defined in the route config
+- `data` an array of nested matched route objects with componentns and any additional metadata found in the route config
 
 ### `useNavigate`
 
 ```js
 const navigate = useNavigate()
-navigate(to)
+
+// examples
+navigate('/shows')
+navigate({ url: '/show/1' })
+navigate({ url: '/show/2', replace: true })
+navigate({ pathname: '/shows', query: { 'most-recent': 1 } })
+navigate({ query: { 'top-rated': 1 }, merge: true })
+navigate({ query: { 'top-rated': undefined }, merge: true })
 ```
 
 Get the `navigate` function for performing navigations. Navigate takes a `string` url or an `object` of shape:
@@ -180,10 +196,10 @@ Get the `navigate` function for performing navigations. Navigate takes a `string
 - `merge` merge partial `to` object into the current route
 - `replace` set to true to replace the current entry in the navigation stack instead of pushing
 
-### `useLink`
+### `useLinkProps`
 
 ```js
-const linkProps = useLink(to)
+const linkProps = useLinkProps(to)
 <a {...linkProps} />
 ```
 
@@ -198,6 +214,19 @@ Takes a `string` url or an `object` of shape:
 - `merge` merge partial `to` object into the current route
 - `replace` set to true to replace the current entry in the navigation stack instead of pushing
 - `onClick` a click handler to be called before the navigation takes place
+
+### `useMakeHref`
+
+```js
+const makeHref = useMakeHref()
+makeHref(to)
+```
+
+Create a relative url string to use in `<a href>` attribute.
+
+- `to` object of shape `{ pathname, params, query, hash }`. The `params` will be interpolated into the pathname if the pathname contains any parametrised segments. The `query` is an object that will be passed through `qs.stringify`.
+
+Note: `to` can be a string, in which case `href` simply returns the input. Similarly, `to` can contain `{ url }` key in which case `href` returns that url. This is to align the function signature with that of `navigate` so that two can be used interchangeably.
 
 ### `shouldNavigate`
 

@@ -7,9 +7,14 @@ export const RouterContext = createContext()
 export const CurrRouteContext = createContext()
 
 /**
- * Hook for getting the space router instance
+ * Hook for getting the space router instance,
+ * normally React Space Router consumers should
+ * never need to use this directly. Other hooks
+ * expose the right functionality. This avoids
+ * leaking complexity due to space-router being
+ * more imperative and React hooks more declarative.
  */
-export function useRouter() {
+export function useInternalRouterInstance() {
   const router = useContext(RouterContext).router
 
   if (!router) {
@@ -31,7 +36,7 @@ export function useRoute(...args) {
  */
 export function useNavigate() {
   const route = useRoute()
-  const navigate = useRouter().navigate
+  const navigate = useInternalRouterInstance().navigate
   return withMerge(navigate, route)
 }
 
@@ -44,15 +49,9 @@ export function useNavigate() {
  * so I'm not sure how to handle the state in that case, not sure how to access the pre-suspension
  * state, but this will work correctly for now if onNavigating is async and blocking
  */
-function withMerge(navigate, route) {
+function withMerge(navigate, currRoute) {
   return (to) => {
-    // we replace merge true, with the current route,
-    // so that the router.href() inside navigation
-    // correctly merges the right current route
-    if (typeof to !== 'string' && to.merge === true) {
-      to = { ...to, merge: route }
-    }
-    return navigate(to)
+    return navigate(to, currRoute)
   }
 }
 
@@ -200,26 +199,31 @@ function useScrollToTop(route, disabled) {
 }
 
 /**
- * useLink hook can be used instead of Link component
+ * Expose router.href via useMakeHref, so that
+ * React Space Router consumers never need to
+ * directly use the router instance.
+ */
+export function useMakeHref() {
+  const { href } = useInternalRouterInstance()
+  return href
+}
+
+/**
+ * useLinkProps hook can be used instead of Link component
  * for more flexibility or when more convenient
  */
-export function useLink(to) {
+export function useLinkProps(to) {
   if (typeof to === 'string') {
     to = { url: to }
   }
 
-  const route = useRoute()
+  const currRoute = useRoute()
   const navigate = useNavigate()
-  const router = useRouter()
-
-  // replace merge true with the current route, so that the router.href()
-  // correctly computes the merged route based on the correct current route
-  // this is relevant if we are in the middle of transitioning into an async route
-  if (to.merge === true) to.merge = route
+  const makeHref = useMakeHref()
 
   // to compute if route is active, we resolve the full url
-  const href = to.url ? to.url : router.href(to)
-  const isActive = route.pathname === href.replace(/^#/, '').split('?')[0]
+  const href = to.url ? to.url : makeHref(to, currRoute)
+  const isActive = currRoute.pathname === href.replace(/^#/, '').split('?')[0]
 
   function onClick(event) {
     to.onClick && to.onClick(event)
@@ -244,7 +248,7 @@ export function Link({ href: to, replace, className, style, extraProps, children
   if (typeof to === 'string') {
     to = { url: to }
   }
-  const linkProps = useLink({ ...to, replace })
+  const linkProps = useLinkProps({ ...to, replace })
   const isActive = linkProps['aria-current'] === 'page'
   const evaluate = (valOrFn) => (typeof valOrFn === 'function' ? valOrFn(isActive) : valOrFn)
   return (

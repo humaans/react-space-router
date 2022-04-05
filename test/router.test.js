@@ -1,11 +1,13 @@
 import test from 'ava'
 import React, { useEffect } from 'react'
-import ReactDOM from 'react-dom'
+import ReactDOM from 'react-dom/client'
 import { act } from 'react-dom/test-utils'
 import { JSDOM } from 'jsdom'
-import { Router, Routes, useRouter, qs } from '../src'
+import { Router, Routes, Link, Navigate, useInternalRouterInstance, useLinkProps, qs } from '../src'
 
-test.serial('usage', async function (t) {
+global.IS_REACT_ACT_ENVIRONMENT = true
+
+function setup() {
   const dom = new JSDOM('<!doctype html><div id="root"></div>')
   global.window = dom.window
   global.window.scrollTo = () => {}
@@ -24,23 +26,30 @@ test.serial('usage', async function (t) {
     pathname: '/',
     search: '',
   }
+}
+
+test.serial('usage', async function (t) {
+  setup()
+
   const root = document.getElementById('root')
 
   const routes = [
-    {
-      path: '/',
-      component: () => <div>Hello</div>,
-    },
-    {
-      path: '/stuff',
-      component: () => <div>Stuff</div>,
-    },
+    { path: '/', component: Home },
+    { path: '/stuff', component: () => <div>Stuff</div> },
   ]
 
   let router
 
+  function Home() {
+    return (
+      <div>
+        <Link to='/stuff'>Stuff</Link>Hello
+      </div>
+    )
+  }
+
   function InitialNav() {
-    const _router = useRouter()
+    const _router = useInternalRouterInstance()
 
     useEffect(() => {
       router = _router
@@ -59,16 +68,62 @@ test.serial('usage', async function (t) {
   }
 
   act(() => {
-    ReactDOM.render(<App />, root)
+    const r = ReactDOM.createRoot(root)
+    r.render(<App />)
   })
 
-  t.is(window.document.body.innerHTML, '<div id="root"><div>Hello</div></div>')
+  t.is(
+    window.document.body.innerHTML,
+    '<div id="root"><div><a aria-current="page" to="/stuff" href="/">Stuff</a>Hello</div></div>'
+  )
 
   act(() => {
     router.navigate('/stuff')
   })
 
   t.is(window.document.body.innerHTML, '<div id="root"><div>Stuff</div></div>')
+})
+
+test.serial('useLinkProps()', async function (t) {
+  setup()
+
+  const root = document.getElementById('root')
+
+  const routes = [
+    { path: '/', component: () => <Navigate to='/stuff' /> },
+    { path: '/stuff', component: Stuff },
+  ]
+
+  let linkProps
+
+  function Stuff() {
+    const _linkProps = useLinkProps('/stuff')
+    useEffect(() => {
+      linkProps = _linkProps
+    }, [])
+
+    return <div>Stuff</div>
+  }
+
+  function App() {
+    return (
+      <Router sync>
+        <Routes routes={routes} />
+      </Router>
+    )
+  }
+
+  act(() => {
+    const r = ReactDOM.createRoot(root)
+    r.render(<App />)
+  })
+
+  t.deepEqual(linkProps, {
+    'aria-current': 'page',
+    href: '/stuff',
+    onClick: linkProps.onClick,
+  })
+  t.is(typeof linkProps.onClick, 'function')
 })
 
 test('qs', async (t) => {
