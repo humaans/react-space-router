@@ -223,7 +223,8 @@ export function useLinkProps(to) {
 
   // to compute if route is active, we resolve the full url
   const href = to.url ? to.url : makeHref(to, currRoute)
-  const isActive = currRoute.pathname === href.replace(/^#/, '').split('?')[0]
+  const isCurrent =
+    typeof to.current === 'undefined' ? currRoute.pathname === href.replace(/^#/, '').split('?')[0] : to.current
 
   function onClick(event) {
     to.onClick && to.onClick(event)
@@ -236,7 +237,7 @@ export function useLinkProps(to) {
 
   return {
     href,
-    'aria-current': isActive ? 'page' : undefined,
+    'aria-current': isCurrent ? 'page' : undefined,
     onClick: onClick,
   }
 }
@@ -244,20 +245,20 @@ export function useLinkProps(to) {
 /**
  * Link component
  */
-export function Link({ href: to, replace, className, style, extraProps, children, ...anchorProps }) {
+export function Link({ href: to, replace, current, className, style, extraProps, children, ...anchorProps }) {
   if (typeof to === 'string') {
     to = { url: to }
   }
-  const linkProps = useLinkProps({ ...to, replace })
-  const isActive = linkProps['aria-current'] === 'page'
-  const evaluate = (valOrFn) => (typeof valOrFn === 'function' ? valOrFn(isActive) : valOrFn)
+  const linkProps = useLinkProps({ ...to, replace, current })
+  const isCurrent = linkProps['aria-current'] === 'page'
+  const evaluate = (valOrFn) => (typeof valOrFn === 'function' ? valOrFn(isCurrent) : valOrFn)
   return (
     <a
       aria-current={linkProps['aria-current']}
       {...anchorProps}
       className={evaluate(className)}
       style={evaluate(style)}
-      {...(extraProps ? extraProps(isActive) : {})}
+      {...(extraProps ? extraProps(isCurrent) : {})}
       href={linkProps.href}
       // eslint-disable-next-line react/jsx-handler-names
       onClick={linkProps.onClick}

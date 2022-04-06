@@ -1,3 +1,7 @@
+## 0.5.0
+
+- Allow overriding automatic `current` behaviour with an explicit `current` prop
+
 ## 0.4.0
 
 - Add `useMakeHref` that returns `makeHref` function for creating hrefs

@@ -130,9 +130,10 @@ Props:
   - `hash` the hash fragment to append to the url of the url
   - `merge` merge partial `to` object into the current route
 - `replace` set to true to replace the current entry in the navigation stack instead of pushing
-- `className` can be a function that takes `isActive` if the current route is active
-- `style` can be a function that takes `isActive` if the current route is active
-- `extraProps` a function that takes `isActive` if the current route is active
+- `current` set to true to render link as current page, or false to disable auto current page detection based on the current URL
+- `className` can be a function that takes `isCurrent` if the current route is active
+- `style` can be a function that takes `isCurrent` if the current route is active
+- `extraProps` a function that takes `isCurrent` if the current route is active
 
 The rest of the props are spread onto the `<a>` element.
 
@@ -213,6 +214,7 @@ Takes a `string` url or an `object` of shape:
 - `hash` the hash fragment to append to the url of the url
 - `merge` merge partial `to` object into the current route
 - `replace` set to true to replace the current entry in the navigation stack instead of pushing
+- `current` set to true to render link as current page, or false to disable auto current page detection based on the current URL
 - `onClick` a click handler to be called before the navigation takes place
 
 ### `useMakeHref`
