@@ -190,6 +190,7 @@ navigate({ query: { 'top-rated': undefined }, merge: true })
 
 Get the `navigate` function for performing navigations. Navigate takes a `string` url or an `object` of shape:
 
+- `url` url string
 - `pathname` the pathname portion of the target url, which can include named segments
 - `params` params to interpolate into the named pathname segments
 - `query` the query object that will be passed through `qs.stringify`
