@@ -238,7 +238,7 @@ export function useLinkProps(to) {
   return {
     href,
     'aria-current': isCurrent ? 'page' : undefined,
-    onClick: onClick,
+    onClick,
   }
 }
 

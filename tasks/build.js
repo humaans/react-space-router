@@ -1,17 +1,19 @@
-const execa = require('execa')
-
-const sh = (...args) => execa(...args, { stdio: 'inherit', shell: true })
+const fs = require('fs')
+const path = require('path')
 
 const watch = process.argv[2] === '-w'
 const w = watch ? ' -w' : ''
 
 ;(async function () {
+  const { execa } = await import('execa')
+  const sh = (...args) => execa(...args, { stdio: 'inherit', shell: true })
+
   await sh('rm -rf dist')
   await sh('mkdir -p dist')
 
-  const pkg = require('../package.json')
+  const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '../package.json')))
 
-  const babel = './node_modules/.bin/babel'
-  sh(`${babel}${w} --no-babelrc src -d ${pkg.main} --config-file=./.babelrc-cjs`)
-  sh(`${babel}${w} --no-babelrc src -d ${pkg.module} --config-file=./.babelrc-esm`)
+  const swc = './node_modules/.bin/swc'
+  await sh(`${swc} --no-swcrc src -d ${pkg.main} ${w} --config-file=./.swc-cjs`)
+  await sh(`${swc} --no-swcrc src -d ${pkg.module} ${w} --config-file=./.swc-esm`)
 })()

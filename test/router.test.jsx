@@ -3,7 +3,7 @@ import React, { useEffect } from 'react'
 import ReactDOM from 'react-dom/client'
 import { act } from 'react-dom/test-utils'
 import { JSDOM } from 'jsdom'
-import { Router, Routes, Link, Navigate, useInternalRouterInstance, useLinkProps, qs } from '../src'
+import { Router, Routes, Link, Navigate, useInternalRouterInstance, useLinkProps, qs } from '../src/index.jsx'
 
 global.IS_REACT_ACT_ENVIRONMENT = true
 

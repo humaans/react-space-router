@@ -1,3 +1,8 @@
+## 0.6.0
+
+- Upgrade all dependencies.
+- Switch from babel to swc.
+
 ## 0.5.0
 
 - Allow overriding automatic `current` behaviour with an explicit `current` prop
