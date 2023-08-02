@@ -30,7 +30,7 @@ function App() {
               if (!routeData.component && routeData.resolver) {
                 routeData.component = await routeData.resolver()
               }
-            })
+            }),
           )
         }
       }, [])}

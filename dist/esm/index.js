@@ -164,7 +164,7 @@ function _unsupported_iterable_to_array(o, minLen) {
     if (n === "Map" || n === "Set") return Array.from(n);
     if (n === "Arguments" || /^(?:Ui|I)nt(?:8|16|32)(?:Clamped)?Array$/.test(n)) return _array_like_to_array(o, minLen);
 }
-var __generator = this && this.__generator || function(thisArg, body) {
+function _ts_generator(thisArg, body) {
     var f, y, t, g, _ = {
         label: 0,
         sent: function() {
@@ -258,7 +258,7 @@ var __generator = this && this.__generator || function(thisArg, body) {
             done: true
         };
     }
-};
+}
 import React, { createContext, useContext, useState, useEffect, useMemo, useRef } from "react";
 import { createRouter } from "space-router";
 export { qs } from "space-router";
@@ -403,7 +403,7 @@ function makeRouter(routerOpts) {
         var transition = function(route) {
             onlyLatest(function() {
                 var _ref = _async_to_generator(function(isLatest) {
-                    return __generator(this, function(_state) {
+                    return _ts_generator(this, function(_state) {
                         switch(_state.label){
                             case 0:
                                 if (!(isLatest() && onNavigating)) return [
