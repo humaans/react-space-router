@@ -9,15 +9,10 @@
     "type": "git",
     "url": "git://github.com/humaans/react-space-router.git"
   },
-  "keywords": [
-    "react",
-    "browser",
-    "clientside",
-    "router",
-    "history",
-    "location",
-    "url"
-  ],
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "keywords": ["react", "browser", "clientside", "router", "history", "location", "url"],
   "author": "Karolis Narkevicius",
   "scripts": {
     "test": "npm run build && healthier && prettier --check '**/*.{js,css,yml}' && c8 ava",
@@ -48,20 +43,11 @@
     "react-dom": "^18.2.0"
   },
   "healthier": {
-    "ignore": [
-      "examples"
-    ]
+    "ignore": ["examples"]
   },
   "ava": {
-    "files": [
-      "test/*.test.*"
-    ],
-    "extensions": [
-      "js",
-      "jsx"
-    ],
-    "require": [
-      "@swc-node/register"
-    ]
+    "files": ["test/*.test.*"],
+    "extensions": ["js", "jsx"],
+    "require": ["@swc-node/register"]
   }
 }
