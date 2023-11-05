@@ -1,7 +1,7 @@
 {
   "name": "react-space-router",
   "description": "Space router bindings for React.",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "main": "dist/cjs",
   "module": "dist/esm",
   "license": "ICS",
@@ -12,7 +12,15 @@
   "engines": {
     "node": ">=14.0.0"
   },
-  "keywords": ["react", "browser", "clientside", "router", "history", "location", "url"],
+  "keywords": [
+    "react",
+    "browser",
+    "clientside",
+    "router",
+    "history",
+    "location",
+    "url"
+  ],
   "author": "Karolis Narkevicius",
   "scripts": {
     "test": "npm run build && healthier && prettier --check '**/*.{js,css,yml}' && c8 ava",
@@ -43,11 +51,20 @@
     "react-dom": "^18.2.0"
   },
   "healthier": {
-    "ignore": ["examples"]
+    "ignore": [
+      "examples"
+    ]
   },
   "ava": {
-    "files": ["test/*.test.*"],
-    "extensions": ["js", "jsx"],
-    "require": ["@swc-node/register"]
+    "files": [
+      "test/*.test.*"
+    ],
+    "extensions": [
+      "js",
+      "jsx"
+    ],
+    "require": [
+      "@swc-node/register"
+    ]
   }
 }
