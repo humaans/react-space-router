@@ -1,3 +1,7 @@
+## 0.6.2
+
+- Upgrade all dependencies to address security alerts.
+
 ## 0.6.1
 
 - Upgrade all dependencies to address security alerts.
