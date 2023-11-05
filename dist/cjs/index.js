@@ -9,35 +9,8 @@ function _export(target, all) {
     });
 }
 _export(exports, {
-    qs: function() {
-        return _spacerouter.qs;
-    },
-    RouterContext: function() {
-        return RouterContext;
-    },
     CurrRouteContext: function() {
         return CurrRouteContext;
-    },
-    useInternalRouterInstance: function() {
-        return useInternalRouterInstance;
-    },
-    useRoute: function() {
-        return useRoute;
-    },
-    useNavigate: function() {
-        return useNavigate;
-    },
-    Router: function() {
-        return Router;
-    },
-    Routes: function() {
-        return Routes;
-    },
-    useMakeHref: function() {
-        return useMakeHref;
-    },
-    useLinkProps: function() {
-        return useLinkProps;
     },
     Link: function() {
         return Link;
@@ -45,8 +18,35 @@ _export(exports, {
     Navigate: function() {
         return Navigate;
     },
+    Router: function() {
+        return Router;
+    },
+    RouterContext: function() {
+        return RouterContext;
+    },
+    Routes: function() {
+        return Routes;
+    },
+    qs: function() {
+        return _spacerouter.qs;
+    },
     shouldNavigate: function() {
         return shouldNavigate;
+    },
+    useInternalRouterInstance: function() {
+        return useInternalRouterInstance;
+    },
+    useLinkProps: function() {
+        return useLinkProps;
+    },
+    useMakeHref: function() {
+        return useMakeHref;
+    },
+    useNavigate: function() {
+        return useNavigate;
+    },
+    useRoute: function() {
+        return useRoute;
     }
 });
 var _react = /*#__PURE__*/ _interop_require_wildcard(require("react"));
@@ -125,7 +125,9 @@ function _interop_require_wildcard(obj, nodeInterop) {
     if (cache && cache.has(obj)) {
         return cache.get(obj);
     }
-    var newObj = {};
+    var newObj = {
+        __proto__: null
+    };
     var hasPropertyDescriptor = Object.defineProperty && Object.getOwnPropertyDescriptor;
     for(var key in obj){
         if (key !== "default" && Object.prototype.hasOwnProperty.call(obj, key)) {
@@ -266,13 +268,13 @@ function _ts_generator(thisArg, body) {
         trys: [],
         ops: []
     };
-    return(g = {
+    return g = {
         next: verb(0),
         "throw": verb(1),
         "return": verb(2)
     }, typeof Symbol === "function" && (g[Symbol.iterator] = function() {
         return this;
-    }), g);
+    }), g;
     function verb(n) {
         return function(v) {
             return step([
@@ -553,13 +555,6 @@ function useMakeHref() {
     return href;
 }
 function useLinkProps(to) {
-    var onClick = function onClick(event) {
-        to.onClick && to.onClick(event);
-        if (shouldNavigate(event)) {
-            event.preventDefault();
-            navigate(to);
-        }
-    };
     if (typeof to === "string") {
         to = {
             url: to
@@ -571,6 +566,13 @@ function useLinkProps(to) {
     // to compute if route is active, we resolve the full url
     var href = to.url ? to.url : makeHref(to, currRoute);
     var isCurrent = typeof to.current === "undefined" ? currRoute.pathname === href.replace(/^#/, "").split("?")[0] : to.current;
+    function onClick(event) {
+        to.onClick && to.onClick(event);
+        if (shouldNavigate(event)) {
+            event.preventDefault();
+            navigate(to);
+        }
+    }
     return {
         href: href,
         "aria-current": isCurrent ? "page" : undefined,

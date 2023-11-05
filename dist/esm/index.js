@@ -174,13 +174,13 @@ function _ts_generator(thisArg, body) {
         trys: [],
         ops: []
     };
-    return(g = {
+    return g = {
         next: verb(0),
         "throw": verb(1),
         "return": verb(2)
     }, typeof Symbol === "function" && (g[Symbol.iterator] = function() {
         return this;
-    }), g);
+    }), g;
     function verb(n) {
         return function(v) {
             return step([
@@ -489,13 +489,6 @@ function makeRouter(routerOpts) {
  * useLinkProps hook can be used instead of Link component
  * for more flexibility or when more convenient
  */ export function useLinkProps(to) {
-    var onClick = function onClick(event) {
-        to.onClick && to.onClick(event);
-        if (shouldNavigate(event)) {
-            event.preventDefault();
-            navigate(to);
-        }
-    };
     if (typeof to === "string") {
         to = {
             url: to
@@ -507,6 +500,13 @@ function makeRouter(routerOpts) {
     // to compute if route is active, we resolve the full url
     var href = to.url ? to.url : makeHref(to, currRoute);
     var isCurrent = typeof to.current === "undefined" ? currRoute.pathname === href.replace(/^#/, "").split("?")[0] : to.current;
+    function onClick(event) {
+        to.onClick && to.onClick(event);
+        if (shouldNavigate(event)) {
+            event.preventDefault();
+            navigate(to);
+        }
+    }
     return {
         href: href,
         "aria-current": isCurrent ? "page" : undefined,
