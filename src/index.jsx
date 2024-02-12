@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useMemo, useRef } from 'react'
+import React, { createContext, useCallback, useContext, useState, useEffect, useMemo, useRef } from 'react'
 import { createRouter } from 'space-router'
 
 export { qs } from 'space-router'
@@ -33,14 +33,7 @@ export function useRoute(...args) {
 
 /**
  * A hook for navigating around the app
- */
-export function useNavigate() {
-  const route = useRoute()
-  const navigate = useInternalRouterInstance().navigate
-  return withMerge(navigate, route)
-}
-
-/**
+ *
  * Since React Space Router allows async route loading/processing, we make sure that the
  * currently active route that's displayed on the screen gets used instead of the next
  * route that will be rendered, when merge: true is used to compute hrefs
@@ -49,10 +42,12 @@ export function useNavigate() {
  * so I'm not sure how to handle the state in that case, not sure how to access the pre-suspension
  * state, but this will work correctly for now if onNavigating is async and blocking
  */
-function withMerge(navigate, currRoute) {
-  return (to) => {
+export function useNavigate() {
+  const currRoute = useRoute()
+  const navigate = useInternalRouterInstance().navigate
+  return useCallback((to) => {
     return navigate(to, currRoute)
-  }
+  }, [navigate, currRoute])
 }
 
 /**

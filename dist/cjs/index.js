@@ -370,22 +370,14 @@ function useRoute() {
     return (_useContext = (0, _react.useContext)(RouterContext)).useRoute.apply(_useContext, _to_consumable_array(args));
 }
 function useNavigate() {
-    var route = useRoute();
+    var currRoute = useRoute();
     var navigate = useInternalRouterInstance().navigate;
-    return withMerge(navigate, route);
-}
-/**
- * Since React Space Router allows async route loading/processing, we make sure that the
- * currently active route that's displayed on the screen gets used instead of the next
- * route that will be rendered, when merge: true is used to compute hrefs
- *
- * Note: with Suspense this will not work the same, as we will trigger onNavigated right away,
- * so I'm not sure how to handle the state in that case, not sure how to access the pre-suspension
- * state, but this will work correctly for now if onNavigating is async and blocking
- */ function withMerge(navigate, currRoute) {
-    return function(to) {
+    return (0, _react.useCallback)(function(to) {
         return navigate(to, currRoute);
-    };
+    }, [
+        navigate,
+        currRoute
+    ]);
 }
 /**
  * When router state is not stored in an external store
