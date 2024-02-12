@@ -1,3 +1,7 @@
+## 0.6.3
+
+- Memo the navigate function returned by useNavigate()
+
 ## 0.6.2
 
 - Upgrade all dependencies to address security alerts.
