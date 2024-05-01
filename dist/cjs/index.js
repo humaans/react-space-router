@@ -358,7 +358,7 @@ var CurrRouteContext = /*#__PURE__*/ (0, _react.createContext)();
 function useInternalRouterInstance() {
     var router = (0, _react.useContext)(RouterContext).router;
     if (!router) {
-        throw new Error("Application must be wrapped in <Router />");
+        throw new Error('Application must be wrapped in <Router />');
     }
     return router;
 }
@@ -533,7 +533,7 @@ function Routes(param) {
         var scrollGroup = data.scrollGroup || route.pathname;
         if (prevScrollGroup.current !== scrollGroup) {
             prevScrollGroup.current = scrollGroup;
-            if (typeof window !== "undefined") {
+            if (typeof window !== 'undefined') {
                 window.scrollTo(0, 0);
             }
         }
@@ -547,7 +547,7 @@ function useMakeHref() {
     return href;
 }
 function useLinkProps(to) {
-    if (typeof to === "string") {
+    if (typeof to === 'string') {
         to = {
             url: to
         };
@@ -557,7 +557,7 @@ function useLinkProps(to) {
     var makeHref = useMakeHref();
     // to compute if route is active, we resolve the full url
     var href = to.url ? to.url : makeHref(to, currRoute);
-    var isCurrent = typeof to.current === "undefined" ? currRoute.pathname === href.replace(/^#/, "").split("?")[0] : to.current;
+    var isCurrent = typeof to.current === 'undefined' ? currRoute.pathname === href.replace(/^#/, '').split('?')[0] : to.current;
     function onClick(event) {
         to.onClick && to.onClick(event);
         if (shouldNavigate(event)) {
@@ -567,7 +567,7 @@ function useLinkProps(to) {
     }
     return {
         href: href,
-        "aria-current": isCurrent ? "page" : undefined,
+        'aria-current': isCurrent ? 'page' : undefined,
         onClick: onClick
     };
 }
@@ -581,7 +581,7 @@ function Link(_param) {
         "extraProps",
         "children"
     ]);
-    if (typeof to === "string") {
+    if (typeof to === 'string') {
         to = {
             url: to
         };
@@ -590,12 +590,12 @@ function Link(_param) {
         replace: replace,
         current: current
     }));
-    var isCurrent = linkProps["aria-current"] === "page";
+    var isCurrent = linkProps['aria-current'] === 'page';
     var evaluate = function(valOrFn) {
-        return typeof valOrFn === "function" ? valOrFn(isCurrent) : valOrFn;
+        return typeof valOrFn === 'function' ? valOrFn(isCurrent) : valOrFn;
     };
     return /*#__PURE__*/ _react.default.createElement("a", _object_spread_props(_object_spread(_object_spread_props(_object_spread({
-        "aria-current": linkProps["aria-current"]
+        "aria-current": linkProps['aria-current']
     }, anchorProps), {
         className: evaluate(className),
         style: evaluate(style)

@@ -259,9 +259,9 @@ function _ts_generator(thisArg, body) {
         };
     }
 }
-import React, { createContext, useCallback, useContext, useState, useEffect, useMemo, useRef } from "react";
-import { createRouter } from "space-router";
-export { qs } from "space-router";
+import React, { createContext, useCallback, useContext, useState, useEffect, useMemo, useRef } from 'react';
+import { createRouter } from 'space-router';
+export { qs } from 'space-router';
 export var RouterContext = /*#__PURE__*/ createContext();
 export var CurrRouteContext = /*#__PURE__*/ createContext();
 /**
@@ -274,7 +274,7 @@ export var CurrRouteContext = /*#__PURE__*/ createContext();
  */ export function useInternalRouterInstance() {
     var router = useContext(RouterContext).router;
     if (!router) {
-        throw new Error("Application must be wrapped in <Router />");
+        throw new Error('Application must be wrapped in <Router />');
     }
     return router;
 }
@@ -468,7 +468,7 @@ function makeRouter(routerOpts) {
         var scrollGroup = data.scrollGroup || route.pathname;
         if (prevScrollGroup.current !== scrollGroup) {
             prevScrollGroup.current = scrollGroup;
-            if (typeof window !== "undefined") {
+            if (typeof window !== 'undefined') {
                 window.scrollTo(0, 0);
             }
         }
@@ -489,7 +489,7 @@ function makeRouter(routerOpts) {
  * useLinkProps hook can be used instead of Link component
  * for more flexibility or when more convenient
  */ export function useLinkProps(to) {
-    if (typeof to === "string") {
+    if (typeof to === 'string') {
         to = {
             url: to
         };
@@ -499,7 +499,7 @@ function makeRouter(routerOpts) {
     var makeHref = useMakeHref();
     // to compute if route is active, we resolve the full url
     var href = to.url ? to.url : makeHref(to, currRoute);
-    var isCurrent = typeof to.current === "undefined" ? currRoute.pathname === href.replace(/^#/, "").split("?")[0] : to.current;
+    var isCurrent = typeof to.current === 'undefined' ? currRoute.pathname === href.replace(/^#/, '').split('?')[0] : to.current;
     function onClick(event) {
         to.onClick && to.onClick(event);
         if (shouldNavigate(event)) {
@@ -509,7 +509,7 @@ function makeRouter(routerOpts) {
     }
     return {
         href: href,
-        "aria-current": isCurrent ? "page" : undefined,
+        'aria-current': isCurrent ? 'page' : undefined,
         onClick: onClick
     };
 }
@@ -525,7 +525,7 @@ function makeRouter(routerOpts) {
         "extraProps",
         "children"
     ]);
-    if (typeof to === "string") {
+    if (typeof to === 'string') {
         to = {
             url: to
         };
@@ -534,12 +534,12 @@ function makeRouter(routerOpts) {
         replace: replace,
         current: current
     }));
-    var isCurrent = linkProps["aria-current"] === "page";
+    var isCurrent = linkProps['aria-current'] === 'page';
     var evaluate = function(valOrFn) {
-        return typeof valOrFn === "function" ? valOrFn(isCurrent) : valOrFn;
+        return typeof valOrFn === 'function' ? valOrFn(isCurrent) : valOrFn;
     };
     return /*#__PURE__*/ React.createElement("a", _object_spread_props(_object_spread(_object_spread_props(_object_spread({
-        "aria-current": linkProps["aria-current"]
+        "aria-current": linkProps['aria-current']
     }, anchorProps), {
         className: evaluate(className),
         style: evaluate(style)

@@ -14,6 +14,6 @@ const w = watch ? ' -w' : ''
   const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '../package.json')))
 
   const swc = './node_modules/.bin/swc'
-  await sh(`${swc} --no-swcrc src -d ${pkg.main} ${w} --config-file=./.swc-cjs`)
-  await sh(`${swc} --no-swcrc src -d ${pkg.module} ${w} --config-file=./.swc-esm`)
+  await sh(`${swc} --no-swcrc src -d ${pkg.main} ${w} --strip-leading-paths --config-file=./.swc-cjs`)
+  await sh(`${swc} --no-swcrc src -d ${pkg.module} ${w} --strip-leading-paths --config-file=./.swc-esm`)
 })()
