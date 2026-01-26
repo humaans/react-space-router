@@ -125,12 +125,22 @@ function _object_spread_props(target, source) {
 }
 function _object_without_properties(source, excluded) {
     if (source == null) return {};
-    var target = _object_without_properties_loose(source, excluded);
-    var key, i;
+    var target = {}, sourceKeys, key, i;
+    if (typeof Reflect !== "undefined" && Reflect.ownKeys) {
+        sourceKeys = Reflect.ownKeys(source);
+        for(i = 0; i < sourceKeys.length; i++){
+            key = sourceKeys[i];
+            if (excluded.indexOf(key) >= 0) continue;
+            if (!Object.prototype.propertyIsEnumerable.call(source, key)) continue;
+            target[key] = source[key];
+        }
+        return target;
+    }
+    target = _object_without_properties_loose(source, excluded);
     if (Object.getOwnPropertySymbols) {
-        var sourceSymbolKeys = Object.getOwnPropertySymbols(source);
-        for(i = 0; i < sourceSymbolKeys.length; i++){
-            key = sourceSymbolKeys[i];
+        sourceKeys = Object.getOwnPropertySymbols(source);
+        for(i = 0; i < sourceKeys.length; i++){
+            key = sourceKeys[i];
             if (excluded.indexOf(key) >= 0) continue;
             if (!Object.prototype.propertyIsEnumerable.call(source, key)) continue;
             target[key] = source[key];
@@ -140,12 +150,11 @@ function _object_without_properties(source, excluded) {
 }
 function _object_without_properties_loose(source, excluded) {
     if (source == null) return {};
-    var target = {};
-    var sourceKeys = Object.keys(source);
-    var key, i;
+    var target = {}, sourceKeys = Object.getOwnPropertyNames(source), key, i;
     for(i = 0; i < sourceKeys.length; i++){
         key = sourceKeys[i];
         if (excluded.indexOf(key) >= 0) continue;
+        if (!Object.prototype.propertyIsEnumerable.call(source, key)) continue;
         target[key] = source[key];
     }
     return target;
@@ -173,9 +182,17 @@ function _ts_generator(thisArg, body) {
         },
         trys: [],
         ops: []
-    }, g = Object.create((typeof Iterator === "function" ? Iterator : Object).prototype);
-    return g.next = verb(0), g["throw"] = verb(1), g["return"] = verb(2), typeof Symbol === "function" && (g[Symbol.iterator] = function() {
-        return this;
+    }, g = Object.create((typeof Iterator === "function" ? Iterator : Object).prototype), d = Object.defineProperty;
+    return d(g, "next", {
+        value: verb(0)
+    }), d(g, "throw", {
+        value: verb(1)
+    }), d(g, "return", {
+        value: verb(2)
+    }), typeof Symbol === "function" && d(g, Symbol.iterator, {
+        value: function() {
+            return this;
+        }
     }), g;
     function verb(n) {
         return function(v) {
@@ -508,8 +525,8 @@ function makeRouter(routerOpts) {
 }
 /**
  * Link component
- */ export function Link(_param) {
-    var to = _param.href, replace = _param.replace, current = _param.current, className = _param.className, style = _param.style, extraProps = _param.extraProps, children = _param.children, anchorProps = _object_without_properties(_param, [
+ */ export function Link(_0) {
+    var to = _0.href, replace = _0.replace, current = _0.current, className = _0.className, style = _0.style, extraProps = _0.extraProps, children = _0.children, anchorProps = _object_without_properties(_0, [
         "href",
         "replace",
         "current",
