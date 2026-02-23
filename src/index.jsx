@@ -107,7 +107,7 @@ export function Router({
         if (!useRoute) {
           setCurrRoute(currRoute)
         }
-        onNavigated && onNavigated(currRoute)
+        if (onNavigated) onNavigated(currRoute)
       },
     }),
     [router, useRoute, onNavigating, onNavigated]
@@ -222,7 +222,7 @@ export function useLinkProps(to) {
     typeof to.current === 'undefined' ? currRoute.pathname === href.replace(/^#/, '').split('?')[0] : to.current
 
   function onClick(event) {
-    to.onClick && to.onClick(event)
+    if (to.onClick) to.onClick(event)
 
     if (shouldNavigate(event)) {
       event.preventDefault()

@@ -23,7 +23,7 @@
   ],
   "author": "Karolis Narkevicius",
   "scripts": {
-    "test": "npm run build && healthier && prettier --check '**/*.{js,css,yml}' && c8 ava",
+    "test": "npm run build && oxlint --ignore-pattern examples --ignore-pattern dist --ignore-pattern docs && prettier --check '**/*.{js,css,yml}' && c8 ava",
     "format": "prettier --write '**/*.{js,css,yml}'",
     "coverage": "c8 --reporter=html ava",
     "build": "node ./tasks/build.js",
@@ -35,6 +35,9 @@
   "dependencies": {
     "space-router": "^0.9.3"
   },
+  "overrides": {
+    "minimatch": ">=10.2.1"
+  },
   "devDependencies": {
     "@babel/preset-react": "^7.27.1",
     "@swc-node/register": "^1.10.10",
@@ -44,16 +47,11 @@
     "c8": "^10.1.3",
     "execa": "^9.6.0",
     "gh-pages": "^6.3.0",
-    "healthier": "^7.0.0",
+    "oxlint": "^1.0.0",
     "jsdom": "^26.1.0",
     "prettier": "^3.6.2",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
-  },
-  "healthier": {
-    "ignore": [
-      "examples"
-    ]
   },
   "ava": {
     "files": [

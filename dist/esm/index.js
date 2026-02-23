@@ -127,7 +127,7 @@ function _object_without_properties(source, excluded) {
     if (source == null) return {};
     var target = {}, sourceKeys, key, i;
     if (typeof Reflect !== "undefined" && Reflect.ownKeys) {
-        sourceKeys = Reflect.ownKeys(source);
+        sourceKeys = Reflect.ownKeys(Object(source));
         for(i = 0; i < sourceKeys.length; i++){
             key = sourceKeys[i];
             if (excluded.indexOf(key) >= 0) continue;
@@ -371,7 +371,7 @@ function makeRouter(routerOpts) {
                 if (!useRoute) {
                     setCurrRoute(currRoute);
                 }
-                onNavigated && onNavigated(currRoute);
+                if (onNavigated) onNavigated(currRoute);
             }
         };
     }, [
@@ -413,7 +413,7 @@ function makeRouter(routerOpts) {
     var onlyLatest = useOnlyLatest();
     useScrollToTop(route, disableScrollToTop);
     useEffect(function() {
-        var transition = function(route) {
+        var transition = function transition(route) {
             onlyLatest(function(isLatest) {
                 return _async_to_generator(function() {
                     return _ts_generator(this, function(_state) {
@@ -511,7 +511,7 @@ function makeRouter(routerOpts) {
     var href = to.url ? to.url : makeHref(to, currRoute);
     var isCurrent = typeof to.current === 'undefined' ? currRoute.pathname === href.replace(/^#/, '').split('?')[0] : to.current;
     function onClick(event) {
-        to.onClick && to.onClick(event);
+        if (to.onClick) to.onClick(event);
         if (shouldNavigate(event)) {
             event.preventDefault();
             navigate(to);
@@ -545,7 +545,7 @@ function makeRouter(routerOpts) {
         current: current
     }));
     var isCurrent = linkProps['aria-current'] === 'page';
-    var evaluate = function(valOrFn) {
+    var evaluate = function evaluate(valOrFn) {
         return typeof valOrFn === 'function' ? valOrFn(isCurrent) : valOrFn;
     };
     return /*#__PURE__*/ React.createElement("a", _object_spread_props(_object_spread(_object_spread_props(_object_spread({
@@ -590,7 +590,7 @@ function makeRouter(routerOpts) {
     return function(fn) {
         seq.current += 1;
         var curr = seq.current;
-        var isLatest = function() {
+        var isLatest = function isLatest() {
             return seq.current === curr;
         };
         return fn(isLatest);
