@@ -156,7 +156,23 @@ export function Navigate({ to }) {
     return null;
 }
 export function shouldNavigate(e) {
-    return !e.defaultPrevented && e.button === 0 && !(e.metaKey || e.altKey || e.ctrlKey || e.shiftKey);
+    if (e.defaultPrevented || e.button !== 0)
+        return false;
+    if (e.metaKey || e.altKey || e.ctrlKey || e.shiftKey)
+        return false;
+    const el = e.currentTarget;
+    if (el && el.tagName === 'A') {
+        const a = el;
+        // let the browser handle these: opening in a new tab/window, downloads,
+        // and cross-origin or non-http(s) protocols (mailto:, tel:, ...)
+        if (a.target && a.target !== '_self')
+            return false;
+        if (a.hasAttribute('download'))
+            return false;
+        if (a.origin && a.origin !== window.location.origin)
+            return false;
+    }
+    return true;
 }
 function useOnlyLatest() {
     const seq = useRef(0);
