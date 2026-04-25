@@ -23,8 +23,8 @@
   ],
   "author": "Karolis Narkevicius",
   "scripts": {
-    "test": "npm run build && oxlint --ignore-pattern examples --ignore-pattern dist --ignore-pattern docs && prettier --check '**/*.{js,css,yml}' && c8 ava",
-    "format": "prettier --write '**/*.{js,css,yml}'",
+    "test": "npm run build && oxlint --ignore-pattern examples --ignore-pattern dist --ignore-pattern docs && oxfmt --check --ignore-path=.gitignore --ignore-path=.oxfmtignore '**/*.{js,css,yml}' && c8 ava",
+    "format": "oxfmt --ignore-path=.gitignore --ignore-path=.oxfmtignore '**/*.{js,css,yml}'",
     "coverage": "c8 --reporter=html ava",
     "build": "node ./tasks/build.js",
     "watch": "node ./tasks/build.js -w",
@@ -48,8 +48,8 @@
     "execa": "^9.6.1",
     "gh-pages": "^6.3.0",
     "oxlint": "^1.60.0",
+    "oxfmt": "^0.46.0",
     "jsdom": "^29.0.2",
-    "prettier": "^3.8.2",
     "react": "^19.2.5",
     "react-dom": "^19.2.5"
   },
