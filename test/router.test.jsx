@@ -286,6 +286,107 @@ test.serial('onNavigating is awaited before onNavigated', async (t) => {
   t.is(events.indexOf('navigating:/stuff') < events.indexOf('navigated:/stuff'), true)
 })
 
+test.serial('Routes resolves ESM-default components and skips null components', (t) => {
+  setup()
+
+  const root = document.getElementById('root')
+
+  const routes = [
+    {
+      path: '/',
+      component: ({ children }) => <section>{children}</section>,
+      routes: [
+        // simulates a dynamically imported module: { default: Component }
+        { path: '/esm', component: { default: () => <div>ESM</div> } },
+        // null component renders nothing for this segment
+        { path: '/empty', component: null },
+      ],
+    },
+  ]
+
+  let router
+
+  function Capture() {
+    const r = useInternalRouterInstance()
+    useEffect(() => {
+      router = r
+    }, [r])
+    return null
+  }
+
+  function App() {
+    return (
+      <Router sync>
+        <Capture />
+        <Routes routes={routes} />
+      </Router>
+    )
+  }
+
+  act(() => {
+    const r = ReactDOM.createRoot(root)
+    r.render(<App />)
+  })
+
+  act(() => {
+    router.navigate('/esm')
+  })
+  t.is(window.document.body.innerHTML, '<div id="root"><section><div>ESM</div></section></div>')
+
+  act(() => {
+    router.navigate('/empty')
+  })
+  t.is(window.document.body.innerHTML, '<div id="root"><section></section></div>')
+})
+
+test.serial('Link honours current override and function className/style/extraProps', (t) => {
+  setup()
+
+  const routes = [
+    {
+      path: '/',
+      component: () => (
+        <div>
+          <Link
+            href='/stuff'
+            current={true}
+            className={(isCurrent) => (isCurrent ? 'on' : 'off')}
+            style={(isCurrent) => ({ color: isCurrent ? 'red' : 'blue' })}
+            extraProps={(isCurrent) => ({ 'data-active': isCurrent ? 'yes' : 'no' })}
+          >
+            Forced
+          </Link>
+          <Link href='/stuff' current={false}>
+            Disabled
+          </Link>
+        </div>
+      ),
+    },
+    { path: '/stuff', component: () => <div>Stuff</div> },
+  ]
+
+  function App() {
+    return (
+      <Router sync>
+        <Routes routes={routes} />
+      </Router>
+    )
+  }
+
+  const root = document.getElementById('root')
+  act(() => {
+    const r = ReactDOM.createRoot(root)
+    r.render(<App />)
+  })
+
+  const [forced, disabled] = window.document.querySelectorAll('a')
+  t.is(forced.getAttribute('aria-current'), 'page')
+  t.is(forced.getAttribute('class'), 'on')
+  t.is(forced.getAttribute('style'), 'color: red;')
+  t.is(forced.getAttribute('data-active'), 'yes')
+  t.is(disabled.getAttribute('aria-current'), null)
+})
+
 test.serial('Router recreates router when mode prop changes', (t) => {
   setup()
 
