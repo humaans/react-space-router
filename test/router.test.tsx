@@ -1,5 +1,5 @@
 import test from 'ava'
-import React, { act, useEffect, useState } from 'react'
+import { act, useEffect, useState } from 'react'
 import ReactDOM from 'react-dom/client'
 import { JSDOM } from 'jsdom'
 import {
@@ -11,25 +11,27 @@ import {
   useInternalRouterInstance,
   useLinkProps,
   qs,
-} from '../src/index.jsx'
+} from '../src/index.tsx'
 
-global.IS_REACT_ACT_ENVIRONMENT = true
+;(globalThis as any).IS_REACT_ACT_ENVIRONMENT = true
+
+const g = globalThis as any
 
 function setup() {
   const dom = new JSDOM('<!doctype html><div id="root"></div>')
-  global.window = dom.window
-  global.window.scrollTo = () => {}
-  global.document = dom.window.document
-  global.history = {
-    pushState(state, title, url) {
-      global.location.href = url
-      global.location.pathname = url
+  g.window = dom.window
+  g.window.scrollTo = () => {}
+  g.document = dom.window.document
+  g.history = {
+    pushState(_state: unknown, _title: string, url: string) {
+      g.location.href = url
+      g.location.pathname = url
 
       const popstate = new dom.window.PopStateEvent('popstate')
       dom.window.dispatchEvent(popstate)
     },
   }
-  global.location = {
+  g.location = {
     href: '/',
     pathname: '/',
     search: '',
@@ -83,7 +85,7 @@ test.serial('usage', async function (t) {
 
   t.is(
     window.document.body.innerHTML,
-    '<div id="root"><div><a aria-current="page" to="/stuff" href="/">Stuff</a>Hello</div></div>'
+    '<div id="root"><div><a aria-current="page" to="/stuff" href="/">Stuff</a>Hello</div></div>',
   )
 
   act(() => {
@@ -152,7 +154,7 @@ test.serial('useInternalRouterInstance throws outside Router', (t) => {
 
   function App() {
     return (
-      <RouterContext.Provider value={{}}>
+      <RouterContext.Provider value={undefined}>
         <NoRouter />
       </RouterContext.Provider>
     )
@@ -169,7 +171,7 @@ test.serial('useInternalRouterInstance throws outside Router', (t) => {
           r.render(<App />)
         })
       },
-      { message: /Application must be wrapped in <Router \/>/ }
+      { message: /Application must be wrapped in <Router \/>/ },
     )
   } finally {
     console.error = originalConsoleError
