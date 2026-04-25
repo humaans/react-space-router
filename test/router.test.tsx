@@ -465,6 +465,116 @@ test.serial('Routes passes children through when a middle segment has no compone
   t.is(window.document.body.innerHTML, '<div id="root"><section><article>Inner</article></section></div>')
 })
 
+test.serial('Link with target=_blank lets the browser open in a new tab', (t) => {
+  setup()
+
+  const root = document.getElementById('root')
+
+  const routes = [
+    {
+      path: '/',
+      component: () => (
+        <Link href='/foo' target='_blank'>
+          NewTab
+        </Link>
+      ),
+    },
+    { path: '/foo', component: () => <div>Foo</div> },
+  ]
+
+  function App() {
+    return (
+      <Router sync>
+        <Routes routes={routes} />
+      </Router>
+    )
+  }
+
+  act(() => {
+    const r = ReactDOM.createRoot(root)
+    r.render(<App />)
+  })
+
+  const link = window.document.querySelector('a')!
+  act(() => {
+    link.click()
+  })
+
+  // navigation should NOT have happened — the browser handles target=_blank
+  t.is(location.pathname, '/')
+})
+
+test.serial('Link with cross-origin URL lets the browser handle it', (t) => {
+  setup()
+
+  const root = document.getElementById('root')
+
+  const routes = [
+    {
+      path: '/',
+      component: () => <Link href='https://example.com/foo'>External</Link>,
+    },
+  ]
+
+  function App() {
+    return (
+      <Router sync>
+        <Routes routes={routes} />
+      </Router>
+    )
+  }
+
+  act(() => {
+    const r = ReactDOM.createRoot(root)
+    r.render(<App />)
+  })
+
+  const link = window.document.querySelector('a')!
+  act(() => {
+    link.click()
+  })
+
+  // SPA navigation should be skipped for cross-origin URLs
+  t.is(location.pathname, '/')
+})
+
+test.serial('Link with download attribute lets the browser handle it', (t) => {
+  setup()
+
+  const root = document.getElementById('root')
+
+  const routes = [
+    {
+      path: '/',
+      component: () => (
+        <Link href='/file.pdf' download>
+          Download
+        </Link>
+      ),
+    },
+  ]
+
+  function App() {
+    return (
+      <Router sync>
+        <Routes routes={routes} />
+      </Router>
+    )
+  }
+
+  act(() => {
+    const r = ReactDOM.createRoot(root)
+    r.render(<App />)
+  })
+
+  const link = window.document.querySelector('a')!
+  act(() => {
+    link.click()
+  })
+
+  t.is(location.pathname, '/')
+})
+
 test.serial('Router recreates router when mode prop changes', (t) => {
   setup()
 
