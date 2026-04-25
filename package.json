@@ -33,7 +33,7 @@
     "release:docs": "hugo -s docs && gh-pages -d docs/public"
   },
   "dependencies": {
-    "space-router": "^0.9.5"
+    "space-router": "^1.0.0"
   },
   "overrides": {
     "minimatch": ">=10.2.1"
@@ -42,12 +42,12 @@
     "@babel/preset-react": "^7.28.5",
     "@swc-node/register": "^1.11.1",
     "@swc/cli": "^0.8.1",
-    "@swc/core": "^1.15.24",
+    "@swc/core": "^1.15.30",
     "ava": "^7.0.0",
     "c8": "^11.0.0",
     "execa": "^9.6.1",
     "gh-pages": "^6.3.0",
-    "oxlint": "^1.60.0",
+    "oxlint": "^1.61.0",
     "oxfmt": "^0.46.0",
     "jsdom": "^29.0.2",
     "react": "^19.2.5",
