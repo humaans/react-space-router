@@ -78,7 +78,8 @@ export function Routes({ routes, disableScrollToTop }) {
             const props = segment.props ?? {};
             const component = segment.component;
             const Component = resolveComponent(component);
-            return Component ? _jsx(Component, { ...props, children: children }) : null;
+            // segments without a component act as transparent passthroughs so descendants still render
+            return Component ? _jsx(Component, { ...props, children: children }) : children;
         }, null);
     }, [router, route && route.pathname]);
 }
@@ -116,7 +117,7 @@ export function useLinkProps(to) {
     const makeHref = useMakeHref();
     const href = target.url ? target.url : makeHref(target, currRoute);
     const isCurrent = typeof target.current === 'undefined'
-        ? currRoute.pathname === href.replace(/^#/, '').split('?')[0]
+        ? currRoute?.pathname === href.replace(/^#/, '').split('?')[0]
         : target.current;
     function onClick(event) {
         if (target.onClick)
