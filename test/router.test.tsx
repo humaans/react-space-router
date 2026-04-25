@@ -389,6 +389,82 @@ test.serial('Link honours current override and function className/style/extraPro
   t.is(disabled.getAttribute('aria-current'), null)
 })
 
+test.serial('Link rendered alongside Routes in async mode does not crash', async (t) => {
+  setup()
+
+  const root = document.getElementById('root')
+
+  const routes = [{ path: '/', component: () => <div>Home</div> }]
+
+  function App() {
+    return (
+      <Router>
+        <Link href='/somewhere'>Nav</Link>
+        <Routes routes={routes} />
+      </Router>
+    )
+  }
+
+  await act(async () => {
+    const r = ReactDOM.createRoot(root)
+    r.render(<App />)
+  })
+
+  // before the bug fix this crashed during render with "Cannot read properties of null (reading 'pathname')"
+  const link = window.document.querySelector('a')
+  t.is(link?.getAttribute('href'), '/somewhere')
+  t.is(link?.getAttribute('aria-current'), null)
+})
+
+test.serial('Routes passes children through when a middle segment has no component', (t) => {
+  setup()
+
+  const root = document.getElementById('root')
+
+  const routes = [
+    {
+      path: '/',
+      component: ({ children }) => <section>{children}</section>,
+      routes: [
+        {
+          // middle segment with no component — should be transparent, not block descendants
+          routes: [{ path: '/inner', component: () => <article>Inner</article> }],
+        },
+      ],
+    },
+  ]
+
+  let router
+
+  function Capture() {
+    const r = useInternalRouterInstance()
+    useEffect(() => {
+      router = r
+    }, [r])
+    return null
+  }
+
+  function App() {
+    return (
+      <Router sync>
+        <Capture />
+        <Routes routes={routes} />
+      </Router>
+    )
+  }
+
+  act(() => {
+    const r = ReactDOM.createRoot(root)
+    r.render(<App />)
+  })
+
+  act(() => {
+    router.navigate('/inner')
+  })
+
+  t.is(window.document.body.innerHTML, '<div id="root"><section><article>Inner</article></section></div>')
+})
+
 test.serial('Router recreates router when mode prop changes', (t) => {
   setup()
 

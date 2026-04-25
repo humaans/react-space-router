@@ -157,7 +157,8 @@ export function Routes({ routes, disableScrollToTop }: RoutesProps) {
       const props = (segment as { props?: Record<string, unknown> }).props ?? {}
       const component = (segment as { component?: unknown }).component
       const Component = resolveComponent(component)
-      return Component ? <Component {...props}>{children}</Component> : null
+      // segments without a component act as transparent passthroughs so descendants still render
+      return Component ? <Component {...props}>{children}</Component> : children
     }, null)
   }, [router, route && route.pathname])
 }
@@ -217,7 +218,7 @@ export function useLinkProps(to: To): LinkPropsResult {
   const href = target.url ? target.url : makeHref(target, currRoute as Route | undefined)
   const isCurrent =
     typeof target.current === 'undefined'
-      ? currRoute!.pathname === href.replace(/^#/, '').split('?')[0]
+      ? currRoute?.pathname === href.replace(/^#/, '').split('?')[0]
       : target.current
 
   function onClick(event: MouseEvent<HTMLAnchorElement>) {
