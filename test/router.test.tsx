@@ -347,11 +347,17 @@ test.serial('transformRoute rewrites the route before commit and syncs the URL',
   setup()
 
   const root = document.getElementById('root')
+  let preparedStatus
+  let preparedUrl
 
   const routes = [
     { path: '/', component: () => <div>Home</div> },
     {
       path: '/people',
+      prepare: ({ query, url }) => {
+        preparedStatus = query.status
+        preparedUrl = url
+      },
       component: () => {
         const r = useRoute()
         return <div data-testid='people'>status={String(r?.query?.status ?? 'none')}</div>
@@ -396,6 +402,56 @@ test.serial('transformRoute rewrites the route before commit and syncs the URL',
   })
 
   t.regex(window.document.body.innerHTML, /status=active/)
+  t.is(preparedStatus, 'active')
+  t.is(preparedUrl, '/people?status=active')
+})
+
+test.serial('transformRoute applies before initial route prepare', async (t) => {
+  setup()
+  history.pushState({}, '', '/people')
+
+  const root = document.getElementById('root')
+  let preparedStatus
+  let preparedUrl
+
+  const routes = [
+    {
+      path: '/people',
+      prepare: ({ query, url }) => {
+        preparedStatus = query.status
+        preparedUrl = url
+      },
+      component: () => {
+        const r = useRoute()
+        return <div>status={String(r?.query?.status ?? 'none')}</div>
+      },
+    },
+  ]
+
+  function transformRoute(route: Route): Route | void {
+    if (route.pathname === '/people' && !(route as any).query?.status) {
+      const query = { ...(route as any).query, status: 'active' }
+      const search = '?status=active'
+      return { ...route, query, search, url: '/people' + search } as Route
+    }
+  }
+
+  function App() {
+    return (
+      <Router sync transformRoute={transformRoute}>
+        <Routes routes={routes} />
+      </Router>
+    )
+  }
+
+  await act(async () => {
+    const r = ReactDOM.createRoot(root)
+    r.render(<App />)
+  })
+
+  t.regex(window.document.body.innerHTML, /status=active/)
+  t.is(preparedStatus, 'active')
+  t.is(preparedUrl, '/people?status=active')
 })
 
 test.serial('usePending flips while a transition is in flight', async (t) => {
@@ -958,6 +1014,83 @@ test.serial('Routes pins prepare handles for the committed nav and releases on t
     released.some((k) => k.startsWith('c#')),
     '/c released on unmount',
   )
+})
+
+test.serial('Routes keeps current prepare handles pinned until a suspended navigation commits', async (t) => {
+  setup()
+
+  const root = document.getElementById('root')
+
+  const released: string[] = []
+  let resolveSlow: (() => void) | null = null
+  const slowGate = new Promise<void>((r) => {
+    resolveSlow = r
+  })
+
+  function makeHandle(label: string): PreparedHandle {
+    return {
+      key: label,
+      promise: Promise.resolve(),
+      release() {
+        released.push(label)
+      },
+    }
+  }
+
+  function Slow() {
+    if (!(Slow as any).ready) {
+      throw slowGate.then(() => {
+        ;(Slow as any).ready = true
+      })
+    }
+    return <div>Slow</div>
+  }
+
+  const routes = [
+    { path: '/', component: () => <div>Home</div>, prepare: () => [makeHandle('home')] },
+    { path: '/slow', component: Slow, prepare: () => [makeHandle('slow')] },
+  ]
+
+  let router
+
+  function Capture() {
+    const r = useInternalRouterInstance()
+    useEffect(() => {
+      router = r
+    }, [r])
+    return null
+  }
+
+  function App() {
+    return (
+      <Router sync>
+        <Capture />
+        <Routes routes={routes} />
+      </Router>
+    )
+  }
+
+  await act(async () => {
+    const r = ReactDOM.createRoot(root)
+    r.render(<App />)
+  })
+
+  await act(async () => {
+    router.navigate('/slow')
+  })
+
+  t.is(window.document.body.innerHTML, '<div id="root"><div>Home</div></div>')
+  t.false(released.includes('home'), 'home handle stays pinned while old route remains committed')
+
+  await act(async () => {
+    resolveSlow!()
+    await Promise.resolve()
+    await Promise.resolve()
+  })
+
+  t.is(window.document.body.innerHTML, '<div id="root"><div>Slow</div></div>')
+  t.true(released.includes('home'), 'home handle releases after /slow commits')
+  t.false(released.includes('slow'), 'slow handle remains pinned after /slow commits')
 })
 
 test.serial('Router recreates router when mode prop changes', (t) => {
