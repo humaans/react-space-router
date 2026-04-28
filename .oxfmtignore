@@ -3,4 +3,5 @@ dist
 docs/static
 docs/assets
 docs/public
-examples/node_modules/*
+demo/dist
+demo/node_modules/*

@@ -35,8 +35,10 @@
   ],
   "author": "Karolis Narkevicius",
   "scripts": {
-    "test": "npm run build && oxlint --ignore-pattern examples --ignore-pattern dist --ignore-pattern docs && oxfmt --check --ignore-path=.gitignore --ignore-path=.oxfmtignore '**/*.{ts,tsx,js,css,yml}' && c8 ava",
+    "test": "npm run build && oxlint --ignore-pattern demo --ignore-pattern dist --ignore-pattern docs && oxfmt --check --ignore-path=.gitignore --ignore-path=.oxfmtignore '**/*.{ts,tsx,js,css,yml}' && c8 ava",
     "format": "oxfmt --ignore-path=.gitignore --ignore-path=.oxfmtignore '**/*.{ts,tsx,js,css,yml}'",
+    "demo": "npm run build && npm --prefix demo run dev",
+    "demo:build": "npm run build && npm --prefix demo run build",
     "coverage": "c8 --reporter=html ava",
     "build": "rm -rf dist && tsc",
     "watch": "tsc -w",
