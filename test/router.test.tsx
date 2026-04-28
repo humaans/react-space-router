@@ -1,7 +1,7 @@
 import test from 'ava'
 import { act, useEffect, useState } from 'react'
 import ReactDOM from 'react-dom/client'
-import { JSDOM } from 'jsdom'
+import { JSDOM, VirtualConsole } from 'jsdom'
 import {
   Router,
   RouterContext,
@@ -22,7 +22,23 @@ import {
 const g = globalThis as any
 
 function setup() {
-  const dom = new JSDOM('<!doctype html><div id="root"></div>', { url: 'http://localhost/' })
+  const virtualConsole = new VirtualConsole()
+  virtualConsole.forwardTo(console, { jsdomErrors: 'none' })
+  virtualConsole.on('jsdomError', (error) => {
+    if (error.type === 'not-implemented' && error.message === 'Not implemented: navigation to another Document') {
+      return
+    }
+    if (error.type === 'unhandled-exception') {
+      console.error(error.cause.stack)
+      return
+    }
+    console.error(error.message)
+  })
+
+  const dom = new JSDOM('<!doctype html><div id="root"></div>', {
+    url: 'http://localhost/',
+    virtualConsole,
+  })
   g.window = dom.window
   g.window.scrollTo = () => {}
   g.document = dom.window.document
@@ -44,6 +60,12 @@ function setup() {
     search: '',
     hash: '',
   }
+}
+
+function dispatchClick(el: Element): MouseEvent {
+  const event = new window.MouseEvent('click', { bubbles: true, button: 0, cancelable: true })
+  el.dispatchEvent(event)
+  return event
 }
 
 test.serial('usage', async function (t) {
@@ -722,11 +744,13 @@ test.serial('Link with target=_blank lets the browser open in a new tab', (t) =>
   })
 
   const link = window.document.querySelector('a')!
+  let event: MouseEvent
   act(() => {
-    link.click()
+    event = dispatchClick(link)
   })
 
   // navigation should NOT have happened — the browser handles target=_blank
+  t.false(event!.defaultPrevented)
   t.is(location.pathname, '/')
 })
 
@@ -756,11 +780,13 @@ test.serial('Link with cross-origin URL lets the browser handle it', (t) => {
   })
 
   const link = window.document.querySelector('a')!
+  let event: MouseEvent
   act(() => {
-    link.click()
+    event = dispatchClick(link)
   })
 
   // SPA navigation should be skipped for cross-origin URLs
+  t.false(event!.defaultPrevented)
   t.is(location.pathname, '/')
 })
 
@@ -794,10 +820,12 @@ test.serial('Link with download attribute lets the browser handle it', (t) => {
   })
 
   const link = window.document.querySelector('a')!
+  let event: MouseEvent
   act(() => {
-    link.click()
+    event = dispatchClick(link)
   })
 
+  t.false(event!.defaultPrevented)
   t.is(location.pathname, '/')
 })
 

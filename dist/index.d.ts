@@ -4,7 +4,7 @@ export { qs } from 'space-router';
 export interface RoutePrepareContext {
     pathname: string;
     url: string;
-    params: Record<string, string | number>;
+    params: Record<string, string>;
     query: Record<string, unknown>;
 }
 /**
@@ -45,8 +45,6 @@ export interface RouteData {
     routes?: RouteData[];
     [extra: string]: unknown;
 }
-export declare function defineRoute<T extends RouteData>(route: T): T;
-export declare function defineRoutes<T extends readonly RouteData[]>(routes: T): T;
 export type To = string | (NavigateTarget & {
     current?: boolean;
 });

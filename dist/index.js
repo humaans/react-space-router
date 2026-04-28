@@ -2,12 +2,6 @@ import { jsx as _jsx } from "react/jsx-runtime";
 import { createContext, lazy as reactLazy, Suspense, useCallback, useContext, useState, useEffect, useMemo, useRef, useTransition, } from 'react';
 import { createRouter, qs as defaultQs, } from 'space-router';
 export { qs } from 'space-router';
-export function defineRoute(route) {
-    return route;
-}
-export function defineRoutes(routes) {
-    return routes;
-}
 const resolverPromiseCache = new WeakMap();
 const resolverComponentCache = new WeakMap();
 function preloadResolver(resolver) {
@@ -313,14 +307,45 @@ export function Routes({ routes, disableScrollToTop }) {
     return useMemo(() => {
         if (!activeRoute)
             return null;
-        const children = activeRoute.data.reduceRight((children, segment) => {
-            const props = segment.props ?? {};
+        // Each segment component receives only the params *declared in its own
+        // `path`* — never borrowed from siblings or descendants. A wrapping
+        // layout without a path gets no params; a layout that owns `:userId`
+        // gets that one and only that one; the leaf gets whatever its own
+        // path declared. Components type the params they expect via their own
+        // function signature (e.g. `({ id }: { id: string })`); the router's
+        // runtime injection meets them at that boundary.
+        //
+        // Static `props` declared on the route definition win on key collision
+        // so consumers can intentionally override a path-injected param.
+        const segments = activeRoute.data;
+        const matchedParams = (activeRoute.params ?? {});
+        const children = segments.reduceRight((children, segment) => {
+            const segProps = segment.props ?? {};
             const Component = resolveSegmentComponent(segment);
-            // segments without a component act as transparent passthroughs
-            return Component ? _jsx(Component, { ...props, children: children }) : children;
+            if (!Component)
+                return children;
+            const ownParams = paramsDeclaredBy(segment.path, matchedParams);
+            return (_jsx(Component, { ...ownParams, ...segProps, children: children }));
         }, null);
         return _jsx(RouteContext.Provider, { value: activeRoute, children: children });
     }, [activeRoute]);
+}
+const PATH_PARAM_NAME_RE = /:([A-Za-z0-9_]+)/g;
+/**
+ * Picks out of `matched` only the params whose names appear as `:name`
+ * segments in `path`. A layout segment with no path returns `{}`; a leaf
+ * with `/users/:userId/posts/:postId` returns `{ userId, postId }`.
+ */
+function paramsDeclaredBy(path, matched) {
+    if (!path)
+        return {};
+    const own = {};
+    for (const match of path.matchAll(PATH_PARAM_NAME_RE)) {
+        const name = match[1];
+        if (name in matched)
+            own[name] = matched[name];
+    }
+    return own;
 }
 function resolveSegmentComponent(segment) {
     if (segment.resolver) {

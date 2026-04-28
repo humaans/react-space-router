@@ -35,7 +35,7 @@ export { qs } from 'space-router'
 export interface RoutePrepareContext {
   pathname: string
   url: string
-  params: Record<string, string | number>
+  params: Record<string, string>
   query: Record<string, unknown>
 }
 
@@ -79,18 +79,15 @@ export interface RouteData {
   [extra: string]: unknown
 }
 
-export function defineRoute<T extends RouteData>(route: T): T {
-  return route
-}
+// Internal caches keyed by the resolver function reference. Generic params are
+// erased here — the cache is structurally a map of unknown resolvers to their
+// lazily-imported component types.
+type AnyResolver = () => Promise<{ default: ComponentType<any> }>
 
-export function defineRoutes<T extends readonly RouteData[]>(routes: T): T {
-  return routes
-}
+const resolverPromiseCache = new WeakMap<AnyResolver, Promise<{ default: ComponentType<any> }>>()
+const resolverComponentCache = new WeakMap<AnyResolver, ComponentType<any>>()
 
-const resolverPromiseCache = new WeakMap<RouteResolver, Promise<ResolverModule>>()
-const resolverComponentCache = new WeakMap<RouteResolver, ComponentType<any>>()
-
-function preloadResolver(resolver: RouteResolver): Promise<ResolverModule> {
+function preloadResolver(resolver: AnyResolver): Promise<{ default: ComponentType<any> }> {
   let promise = resolverPromiseCache.get(resolver)
   if (!promise) {
     promise = resolver()
@@ -99,7 +96,7 @@ function preloadResolver(resolver: RouteResolver): Promise<ResolverModule> {
   return promise
 }
 
-function getResolverComponent(resolver: RouteResolver): ComponentType<any> {
+function getResolverComponent(resolver: AnyResolver): ComponentType<any> {
   let component = resolverComponentCache.get(resolver)
   if (!component) {
     component = reactLazy(() => preloadResolver(resolver))
@@ -570,15 +567,53 @@ export function Routes({ routes, disableScrollToTop }: RoutesProps) {
   return useMemo(() => {
     if (!activeRoute) return null
 
-    const children = (activeRoute.data as RouteData[]).reduceRight<ReactNode>((children, segment) => {
-      const props = (segment as { props?: Record<string, unknown> }).props ?? {}
+    // Each segment component receives only the params *declared in its own
+    // `path`* — never borrowed from siblings or descendants. A wrapping
+    // layout without a path gets no params; a layout that owns `:userId`
+    // gets that one and only that one; the leaf gets whatever its own
+    // path declared. Components type the params they expect via their own
+    // function signature (e.g. `({ id }: { id: string })`); the router's
+    // runtime injection meets them at that boundary.
+    //
+    // Static `props` declared on the route definition win on key collision
+    // so consumers can intentionally override a path-injected param.
+    const segments = activeRoute.data as RouteData[]
+    const matchedParams = ((activeRoute as Route & { params?: Record<string, string> }).params ?? {}) as Record<
+      string,
+      string
+    >
+
+    const children = segments.reduceRight<ReactNode>((children, segment) => {
+      const segProps = (segment as { props?: Record<string, unknown> }).props ?? {}
       const Component = resolveSegmentComponent(segment)
-      // segments without a component act as transparent passthroughs
-      return Component ? <Component {...props}>{children}</Component> : children
+      if (!Component) return children
+      const ownParams = paramsDeclaredBy(segment.path, matchedParams)
+      return (
+        <Component {...ownParams} {...segProps}>
+          {children}
+        </Component>
+      )
     }, null)
 
     return <RouteContext.Provider value={activeRoute}>{children}</RouteContext.Provider>
   }, [activeRoute])
+}
+
+const PATH_PARAM_NAME_RE = /:([A-Za-z0-9_]+)/g
+
+/**
+ * Picks out of `matched` only the params whose names appear as `:name`
+ * segments in `path`. A layout segment with no path returns `{}`; a leaf
+ * with `/users/:userId/posts/:postId` returns `{ userId, postId }`.
+ */
+function paramsDeclaredBy(path: string | undefined, matched: Record<string, string>): Record<string, string> {
+  if (!path) return {}
+  const own: Record<string, string> = {}
+  for (const match of path.matchAll(PATH_PARAM_NAME_RE)) {
+    const name = match[1]
+    if (name in matched) own[name] = matched[name]
+  }
+  return own
 }
 
 function resolveSegmentComponent(segment: RouteData): ComponentType<any> | null {

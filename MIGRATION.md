@@ -19,7 +19,7 @@ router or did async work in `onNavigating`.
 | Manual `navigating: true/false` flag | `usePending()` |
 | `route.data[i].component` only | `route.data[i].component` **or** `resolver: () => import(...)` |
 | (no equivalent) | `route.data[i].prepare(ctx)` returning `PreparedHandle[]` |
-| `defineRoute`/`defineRoutes` | Same — typed identity helpers (no runtime change) |
+| `defineRoute`/`defineRoutes` | Removed — routes are plain objects in plain arrays; path params are injected as props onto the leaf component automatically |
 
 ### Why the change
 
@@ -248,9 +248,7 @@ navigation for that click.
 These are deferred to later milestones. Migrate to 1.0 first; pick these up as
 they land:
 
-- `commit: 'ready'` + `timeoutMs` — keep the previous route on screen while
-  prepare resolves, with a timeout fallback. Today only `'immediate'` works.
-- `defineRoute<Params>()` with typed `<Link to={route} params={...}>`,
-  `navigate(route, args)`, etc. Today `defineRoute` is an identity helper.
+- `<DelayedSuspense>` per-instance `delayMs` override (today only the
+  Router-level `pendingDelayMs` is configurable).
 - `useBlocker(predicate)` for cancellable navigation guards (unsaved-changes
   prompts). Don't try to rebuild this with `transformRoute` — different shape.

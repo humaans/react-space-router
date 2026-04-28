@@ -34,16 +34,9 @@ $ npm install react-space-router
 
 ```js
 import React, { Suspense, useEffect } from 'react'
-import {
-  Router,
-  Routes,
-  Link,
-  useRoute,
-  useNavigate,
-  defineRoutes,
-} from 'react-space-router'
+import { Router, Routes, Link, useRoute, useNavigate } from 'react-space-router'
 
-const routes = defineRoutes([
+const routes = [
   { path: '/', component: Home },
   {
     component: SettingsContainer,
@@ -52,7 +45,7 @@ const routes = defineRoutes([
       { path: '/settings/billing', resolver: () => import('./Billing') },
     ],
   },
-])
+]
 
 function App() {
   return (
@@ -128,23 +121,28 @@ Props:
   - `...metadata` any other keys you want — they're available on `route.data[i]`.
 - `disableScrollToTop` disables the scroll-to-top behavior after each navigation.
 
-### `defineRoute` / `defineRoutes`
+### Path params as component props
+
+When the router commits a route, it spreads the matched path params onto the leaf segment's component as own props. Each segment receives only the params declared in its own `path` — wrapping layouts that didn't declare those params get nothing extra.
 
 ```js
-import { defineRoute, defineRoutes } from 'react-space-router'
-
-const routes = defineRoutes([
-  defineRoute({
+const routes = [
+  {
     path: '/issues/:id',
     resolver: () => import('./pages/IssueDetail'),
     prepare: ({ params }) => [
       figbird.prepare(issueDetail, { id: Number(params.id) }),
     ],
-  }),
-])
+  },
+]
+
+// In ./pages/IssueDetail
+export default function IssueDetail({ id }) {
+  // `id` is injected from the route's `:id` segment.
+}
 ```
 
-Identity helpers for type-checking route shapes. They have no runtime behavior — the returned value is the input.
+If you also need cross-cutting access from a parent layout, reach for `useRoute()` from there.
 
 ### `PreparedHandle`
 
