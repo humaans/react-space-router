@@ -12,22 +12,22 @@ export default function Home() {
       </div>
 
       <p>
-        Each route delays its code chunk by <strong>~800ms</strong> (simulating a cold lazy import) and prepares three
+        Each route delays its code chunk by <strong>~400ms</strong> (simulating a cold lazy import) and prepares three
         data sources with different latencies:
       </p>
 
       <div className='card'>
         <div className='card-row'>
           <span>fast read</span>
-          <span className='badge badge-fast'>200ms</span>
+          <span className='badge badge-fast'>100ms</span>
         </div>
         <div className='card-row'>
           <span>medium read</span>
-          <span className='badge badge-slow'>1000ms</span>
+          <span className='badge badge-slow'>500ms</span>
         </div>
         <div className='card-row'>
           <span>slow read</span>
-          <span className='badge badge-very-slow'>6000ms</span>
+          <span className='badge badge-very-slow'>3000ms</span>
         </div>
       </div>
 
@@ -40,7 +40,7 @@ export default function Home() {
       <div className='card'>
         <h3>(a) Immediate + skeletons</h3>
         <p className='dim'>
-          Old page held while code chunk loads (~800ms), then new page commits with the fast data already there and
+          Old page held while code chunk loads (~400ms), then new page commits with the fast data already there and
           skeletons in place of slow data. Skeletons swap to real content as data arrives.
         </p>
       </div>
@@ -57,8 +57,9 @@ export default function Home() {
       <div className='card'>
         <h3>(c) Timed fallback</h3>
         <p className='dim'>
-          Behaves like (b) for the first ~1s, then falls back to (a) — meaning if the slow read is still pending after
-          1s, we commit anyway and let inner skeletons take over. Best of both worlds for variable-latency data.
+          Behaves like (b) for the first ~500ms, then falls back to (a) — meaning if the slow read is still pending
+          after 500ms, we commit anyway and let inner skeletons take over. Best of both worlds for variable-latency
+          data.
         </p>
       </div>
 
@@ -87,7 +88,7 @@ export default function Home() {
         </li>
         <li>
           <strong>(c)</strong> — wrap in <code>&lt;DelayedSuspense fallback={'{<Skeleton/>}'}&gt;</code>. Behaves like
-          (b) for the first <code>pendingDelayMs</code> (1s), then like (a).
+          (b) for the first <code>pendingDelayMs</code> (500ms), then like (a).
         </li>
         <li>
           <strong>(d)</strong> — no inner boundary around the detail read. Same-page item links set a local fade state;

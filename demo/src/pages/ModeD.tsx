@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { Link, usePending } from 'react-space-router'
+import { Link, shouldNavigate, usePending } from 'react-space-router'
 import { read } from '../data'
 
 const ITEMS = [
@@ -78,9 +78,9 @@ export default function ModeD({ id = ITEMS[0].id }: { id?: string }) {
                 href={{
                   url: `/mode-d/${item.id}`,
                   current: isCurrent,
-                  onClick: () => {
-                    if (!isCurrent) setPendingItemId(item.id)
-                  },
+                }}
+                onClick={(event) => {
+                  if (!isCurrent && shouldNavigate(event)) setPendingItemId(item.id)
                 }}
                 className={`item-link${isRequested ? ' requested' : ''}`}
               >

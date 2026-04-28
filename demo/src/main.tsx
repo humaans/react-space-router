@@ -7,7 +7,7 @@ import './styles.css'
 
 function App() {
   return (
-    <Router mode='history'>
+    <Router mode='history' pendingDelayMs={500}>
       <Shell>
         <Suspense fallback={null}>
           <Routes routes={routes} />

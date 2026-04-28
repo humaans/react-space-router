@@ -71,7 +71,7 @@ export function Shell({ children }: { children: ReactNode }) {
           </Link>
           <Link href='/mode-c' className='nav-link'>
             (c) Timed fallback
-            <small>(b) for 1s, then fall back to (a)</small>
+            <small>(b) for 500ms, then fall back to (a)</small>
           </Link>
           <Link href='/mode-d/atlas' current={isModeD} className='nav-link'>
             (d) Detail swap fade

@@ -174,7 +174,8 @@ function flattenRoutes(routes) {
     const parentData = [];
     function addLevel(level) {
         for (const route of level) {
-            const { path = '', routes: children, ...routeData } = route;
+            const { path = '', routes: children, ...routeDataWithoutPath } = route;
+            const routeData = { path, ...routeDataWithoutPath };
             flatRoutes.push({ pattern: path, data: parentData.concat([routeData]) });
             if (children) {
                 parentData.push(routeData);
@@ -291,18 +292,20 @@ export function Routes({ routes, disableScrollToTop }) {
     useScrollToTop(activeRoute, disableScrollToTop);
     useEffect(() => {
         const transition = (next) => {
-            if (seededRoute.current?.route.url === next.url) {
+            const nextUrl = next.url ?? next.pathname;
+            const matched = matchRoutes(routes, nextUrl, qs) ?? next;
+            if (seededRoute.current?.route.url === matched.url) {
                 seededRoute.current = null;
-                commit(next);
+                commit(matched);
                 return;
             }
-            const nextHandles = prepareRoute(next);
+            const nextHandles = prepareRoute(matched);
             releasePinned();
             pinnedHandles.current = nextHandles;
-            commit(next);
+            commit(matched);
         };
         return router.listen(routes, transition);
-    }, [router, routes, commit, releasePinned]);
+    }, [router, routes, qs, commit, releasePinned]);
     useEffect(() => releasePinned, [releasePinned]);
     return useMemo(() => {
         if (!activeRoute)

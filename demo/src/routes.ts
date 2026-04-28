@@ -3,15 +3,15 @@ import { prepare, slowImport } from './data'
 // Latency budgets we'll reuse across routes. Tweak here to see the modes
 // react. Reload the page to clear cache and re-feel cold loads.
 export const LATENCIES = {
-  fast: 200,
-  medium: 1000,
-  detail: 2200,
-  slow: 6000,
+  fast: 100,
+  medium: 500,
+  detail: 1100,
+  slow: 3000,
 }
 
 // Slow code chunk delay — meant to feel like a cold lazy import on a real
 // network. Keeps the page held during chunk download regardless of mode.
-const CHUNK_MS = 800
+const CHUNK_MS = 400
 
 export const routes = [
   {

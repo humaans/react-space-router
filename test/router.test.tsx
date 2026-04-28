@@ -713,6 +713,48 @@ test.serial('Routes passes children through when a middle segment has no compone
   t.is(window.document.body.innerHTML, '<div id="root"><section><article>Inner</article></section></div>')
 })
 
+test.serial('Routes injects path params as component props', (t) => {
+  setup()
+
+  const root = document.getElementById('root')
+
+  function Item({ id }: { id?: string }) {
+    return <div>item={id ?? 'missing'}</div>
+  }
+
+  const routes = [{ path: '/items/:id', component: Item }]
+
+  let router
+
+  function Capture() {
+    const r = useInternalRouterInstance()
+    useEffect(() => {
+      router = r
+    }, [r])
+    return null
+  }
+
+  function App() {
+    return (
+      <Router sync>
+        <Capture />
+        <Routes routes={routes} />
+      </Router>
+    )
+  }
+
+  act(() => {
+    const r = ReactDOM.createRoot(root)
+    r.render(<App />)
+  })
+
+  act(() => {
+    router.navigate('/items/beacon')
+  })
+
+  t.is(window.document.body.innerHTML, '<div id="root"><div>item=beacon</div></div>')
+})
+
 test.serial('Link with target=_blank lets the browser open in a new tab', (t) => {
   setup()
 
