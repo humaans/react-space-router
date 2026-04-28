@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { Link, usePending, useRoute } from 'react-space-router'
+import { Link, usePending } from 'react-space-router'
 import { read } from '../data'
 
 const ITEMS = [
@@ -36,10 +36,11 @@ const ITEMS = [
  * Leaving this route does not set that local state, so cross-page navigation
  * falls back to whatever the destination page opted into.
  */
-export default function ModeD() {
-  const route = useRoute()
+// Path is `/mode-d/:id` — the router injects `id` as a prop, so the page
+// component declares it directly instead of reaching for `useRoute()`.
+export default function ModeD({ id = ITEMS[0].id }: { id?: string }) {
   const pending = usePending()
-  const currentId = String(route?.params?.id ?? ITEMS[0].id)
+  const currentId = id
   const [pendingItemId, setPendingItemId] = useState<string | null>(null)
 
   useEffect(() => {

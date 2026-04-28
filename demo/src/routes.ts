@@ -1,4 +1,3 @@
-import { defineRoutes } from 'react-space-router'
 import { prepare, slowImport } from './data'
 
 // Latency budgets we'll reuse across routes. Tweak here to see the modes
@@ -14,7 +13,7 @@ export const LATENCIES = {
 // network. Keeps the page held during chunk download regardless of mode.
 const CHUNK_MS = 800
 
-export const routes = defineRoutes([
+export const routes = [
   {
     path: '/',
     resolver: slowImport(0, () => import('./pages/Home')),
@@ -55,7 +54,10 @@ export const routes = defineRoutes([
   {
     path: '/mode-d/:id',
     resolver: slowImport(CHUNK_MS, () => import('./pages/ModeD')),
+    // The router injects matching path params as props on the page
+    // component. ModeD's signature declares `{ id?: string }`, so it
+    // receives `id` for free — no `useRoute()` dance needed.
     prepare: ({ params }) => [prepare(`item-${params.id}`, LATENCIES.detail)],
     scrollGroup: 'mode-d',
   },
-])
+]
