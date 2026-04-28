@@ -6,13 +6,15 @@
 <h4 align="center"><a href="https://github.com/KidkArolis/space-router">Space Router</a> bindings for React</a></h4>
 <br />
 
-React Space Router is a set of hooks and components for keeping your app in sync with the url and performing page navigations. A library built by and used at [Humaans](https://humaans.io/).
+React Space Router is a set of hooks and components for keeping your app in sync with the URL and performing page navigations. Suspense-aware and built around React's transition machinery. A library built by and used at [Humaans](https://humaans.io/).
 
 - React hooks based
 - Nested routes
-- Async navigation middleware
+- Code-split routes via `resolver` (`React.lazy` under the hood)
+- Per-route `prepare(ctx)` for fetch-as-you-render data loading
+- Pending state via `usePending()` (backed by `useTransition`)
+- Optional pre-commit `transformRoute` hook for URL rewrites
 - Built in query string parser
-- Supports external stores for router state
 - Scrolls to top after navigation
 - Preserves cmd/ctrl/alt/shift click and mouse middle click
 
