@@ -1,0 +1,349 @@
+:root {
+  --bg: #0d1117;
+  --panel: #161b22;
+  --panel-2: #1c2230;
+  --text: #e6edf3;
+  --text-dim: #8b95a5;
+  --border: #2a3142;
+  --accent: #5b9bff;
+  --accent-2: #7ee787;
+  --warn: #f4d03f;
+  --danger: #ff7b72;
+  --skel: #2c3850;
+  --skel-shine: #4a5a7d;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family:
+    'SF Pro Text', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+a:hover {
+  text-decoration: underline;
+}
+
+/* Top progress bar */
+.progress-bar {
+  position: fixed;
+  inset: 0 0 auto 0;
+  height: 3px;
+  background: transparent;
+  z-index: 100;
+  pointer-events: none;
+}
+.progress-bar::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 30%;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  animation: progress 1.2s ease-in-out infinite;
+}
+@keyframes progress {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(450%);
+  }
+}
+
+/* Layout */
+.app {
+  min-height: 100%;
+  display: grid;
+  grid-template-columns: 240px 1fr;
+}
+
+.sidebar {
+  border-right: 1px solid var(--border);
+  padding: 24px 16px;
+  background: var(--panel);
+}
+
+.sidebar h1 {
+  margin: 0 0 20px;
+  font-size: 14px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.sidebar nav {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.nav-link {
+  display: block;
+  padding: 8px 12px;
+  border-radius: 6px;
+  color: var(--text);
+  font-weight: 500;
+}
+
+.nav-link:hover {
+  background: var(--panel-2);
+  text-decoration: none;
+}
+
+.nav-link[aria-current='page'] {
+  background: var(--panel-2);
+  color: var(--accent);
+}
+
+.nav-link small {
+  display: block;
+  color: var(--text-dim);
+  font-weight: 400;
+  font-size: 12px;
+  margin-top: 2px;
+}
+
+.sidebar-footer {
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.button {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.button:hover {
+  background: var(--border);
+}
+.button-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #0d1117;
+  font-weight: 600;
+}
+.button-primary:hover {
+  background: #4a89eb;
+}
+
+/* Main */
+.main {
+  padding: 32px 40px;
+  max-width: 880px;
+}
+
+.main h1 {
+  margin: 0 0 4px;
+  font-size: 24px;
+}
+.main h2 {
+  margin: 32px 0 12px;
+  font-size: 16px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 500;
+}
+.main h3 {
+  margin: 0 0 8px;
+  font-size: 16px;
+}
+.main p {
+  margin: 0 0 12px;
+  color: var(--text);
+}
+.main p.dim {
+  color: var(--text-dim);
+}
+
+/* Cards */
+.card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px 18px;
+  margin-bottom: 12px;
+}
+.card-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+/* Skeleton */
+.skel {
+  background: linear-gradient(90deg, var(--skel) 0%, var(--skel-shine) 50%, var(--skel) 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+  border-radius: 4px;
+  height: 14px;
+  display: block;
+  margin: 10px 0;
+}
+.skel.lg {
+  height: 20px;
+}
+.skel.short {
+  width: 35%;
+}
+.skel.med {
+  width: 65%;
+}
+@keyframes shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* Distinguish a skeleton card visually from a regular card so it's
+   obvious that "loading" is happening even at a glance. */
+.card.is-skeleton {
+  border-style: dashed;
+  border-color: rgba(91, 155, 255, 0.35);
+  position: relative;
+}
+.card.is-skeleton::before {
+  content: 'loading';
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+  opacity: 0.7;
+  font-weight: 600;
+}
+
+/* Latency badges */
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  background: var(--panel-2);
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  margin-left: 8px;
+  font-variant-numeric: tabular-nums;
+}
+.badge-fast {
+  color: var(--accent-2);
+  border-color: rgba(126, 231, 135, 0.3);
+}
+.badge-slow {
+  color: var(--warn);
+  border-color: rgba(244, 208, 63, 0.3);
+}
+.badge-very-slow {
+  color: var(--danger);
+  border-color: rgba(255, 123, 114, 0.3);
+}
+
+/* Status row */
+.status-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 6px;
+  flex-wrap: wrap;
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+.status-pill.live {
+  color: var(--accent);
+  border-color: rgba(91, 155, 255, 0.4);
+}
+.status-pill.live::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: blink 1s ease-in-out infinite;
+}
+@keyframes blink {
+  50% {
+    opacity: 0.3;
+  }
+}
+
+/* Mode header */
+.mode-header {
+  border-left: 3px solid var(--accent);
+  padding: 4px 0 4px 16px;
+  margin-bottom: 24px;
+}
+.mode-header h1 {
+  margin: 0 0 4px;
+}
+.mode-header p {
+  margin: 0;
+  color: var(--text-dim);
+}
+
+/* Recipe blurb */
+.recipe {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: 6px;
+  padding: 12px 16px;
+  margin-bottom: 24px;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+.recipe code {
+  background: var(--panel-2);
+  padding: 1px 6px;
+  border-radius: 3px;
+  color: var(--text);
+  font-size: 12px;
+}
+
+/* Note */
+.note {
+  font-size: 12px;
+  color: var(--text-dim);
+  font-style: italic;
+}

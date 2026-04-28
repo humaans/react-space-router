@@ -10,7 +10,11 @@ import {
   Navigate,
   useInternalRouterInstance,
   useLinkProps,
+  usePending,
+  useRoute,
   qs,
+  type PreparedHandle,
+  type Route,
 } from '../src/index.tsx'
 
 ;(globalThis as any).IS_REACT_ACT_ENVIRONMENT = true
@@ -18,7 +22,7 @@ import {
 const g = globalThis as any
 
 function setup() {
-  const dom = new JSDOM('<!doctype html><div id="root"></div>')
+  const dom = new JSDOM('<!doctype html><div id="root"></div>', { url: 'http://localhost/' })
   g.window = dom.window
   g.window.scrollTo = () => {}
   g.document = dom.window.document
@@ -29,6 +33,9 @@ function setup() {
 
       const popstate = new dom.window.PopStateEvent('popstate')
       dom.window.dispatchEvent(popstate)
+    },
+    replaceState() {
+      // no-op for tests; real replaceState would update the address bar
     },
   }
   g.location = {
@@ -235,19 +242,23 @@ test.serial('Link click navigates and invokes to.onClick', (t) => {
   t.truthy(stringLink)
 })
 
-test.serial('onNavigating is awaited before onNavigated', async (t) => {
+test.serial('transformRoute rewrites the route before commit and syncs the URL', async (t) => {
   setup()
 
   const root = document.getElementById('root')
-  const events = []
 
   const routes = [
     { path: '/', component: () => <div>Home</div> },
-    { path: '/stuff', component: () => <div>Stuff</div> },
+    {
+      path: '/people',
+      component: () => {
+        const r = useRoute()
+        return <div data-testid='people'>status={String(r?.query?.status ?? 'none')}</div>
+      },
+    },
   ]
 
   let router
-
   function Capture() {
     const r = useInternalRouterInstance()
     useEffect(() => {
@@ -256,18 +267,18 @@ test.serial('onNavigating is awaited before onNavigated', async (t) => {
     return null
   }
 
-  async function onNavigating(route) {
-    events.push(`navigating:${route.pathname}`)
-    await Promise.resolve()
-  }
-
-  function onNavigated(route) {
-    events.push(`navigated:${route.pathname}`)
+  // Simulate persisted-query restoration: if /people has no `status`, inject one.
+  function transformRoute(route: Route): Route | void {
+    if (route.pathname === '/people' && !(route as any).query?.status) {
+      const query = { ...((route as any).query ?? {}), status: 'active' }
+      const search = '?status=active'
+      return { ...route, query, search, url: '/people' + search } as Route
+    }
   }
 
   function App() {
     return (
-      <Router sync onNavigating={onNavigating} onNavigated={onNavigated}>
+      <Router sync transformRoute={transformRoute}>
         <Capture />
         <Routes routes={routes} />
       </Router>
@@ -280,12 +291,80 @@ test.serial('onNavigating is awaited before onNavigated', async (t) => {
   })
 
   await act(async () => {
-    router.navigate('/stuff')
+    router.navigate('/people')
   })
 
-  t.true(events.includes('navigating:/stuff'))
-  t.true(events.includes('navigated:/stuff'))
-  t.is(events.indexOf('navigating:/stuff') < events.indexOf('navigated:/stuff'), true)
+  t.regex(window.document.body.innerHTML, /status=active/)
+})
+
+test.serial('usePending flips while a transition is in flight', async (t) => {
+  setup()
+
+  const root = document.getElementById('root')
+
+  let resolveSlow: (() => void) | null = null
+  const slowGate = new Promise<void>((r) => {
+    resolveSlow = r
+  })
+
+  function Slow() {
+    // The first render of /slow throws this promise to suspend until the gate resolves.
+    if (!(Slow as any).ready) {
+      throw slowGate.then(() => {
+        ;(Slow as any).ready = true
+      })
+    }
+    return <div>Slow</div>
+  }
+
+  const routes = [
+    { path: '/', component: () => <div>Home</div> },
+    { path: '/slow', component: Slow },
+  ]
+
+  const pendingSamples: boolean[] = []
+  let router
+  function Capture() {
+    const r = useInternalRouterInstance()
+    const pending = usePending()
+    pendingSamples.push(pending)
+    useEffect(() => {
+      router = r
+    }, [r])
+    return null
+  }
+
+  function App() {
+    return (
+      <Router sync>
+        <Capture />
+        <Routes routes={routes} />
+      </Router>
+    )
+  }
+
+  await act(async () => {
+    const r = ReactDOM.createRoot(root)
+    r.render(<App />)
+  })
+
+  pendingSamples.length = 0
+
+  await act(async () => {
+    router.navigate('/slow')
+  })
+
+  // While suspended, React is mid-transition: pending should have flipped true.
+  t.true(pendingSamples.includes(true), 'usePending was true during the suspended transition')
+
+  await act(async () => {
+    resolveSlow!()
+    await Promise.resolve()
+    await Promise.resolve()
+  })
+
+  // After commit, the latest pending sample is false.
+  t.is(pendingSamples[pendingSamples.length - 1], false, 'usePending settles to false after commit')
 })
 
 test.serial('Routes resolves ESM-default components and skips null components', (t) => {
@@ -573,6 +652,95 @@ test.serial('Link with download attribute lets the browser handle it', (t) => {
   })
 
   t.is(location.pathname, '/')
+})
+
+test.serial('Routes pins prepare handles for the committed nav and releases on the next', async (t) => {
+  setup()
+
+  const root = document.getElementById('root')
+
+  const released: string[] = []
+  let nextHandleId = 0
+
+  function makeHandle(label: string): PreparedHandle {
+    const key = `${label}#${++nextHandleId}`
+    return {
+      key,
+      promise: new Promise<void>(() => {}),
+      release() {
+        released.push(key)
+      },
+    }
+  }
+
+  const routes = [
+    { path: '/', component: () => <div>Home</div> },
+    { path: '/a', component: () => <div>A</div>, prepare: () => [makeHandle('a')] },
+    { path: '/b', component: () => <div>B</div>, prepare: () => [makeHandle('b')] },
+    { path: '/c', component: () => <div>C</div>, prepare: () => [makeHandle('c')] },
+  ]
+
+  let router
+
+  function Capture() {
+    const r = useInternalRouterInstance()
+    useEffect(() => {
+      router = r
+    }, [r])
+    return null
+  }
+
+  function App() {
+    return (
+      <Router sync mode='memory'>
+        <Capture />
+        <Routes routes={routes} />
+      </Router>
+    )
+  }
+
+  let rootHandle
+  await act(async () => {
+    rootHandle = ReactDOM.createRoot(root)
+    rootHandle.render(<App />)
+  })
+
+  await act(async () => {
+    router.navigate('/a')
+  })
+
+  t.deepEqual(released, [], '/a pinned, nothing released yet')
+
+  await act(async () => {
+    router.navigate('/b')
+  })
+
+  t.true(
+    released.some((k) => k.startsWith('a#')),
+    '/a released when /b committed',
+  )
+  t.false(
+    released.some((k) => k.startsWith('b#')),
+    '/b still pinned',
+  )
+
+  await act(async () => {
+    router.navigate('/c')
+  })
+
+  t.true(
+    released.some((k) => k.startsWith('b#')),
+    '/b released when /c committed',
+  )
+
+  await act(async () => {
+    rootHandle.unmount()
+  })
+
+  t.true(
+    released.some((k) => k.startsWith('c#')),
+    '/c released on unmount',
+  )
 })
 
 test.serial('Router recreates router when mode prop changes', (t) => {
