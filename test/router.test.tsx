@@ -1,5 +1,5 @@
 import test from 'ava'
-import { act, useEffect, useState } from 'react'
+import { act, Component, Suspense, useEffect, useState, type ReactNode } from 'react'
 import ReactDOM from 'react-dom/client'
 import { JSDOM, VirtualConsole } from 'jsdom'
 import {
@@ -8,6 +8,7 @@ import {
   Routes,
   Link,
   Navigate,
+  DelayedSuspense,
   useInternalRouterInstance,
   useLinkProps,
   usePending,
@@ -454,6 +455,47 @@ test.serial('transformRoute applies before initial route prepare', async (t) => 
   t.is(preparedUrl, '/people?status=active')
 })
 
+test.serial('prepare context falls back when transformRoute omits optional route fields', async (t) => {
+  setup()
+  history.pushState({}, '', '/bare')
+
+  const root = document.getElementById('root')
+  const prepared: unknown[] = []
+
+  const routes = [
+    {
+      path: '/bare',
+      prepare: (ctx) => {
+        prepared.push(ctx)
+      },
+      component: () => <div>Bare</div>,
+    },
+  ]
+
+  function App() {
+    return (
+      <Router
+        sync
+        transformRoute={(route) =>
+          ({
+            data: route.data,
+          }) as Route
+        }
+      >
+        <Routes routes={routes} disableScrollToTop />
+      </Router>
+    )
+  }
+
+  await act(async () => {
+    const r = ReactDOM.createRoot(root)
+    r.render(<App />)
+  })
+
+  t.is(window.document.body.innerHTML, '<div id="root"><div>Bare</div></div>')
+  t.deepEqual(prepared, [{ pathname: '', url: '', params: {}, query: {} }])
+})
+
 test.serial('usePending flips while a transition is in flight', async (t) => {
   setup()
 
@@ -575,6 +617,252 @@ test.serial('Routes resolves ESM-default components and skips null components', 
     router.navigate('/empty')
   })
   t.is(window.document.body.innerHTML, '<div id="root"><section></section></div>')
+})
+
+test.serial('Routes resolves lazy resolver components', async (t) => {
+  setup()
+
+  const root = document.getElementById('root')
+  let resolverCalls = 0
+
+  const routes = [
+    { path: '/', component: () => <div>Home</div> },
+    {
+      path: '/lazy',
+      resolver: () => {
+        resolverCalls++
+        return Promise.resolve({ default: () => <div>Lazy</div> })
+      },
+    },
+  ]
+
+  let router
+
+  function Capture() {
+    const r = useInternalRouterInstance()
+    useEffect(() => {
+      router = r
+    }, [r])
+    return null
+  }
+
+  function App() {
+    return (
+      <Router sync>
+        <Capture />
+        <Suspense fallback={<div>Loading</div>}>
+          <Routes routes={routes} />
+        </Suspense>
+      </Router>
+    )
+  }
+
+  await act(async () => {
+    const r = ReactDOM.createRoot(root)
+    r.render(<App />)
+  })
+
+  await act(async () => {
+    router.navigate('/lazy')
+    await Promise.resolve()
+    await Promise.resolve()
+  })
+
+  t.is(window.document.body.innerHTML, '<div id="root"><div>Lazy</div></div>')
+  t.is(resolverCalls, 1)
+
+  await act(async () => {
+    router.navigate('/')
+  })
+  await act(async () => {
+    router.navigate('/lazy')
+    await Promise.resolve()
+  })
+
+  t.is(resolverCalls, 1, 'resolver result is cached by function reference')
+})
+
+test.serial('Routes observes rejected resolver preload promises', async (t) => {
+  setup()
+
+  const root = document.getElementById('root')
+  const originalConsoleError = console.error
+  console.error = () => {}
+
+  class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
+    state = { hasError: false }
+
+    static getDerivedStateFromError() {
+      return { hasError: true }
+    }
+
+    render() {
+      return this.state.hasError ? <div>Error</div> : this.props.children
+    }
+  }
+
+  const routes = [
+    { path: '/', component: () => <div>Home</div> },
+    {
+      path: '/broken',
+      resolver: () => Promise.reject(new Error('broken import')),
+    },
+  ]
+
+  let router
+
+  function Capture() {
+    const r = useInternalRouterInstance()
+    useEffect(() => {
+      router = r
+    }, [r])
+    return null
+  }
+
+  function App() {
+    return (
+      <Router sync>
+        <Capture />
+        <ErrorBoundary>
+          <Suspense fallback={<div>Loading</div>}>
+            <Routes routes={routes} />
+          </Suspense>
+        </ErrorBoundary>
+      </Router>
+    )
+  }
+
+  try {
+    await act(async () => {
+      const r = ReactDOM.createRoot(root)
+      r.render(<App />)
+    })
+
+    await act(async () => {
+      router.navigate('/broken')
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    t.is(window.document.body.innerHTML, '<div id="root"><div>Error</div></div>')
+  } finally {
+    console.error = originalConsoleError
+  }
+})
+
+test.serial('DelayedSuspense renders fallback normally outside delayed navigation hold', async (t) => {
+  setup()
+
+  const root = document.getElementById('root')
+  let resolveChild: (() => void) | null = null
+  const childGate = new Promise<void>((r) => {
+    resolveChild = r
+  })
+
+  function Child() {
+    if (!(Child as any).ready) {
+      throw childGate.then(() => {
+        ;(Child as any).ready = true
+      })
+    }
+    return <span>Ready</span>
+  }
+
+  function App() {
+    return (
+      <Router sync>
+        <DelayedSuspense fallback={<span>Fallback</span>}>
+          <Child />
+        </DelayedSuspense>
+      </Router>
+    )
+  }
+
+  await act(async () => {
+    const r = ReactDOM.createRoot(root)
+    r.render(<App />)
+  })
+
+  t.is(window.document.body.innerHTML, '<div id="root"><span>Fallback</span></div>')
+
+  await act(async () => {
+    resolveChild!()
+    await Promise.resolve()
+  })
+
+  t.is(window.document.body.innerHTML, '<div id="root"><span>Ready</span></div>')
+})
+
+test.serial('DelayedSuspense holds fallback during route transition delay', async (t) => {
+  setup()
+
+  const root = document.getElementById('root')
+  let resolveSlow: (() => void) | null = null
+  const slowGate = new Promise<void>((r) => {
+    resolveSlow = r
+  })
+
+  function SlowChild() {
+    if (!(SlowChild as any).ready) {
+      throw slowGate.then(() => {
+        ;(SlowChild as any).ready = true
+      })
+    }
+    return <div>Slow</div>
+  }
+
+  function SlowPage() {
+    return (
+      <DelayedSuspense fallback={<div>Inner fallback</div>}>
+        <SlowChild />
+      </DelayedSuspense>
+    )
+  }
+
+  const routes = [
+    { path: '/', component: () => <div>Home</div> },
+    { path: '/slow', component: SlowPage },
+  ]
+
+  let router
+
+  function Capture() {
+    const r = useInternalRouterInstance()
+    useEffect(() => {
+      router = r
+    }, [r])
+    return null
+  }
+
+  function App() {
+    return (
+      <Router sync pendingDelayMs={10_000}>
+        <Capture />
+        <Suspense fallback={<div>Outer fallback</div>}>
+          <Routes routes={routes} />
+        </Suspense>
+      </Router>
+    )
+  }
+
+  await act(async () => {
+    const r = ReactDOM.createRoot(root)
+    r.render(<App />)
+  })
+
+  await act(async () => {
+    router.navigate('/slow')
+  })
+
+  t.is(window.document.body.innerHTML, '<div id="root"><div>Home</div></div>')
+
+  await act(async () => {
+    resolveSlow!()
+    await Promise.resolve()
+    await Promise.resolve()
+  })
+
+  t.is(window.document.body.innerHTML, '<div id="root"><div>Slow</div></div>')
 })
 
 test.serial('Link honours current override and regular className/style props', (t) => {
@@ -720,7 +1008,7 @@ test.serial('Link rendered alongside Routes in async mode does not crash', async
   t.is(link?.getAttribute('aria-current'), null)
 })
 
-test.serial('Routes passes children through when a middle segment has no component', (t) => {
+test.serial('Link clears pending href when async navigation commits', async (t) => {
   setup()
 
   const root = document.getElementById('root')
@@ -728,6 +1016,47 @@ test.serial('Routes passes children through when a middle segment has no compone
   const routes = [
     {
       path: '/',
+      component: () => <Link href='/next'>Next</Link>,
+    },
+    { path: '/next', component: () => <div>Next</div> },
+  ]
+
+  function PendingProbe() {
+    const props = useLinkProps('/next')
+    return <span data-pending={String(props.isPending)} />
+  }
+
+  function App() {
+    return (
+      <Router>
+        <PendingProbe />
+        <Routes routes={routes} />
+      </Router>
+    )
+  }
+
+  await act(async () => {
+    const r = ReactDOM.createRoot(root)
+    r.render(<App />)
+  })
+
+  await act(async () => {
+    window.document.querySelector('a')!.click()
+    await Promise.resolve()
+    await Promise.resolve()
+  })
+
+  t.is(window.document.querySelector('[data-pending]')?.getAttribute('data-pending'), 'false')
+  t.is(window.document.body.innerHTML, '<div id="root"><span data-pending="false"></span><div>Next</div></div>')
+})
+
+test.serial('Routes passes children through when a middle segment has no component', (t) => {
+  setup()
+
+  const root = document.getElementById('root')
+
+  const routes = [
+    {
       component: ({ children }) => <section>{children}</section>,
       routes: [
         {
@@ -811,6 +1140,81 @@ test.serial('Routes injects path params as component props', (t) => {
   t.is(window.document.body.innerHTML, '<div id="root"><div>item=beacon</div></div>')
 })
 
+test.serial('Routes parses query hash splat optional params and wildcard routes', (t) => {
+  setup()
+
+  const root = document.getElementById('root')
+
+  function Inspector() {
+    const route = useRoute()
+    return (
+      <div>
+        path={route?.pathname}; params={JSON.stringify(route?.params)}; query={JSON.stringify(route?.query)}; hash=
+        {route?.hash}
+      </div>
+    )
+  }
+
+  const routes = [
+    { path: '/files/:path+', component: Inspector },
+    { path: '/needs/:id+', component: Inspector },
+    { path: '/optional/:id?', component: Inspector },
+    { path: '*', component: Inspector },
+  ]
+
+  let router
+
+  function Capture() {
+    const r = useInternalRouterInstance()
+    useEffect(() => {
+      router = r
+    }, [r])
+    return null
+  }
+
+  function App() {
+    return (
+      <Router sync mode='memory'>
+        <Capture />
+        <Routes routes={routes} />
+      </Router>
+    )
+  }
+
+  act(() => {
+    const r = ReactDOM.createRoot(root)
+    r.render(<App />)
+  })
+
+  act(() => {
+    router.navigate('/files/a/b?q=1#top')
+  })
+
+  t.regex(window.document.body.innerHTML, /path=\/files\/a\/b/)
+  t.regex(window.document.body.innerHTML, /"path":"a\/b"/)
+  t.regex(window.document.body.innerHTML, /"q":"1"/)
+  t.regex(window.document.body.innerHTML, /hash=#top/)
+
+  act(() => {
+    router.navigate('/needs')
+  })
+
+  t.regex(window.document.body.innerHTML, /path=\/needs/)
+  t.notRegex(window.document.body.innerHTML, /"id":/)
+
+  act(() => {
+    router.navigate('/optional')
+  })
+
+  t.regex(window.document.body.innerHTML, /"id":""/)
+
+  act(() => {
+    router.navigate('/anything-else')
+  })
+
+  t.regex(window.document.body.innerHTML, /path=\/anything-else/)
+})
+
 test.serial('Link with target=_blank lets the browser open in a new tab', (t) => {
   setup()
 
@@ -848,6 +1252,43 @@ test.serial('Link with target=_blank lets the browser open in a new tab', (t) =>
   })
 
   // navigation should NOT have happened — the browser handles target=_blank
+  t.false(event!.defaultPrevented)
+  t.is(location.pathname, '/')
+})
+
+test.serial('Link with modifier key lets the browser handle it', (t) => {
+  setup()
+
+  const root = document.getElementById('root')
+
+  const routes = [
+    {
+      path: '/',
+      component: () => <Link href='/foo'>Modified</Link>,
+    },
+    { path: '/foo', component: () => <div>Foo</div> },
+  ]
+
+  function App() {
+    return (
+      <Router sync>
+        <Routes routes={routes} />
+      </Router>
+    )
+  }
+
+  act(() => {
+    const r = ReactDOM.createRoot(root)
+    r.render(<App />)
+  })
+
+  const link = window.document.querySelector('a')!
+  let event: MouseEvent
+  act(() => {
+    event = new window.MouseEvent('click', { bubbles: true, button: 0, cancelable: true, metaKey: true })
+    link.dispatchEvent(event)
+  })
+
   t.false(event!.defaultPrevented)
   t.is(location.pathname, '/')
 })
@@ -1091,6 +1532,109 @@ test.serial('Routes keeps current prepare handles pinned until a suspended navig
   t.is(window.document.body.innerHTML, '<div id="root"><div>Slow</div></div>')
   t.true(released.includes('home'), 'home handle releases after /slow commits')
   t.false(released.includes('slow'), 'slow handle remains pinned after /slow commits')
+})
+
+test.serial('Routes releases superseded pending handles and ignores release errors', async (t) => {
+  setup()
+
+  const root = document.getElementById('root')
+
+  const released: string[] = []
+  let resolveA: (() => void) | null = null
+  const gateA = new Promise<void>((r) => {
+    resolveA = r
+  })
+  let resolveB: (() => void) | null = null
+  const gateB = new Promise<void>((r) => {
+    resolveB = r
+  })
+
+  function makeSlow(label: string, gate: Promise<void>) {
+    function Slow() {
+      if (!(Slow as any).ready) {
+        throw gate.then(() => {
+          ;(Slow as any).ready = true
+        })
+      }
+      return <div>{label}</div>
+    }
+    return Slow
+  }
+
+  const SlowA = makeSlow('A', gateA)
+  const SlowB = makeSlow('B', gateB)
+
+  const routes = [
+    { path: '/', component: () => <div>Home</div> },
+    {
+      path: '/a',
+      component: SlowA,
+      prepare: () => [
+        {
+          promise: Promise.resolve(),
+          release() {
+            released.push('a')
+            throw new Error('ignored')
+          },
+        },
+      ],
+    },
+    {
+      path: '/b',
+      component: SlowB,
+      prepare: () => [
+        {
+          promise: Promise.resolve(),
+          release() {
+            released.push('b')
+          },
+        },
+      ],
+    },
+  ]
+
+  let router
+
+  function Capture() {
+    const r = useInternalRouterInstance()
+    useEffect(() => {
+      router = r
+    }, [r])
+    return null
+  }
+
+  function App() {
+    return (
+      <Router sync>
+        <Capture />
+        <Routes routes={routes} />
+      </Router>
+    )
+  }
+
+  await act(async () => {
+    const r = ReactDOM.createRoot(root)
+    r.render(<App />)
+  })
+
+  await act(async () => {
+    router.navigate('/a')
+  })
+  await act(async () => {
+    router.navigate('/b')
+  })
+
+  t.deepEqual(released, ['a'])
+
+  await act(async () => {
+    resolveA!()
+    resolveB!()
+    await Promise.resolve()
+    await Promise.resolve()
+  })
+
+  t.is(window.document.body.innerHTML, '<div id="root"><div>B</div></div>')
+  t.false(released.includes('b'))
 })
 
 test.serial('Router recreates router when mode prop changes', (t) => {
