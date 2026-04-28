@@ -567,87 +567,71 @@ export function Routes({ routes, disableScrollToTop }: RoutesProps) {
 
   // Pinned prepare handles for the currently committed navigation. Released
   // when a new navigation commits or when <Routes> unmounts.
-  const committedHandles = useRef<PreparedHandle[]>([])
-  const committedRouteUrl = useRef<string | null>(null)
-  const pendingPrepared = useRef<PreparedRoute | null>(null)
-  const seededRoute = useRef<PreparedRoute | null>(null)
+  const committed = useRef<PreparedRoute | null>(null)
+  const pending = useRef<PreparedRoute | null>(null)
   const didSeedInitialRoute = useRef(false)
 
+  const prepareMatched = useCallback(
+    (matched: Route): PreparedRoute => {
+      const transformed = transformRoute(matched)
+      return { route: transformed, matched, handles: prepareRoute(transformed) }
+    },
+    [transformRoute],
+  )
+
   const releaseAll = useCallback(() => {
-    const handles = [
-      committedHandles.current,
-      pendingPrepared.current?.handles ?? [],
-      seededRoute.current?.handles ?? [],
-    ]
-    committedHandles.current = []
-    committedRouteUrl.current = null
-    pendingPrepared.current = null
-    seededRoute.current = null
-    releaseUniqueHandles(handles)
+    releaseUniqueHandles([committed.current?.handles ?? [], pending.current?.handles ?? []])
+    committed.current = null
+    pending.current = null
   }, [])
 
-  if (!didSeedInitialRoute.current && !route && !seededRoute.current) {
+  if (!didSeedInitialRoute.current && !route) {
     didSeedInitialRoute.current = true
     const matched = matchRoutes(routes, router.getUrl(), qs)
     if (matched) {
-      const transformed = transformRoute(matched)
-      const handles = prepareRoute(transformed)
-      seededRoute.current = { route: transformed, matched, handles }
-      committedHandles.current = handles
-      committedRouteUrl.current = transformed.url
+      committed.current = prepareMatched(matched)
     }
   }
 
-  const activeRoute = route ?? seededRoute.current?.route ?? null
+  const activeRoute = route ?? committed.current?.route ?? null
   useScrollToTop(activeRoute, disableScrollToTop)
 
   useEffect(() => {
-    const seeded = seededRoute.current
-    if (seeded) syncRouteUrl(seeded.matched, seeded.route)
+    if (committed.current) syncRouteUrl(committed.current.matched, committed.current.route)
   }, [syncRouteUrl])
 
   useEffect(() => {
     const transition = (next: Route) => {
       const nextUrl = (next as Route & { url?: string; pathname?: string }).url ?? next.pathname
       const matched = matchRoutes(routes, nextUrl, qs) ?? next
-      const transformed = transformRoute(matched)
+      const matchedRoute = transformRoute(matched)
 
-      if (seededRoute.current?.route.url === transformed.url) {
-        const seeded = seededRoute.current
-        seededRoute.current = null
-        commit(seeded.route, seeded.matched)
+      if (committed.current?.route.url === matchedRoute.url) {
+        commit(committed.current.route, committed.current.matched)
         return
       }
 
-      if (pendingPrepared.current?.route.url === transformed.url) {
-        commit(pendingPrepared.current.route, pendingPrepared.current.matched)
+      if (pending.current?.route.url === matchedRoute.url) {
+        commit(pending.current.route, pending.current.matched)
         return
       }
 
-      if (committedRouteUrl.current === transformed.url) {
-        return
-      }
+      if (pending.current) releaseHandles(pending.current.handles)
 
-      if (pendingPrepared.current) {
-        releaseHandles(pendingPrepared.current.handles)
-      }
-
-      const nextHandles = prepareRoute(transformed)
-      pendingPrepared.current = { route: transformed, matched, handles: nextHandles }
-      commit(transformed, matched)
+      pending.current = prepareMatched(matched)
+      commit(pending.current.route, pending.current.matched)
     }
     return router.listen(routes, transition)
-  }, [router, routes, qs, transformRoute, commit])
+  }, [router, routes, qs, transformRoute, prepareMatched, commit])
 
   useEffect(() => {
-    const pending = pendingPrepared.current
-    if (!route || !pending || pending.route.url !== route.url) return
+    const prepared = pending.current
+    if (!route || !prepared || prepared.route.url !== route.url) return
 
-    const previousHandles = committedHandles.current
-    committedHandles.current = pending.handles
-    committedRouteUrl.current = pending.route.url
-    pendingPrepared.current = null
-    releaseHandles(previousHandles)
+    const previous = committed.current
+    committed.current = prepared
+    pending.current = null
+    if (previous) releaseHandles(previous.handles)
   }, [route?.url])
 
   useEffect(() => releaseAll, [releaseAll])
