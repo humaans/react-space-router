@@ -91,6 +91,10 @@ function preloadResolver(resolver: AnyResolver): Promise<{ default: ComponentTyp
   let promise = resolverPromiseCache.get(resolver)
   if (!promise) {
     promise = resolver()
+    promise.catch(() => {
+      // Keep the original rejected promise cached for React.lazy/error
+      // boundaries, but mark preload rejections as observed.
+    })
     resolverPromiseCache.set(resolver, promise)
   }
   return promise
@@ -113,7 +117,7 @@ function buildPrepareContext(route: Route): RoutePrepareContext {
   }
   return {
     pathname: r.pathname ?? '',
-    url: r.pathname ?? '',
+    url: (r as Route & { url?: string }).url ?? r.pathname ?? '',
     params: r.params ?? {},
     query: r.query ?? {},
   }
@@ -132,7 +136,9 @@ export type To =
 interface RouterContextValue {
   router: SpaceRouter
   route: Route | null
-  commit: (route: Route) => void
+  transformRoute: (route: Route) => Route
+  syncRouteUrl: (matched: Route, transformed: Route) => void
+  commit: (route: Route, matched?: Route) => void
   navigate: (to: To, curr?: Route) => void
   isPending: boolean
   pendingHref: string | null
@@ -273,24 +279,17 @@ export function Router({
   const transformRef = useRef(transformRoute)
   transformRef.current = transformRoute
 
-  const commit = useCallback((next: Route) => {
+  const applyTransform = useCallback((next: Route) => {
     const transform = transformRef.current
-    const transformed = transform ? (transform(next) ?? next) : next
-    const matchedUrl = (next as Route & { url?: string }).url
+    return transform ? (transform(next) ?? next) : next
+  }, [])
+
+  const syncRouteUrl = useCallback((matched: Route, transformed: Route) => {
+    const matchedUrl = (matched as Route & { url?: string }).url
     const transformedUrl = (transformed as Route & { url?: string }).url
 
-    startRouterTransition(() => {
-      setCurrRoute(transformed)
-      if (pendingHrefRef.current === matchedUrl || pendingHrefRef.current === transformedUrl) {
-        setPendingHref(null)
-      }
-    })
-
-    // Sync the address bar if the transform rewrote the URL. We use
-    // history.replaceState directly so we don't re-trigger the router's
-    // listener loop.
     if (
-      transformed !== next &&
+      transformed !== matched &&
       transformedUrl &&
       transformedUrl !== matchedUrl &&
       typeof window !== 'undefined' &&
@@ -299,6 +298,26 @@ export function Router({
       window.history.replaceState({}, '', transformedUrl)
     }
   }, [])
+
+  const commit = useCallback(
+    (next: Route, matched: Route = next) => {
+      const matchedUrl = (matched as Route & { url?: string }).url
+      const transformedUrl = (next as Route & { url?: string }).url
+
+      startRouterTransition(() => {
+        setCurrRoute(next)
+        if (pendingHrefRef.current === matchedUrl || pendingHrefRef.current === transformedUrl) {
+          setPendingHref(null)
+        }
+      })
+
+      // Sync the address bar if the transform rewrote the URL. We use
+      // history.replaceState directly so we don't re-trigger the router's
+      // listener loop.
+      syncRouteUrl(matched, next)
+    },
+    [syncRouteUrl],
+  )
 
   const navigate = useCallback(
     (to: To, curr?: Route) => {
@@ -320,8 +339,18 @@ export function Router({
   }, [pendingHref, isPending, currRoute?.url])
 
   const ctx = useMemo<RouterContextValue>(
-    () => ({ router, route: currRoute, commit, navigate, isPending, pendingHref, qs }),
-    [router, currRoute, commit, navigate, isPending, pendingHref, qs],
+    () => ({
+      router,
+      route: currRoute,
+      transformRoute: applyTransform,
+      syncRouteUrl,
+      commit,
+      navigate,
+      isPending,
+      pendingHref,
+      qs,
+    }),
+    [router, currRoute, applyTransform, syncRouteUrl, commit, navigate, isPending, pendingHref, qs],
   )
 
   useEffect(() => {
@@ -388,6 +417,7 @@ export interface RoutesProps {
 
 interface PreparedRoute {
   route: Route
+  matched: Route
   handles: PreparedHandle[]
 }
 
@@ -521,26 +551,50 @@ function releaseHandles(handles: PreparedHandle[]) {
   }
 }
 
+function releaseUniqueHandles(handleGroups: PreparedHandle[][]) {
+  const released = new Set<PreparedHandle>()
+  for (const handles of handleGroups) {
+    for (const handle of handles) {
+      if (released.has(handle)) continue
+      released.add(handle)
+      releaseHandles([handle])
+    }
+  }
+}
+
 export function Routes({ routes, disableScrollToTop }: RoutesProps) {
-  const { router, route, commit, qs } = useRouterCtx()
+  const { router, route, transformRoute, syncRouteUrl, commit, qs } = useRouterCtx()
 
   // Pinned prepare handles for the currently committed navigation. Released
   // when a new navigation commits or when <Routes> unmounts.
-  const pinnedHandles = useRef<PreparedHandle[]>([])
+  const committedHandles = useRef<PreparedHandle[]>([])
+  const committedRouteUrl = useRef<string | null>(null)
+  const pendingPrepared = useRef<PreparedRoute | null>(null)
   const seededRoute = useRef<PreparedRoute | null>(null)
+  const didSeedInitialRoute = useRef(false)
 
-  const releasePinned = useCallback(() => {
-    const handles = pinnedHandles.current
-    pinnedHandles.current = []
-    releaseHandles(handles)
+  const releaseAll = useCallback(() => {
+    const handles = [
+      committedHandles.current,
+      pendingPrepared.current?.handles ?? [],
+      seededRoute.current?.handles ?? [],
+    ]
+    committedHandles.current = []
+    committedRouteUrl.current = null
+    pendingPrepared.current = null
+    seededRoute.current = null
+    releaseUniqueHandles(handles)
   }, [])
 
-  if (!route && !seededRoute.current) {
+  if (!didSeedInitialRoute.current && !route && !seededRoute.current) {
+    didSeedInitialRoute.current = true
     const matched = matchRoutes(routes, router.getUrl(), qs)
     if (matched) {
-      const handles = prepareRoute(matched)
-      seededRoute.current = { route: matched, handles }
-      pinnedHandles.current = handles
+      const transformed = transformRoute(matched)
+      const handles = prepareRoute(transformed)
+      seededRoute.current = { route: transformed, matched, handles }
+      committedHandles.current = handles
+      committedRouteUrl.current = transformed.url
     }
   }
 
@@ -548,25 +602,55 @@ export function Routes({ routes, disableScrollToTop }: RoutesProps) {
   useScrollToTop(activeRoute, disableScrollToTop)
 
   useEffect(() => {
+    const seeded = seededRoute.current
+    if (seeded) syncRouteUrl(seeded.matched, seeded.route)
+  }, [syncRouteUrl])
+
+  useEffect(() => {
     const transition = (next: Route) => {
       const nextUrl = (next as Route & { url?: string; pathname?: string }).url ?? next.pathname
       const matched = matchRoutes(routes, nextUrl, qs) ?? next
+      const transformed = transformRoute(matched)
 
-      if (seededRoute.current?.route.url === matched.url) {
+      if (seededRoute.current?.route.url === transformed.url) {
+        const seeded = seededRoute.current
         seededRoute.current = null
-        commit(matched)
+        commit(seeded.route, seeded.matched)
         return
       }
 
-      const nextHandles = prepareRoute(matched)
-      releasePinned()
-      pinnedHandles.current = nextHandles
-      commit(matched)
+      if (pendingPrepared.current?.route.url === transformed.url) {
+        commit(pendingPrepared.current.route, pendingPrepared.current.matched)
+        return
+      }
+
+      if (committedRouteUrl.current === transformed.url) {
+        return
+      }
+
+      if (pendingPrepared.current) {
+        releaseHandles(pendingPrepared.current.handles)
+      }
+
+      const nextHandles = prepareRoute(transformed)
+      pendingPrepared.current = { route: transformed, matched, handles: nextHandles }
+      commit(transformed, matched)
     }
     return router.listen(routes, transition)
-  }, [router, routes, qs, commit, releasePinned])
+  }, [router, routes, qs, transformRoute, commit])
 
-  useEffect(() => releasePinned, [releasePinned])
+  useEffect(() => {
+    const pending = pendingPrepared.current
+    if (!route || !pending || pending.route.url !== route.url) return
+
+    const previousHandles = committedHandles.current
+    committedHandles.current = pending.handles
+    committedRouteUrl.current = pending.route.url
+    pendingPrepared.current = null
+    releaseHandles(previousHandles)
+  }, [route?.url])
+
+  useEffect(() => releaseAll, [releaseAll])
 
   return useMemo(() => {
     if (!activeRoute) return null

@@ -51,7 +51,9 @@ export type To = string | (NavigateTarget & {
 interface RouterContextValue {
     router: SpaceRouter;
     route: Route | null;
-    commit: (route: Route) => void;
+    transformRoute: (route: Route) => Route;
+    syncRouteUrl: (matched: Route, transformed: Route) => void;
+    commit: (route: Route, matched?: Route) => void;
     navigate: (to: To, curr?: Route) => void;
     isPending: boolean;
     pendingHref: string | null;
