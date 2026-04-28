@@ -169,6 +169,42 @@ test.serial('useLinkProps()', async function (t) {
   t.false(linkProps.isPending)
 })
 
+test.serial('Navigate follows to prop changes while mounted', async (t) => {
+  setup()
+
+  const root = document.getElementById('root')
+  let setTarget
+
+  const routes = [
+    { path: '/a', component: () => <div>A</div> },
+    { path: '/b', component: () => <div>B</div> },
+  ]
+
+  function App() {
+    const [target, _setTarget] = useState('/a')
+    setTarget = _setTarget
+    return (
+      <Router sync>
+        <Navigate to={target} />
+        <Routes routes={routes} />
+      </Router>
+    )
+  }
+
+  await act(async () => {
+    const r = ReactDOM.createRoot(root)
+    r.render(<App />)
+  })
+
+  t.is(window.document.body.innerHTML, '<div id="root"><div>A</div></div>')
+
+  await act(async () => {
+    setTarget('/b')
+  })
+
+  t.is(window.document.body.innerHTML, '<div id="root"><div>B</div></div>')
+})
+
 test.serial('Routes seeds the initial route synchronously for route components', async (t) => {
   setup()
 
@@ -907,6 +943,74 @@ test.serial('Link honours current override and regular className/style props', (
   t.is(disabled.getAttribute('aria-current'), null)
 })
 
+test.serial('Link preserves replace and current from object href when props are omitted', (t) => {
+  setup()
+
+  const root = document.getElementById('root')
+  let pushCalls = 0
+  let replaceCalls = 0
+  const originalPushState = history.pushState
+  const originalReplaceState = history.replaceState
+
+  history.pushState = (state: unknown, title: string, url: string) => {
+    pushCalls++
+    originalPushState.call(history, state, title, url)
+  }
+  history.replaceState = (_state: unknown, _title: string, url: string) => {
+    replaceCalls++
+    location.href = url
+    location.pathname = url
+    const popstate = new window.PopStateEvent('popstate')
+    window.dispatchEvent(popstate)
+  }
+
+  const routes = [
+    {
+      path: '/',
+      component: () => (
+        <div>
+          <Link href={{ pathname: '/next', replace: true }}>Next</Link>
+          <Link href={{ pathname: '/next', current: true }}>Forced</Link>
+          <Link href='/next' replace>
+            PropReplace
+          </Link>
+        </div>
+      ),
+    },
+    { path: '/next', component: () => <div>Next</div> },
+  ]
+
+  function App() {
+    return (
+      <Router sync>
+        <Routes routes={routes} />
+      </Router>
+    )
+  }
+
+  try {
+    act(() => {
+      const r = ReactDOM.createRoot(root)
+      r.render(<App />)
+    })
+
+    const [next, forced, propReplace] = window.document.querySelectorAll('a')
+    t.is(forced.getAttribute('aria-current'), 'page')
+    t.is(propReplace.getAttribute('href'), '/next')
+
+    act(() => {
+      next.click()
+    })
+
+    t.is(replaceCalls, 1)
+    t.is(pushCalls, 0)
+    t.is(window.document.body.innerHTML, '<div id="root"><div>Next</div></div>')
+  } finally {
+    history.pushState = originalPushState
+    history.replaceState = originalReplaceState
+  }
+})
+
 test.serial('useLinkProps exposes per-link pending state', async (t) => {
   setup()
 
@@ -1048,6 +1152,62 @@ test.serial('Link clears pending href when async navigation commits', async (t) 
 
   t.is(window.document.querySelector('[data-pending]')?.getAttribute('data-pending'), 'false')
   t.is(window.document.body.innerHTML, '<div id="root"><span data-pending="false"></span><div>Next</div></div>')
+})
+
+test.serial('Link clears pending href after a route-level redirect commits', async (t) => {
+  setup()
+
+  const root = document.getElementById('root')
+
+  const routes = [
+    {
+      path: '/',
+      component: () => <Link href='/old'>Old</Link>,
+    },
+    { path: '/old', redirect: '/new' } as RouteDefinition,
+    { path: '/new', component: () => <div>New</div> },
+  ]
+
+  function PendingProbe() {
+    const props = useLinkProps('/old')
+    return <span data-pending={String(props.isPending)} />
+  }
+
+  let router
+
+  function Capture() {
+    const r = useInternalRouterInstance()
+    useEffect(() => {
+      router = r
+    }, [r])
+    return null
+  }
+
+  function App() {
+    return (
+      <Router sync mode='memory'>
+        <Capture />
+        <PendingProbe />
+        <Routes routes={routes} />
+      </Router>
+    )
+  }
+
+  await act(async () => {
+    const r = ReactDOM.createRoot(root)
+    r.render(<App />)
+  })
+
+  await act(async () => {
+    router.navigate('/')
+  })
+
+  await act(async () => {
+    window.document.querySelector('a')!.click()
+    await Promise.resolve()
+  })
+
+  t.is(window.document.body.innerHTML, '<div id="root"><span data-pending="false"></span><div>New</div></div>')
 })
 
 test.serial('Routes passes children through when a middle segment has no component', (t) => {
@@ -1635,6 +1795,129 @@ test.serial('Routes releases superseded pending handles and ignores release erro
 
   t.is(window.document.body.innerHTML, '<div id="root"><div>B</div></div>')
   t.false(released.includes('b'))
+})
+
+test.serial('Routes releases pending handles when navigation returns to the committed route', async (t) => {
+  setup()
+
+  const root = document.getElementById('root')
+  const released: string[] = []
+  let resolveSlow: (() => void) | null = null
+  const slowGate = new Promise<void>((r) => {
+    resolveSlow = r
+  })
+
+  function Slow() {
+    if (!(Slow as any).ready) {
+      throw slowGate.then(() => {
+        ;(Slow as any).ready = true
+      })
+    }
+    return <div>Slow</div>
+  }
+
+  const routes = [
+    { path: '/', component: () => <div>Home</div> },
+    {
+      path: '/slow',
+      component: Slow,
+      prepare: () => [
+        {
+          promise: Promise.resolve(),
+          release() {
+            released.push('slow')
+          },
+        },
+      ],
+    },
+  ]
+
+  let router
+
+  function Capture() {
+    const r = useInternalRouterInstance()
+    useEffect(() => {
+      router = r
+    }, [r])
+    return null
+  }
+
+  function App() {
+    return (
+      <Router sync>
+        <Capture />
+        <Routes routes={routes} />
+      </Router>
+    )
+  }
+
+  await act(async () => {
+    const r = ReactDOM.createRoot(root)
+    r.render(<App />)
+  })
+
+  await act(async () => {
+    router.navigate('/slow')
+  })
+
+  t.is(window.document.body.innerHTML, '<div id="root"><div>Home</div></div>')
+
+  await act(async () => {
+    router.navigate('/')
+  })
+
+  t.deepEqual(released, ['slow'])
+
+  await act(async () => {
+    resolveSlow!()
+    await Promise.resolve()
+  })
+
+  t.is(window.document.body.innerHTML, '<div id="root"><div>Home</div></div>')
+})
+
+test.serial('Routes rematches the current URL when the route map changes in memory mode', async (t) => {
+  setup()
+
+  const root = document.getElementById('root')
+  let router
+  let setRoutes
+
+  function Capture() {
+    const r = useInternalRouterInstance()
+    useEffect(() => {
+      router = r
+    }, [r])
+    return null
+  }
+
+  function App() {
+    const [routes, _setRoutes] = useState<RouteDefinition[]>([{ path: '/swap', component: () => <div>A</div> }])
+    setRoutes = _setRoutes
+    return (
+      <Router sync mode='memory'>
+        <Capture />
+        <Routes routes={routes} />
+      </Router>
+    )
+  }
+
+  await act(async () => {
+    const r = ReactDOM.createRoot(root)
+    r.render(<App />)
+  })
+
+  await act(async () => {
+    router.navigate('/swap')
+  })
+
+  t.is(window.document.body.innerHTML, '<div id="root"><div>A</div></div>')
+
+  await act(async () => {
+    setRoutes([{ path: '/swap', component: () => <div>B</div> }])
+  })
+
+  t.is(window.document.body.innerHTML, '<div id="root"><div>B</div></div>')
 })
 
 test.serial('Router recreates router when mode prop changes', (t) => {
