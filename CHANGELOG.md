@@ -1,3 +1,17 @@
+## 0.7.0
+
+- **Breaking**: move route state inside `<Router>` and remove the old prop-based lifecycle hooks (`useRoute`, `onNavigating`, `onNavigated`). Read the current route with `useRoute()` and observe committed route changes with regular React effects.
+- **Breaking**: remove function-form `<Link>` props and `extraProps`. Use `aria-current="page"` for CSS styling, or `useLinkProps()` when active/pending state needs to affect rendered output.
+- Add Suspense-aware route transitions backed by React `useTransition`, exposed through `usePending()`.
+- Add route `resolver` support for code-split route segments. Resolvers are preloaded during navigation and rendered through `React.lazy`.
+- Add route `prepare(ctx)` support for fetch-as-you-render data loading. Returned `PreparedHandle`s are pinned while the route is committed and released on the next commit or `<Routes>` unmount.
+- Add `<DelayedSuspense>` and `pendingDelayMs` for delayed skeleton fallbacks during in-flight route navigations.
+- Add `transformRoute(route)` for synchronous pre-commit route rewrites, including URL replacement when the transformed route changes `url`.
+- Inject matched path params as props onto the route segment that declares each param.
+- Add per-link pending state through `useLinkProps(to).isPending`.
+- Add `scrollGroup` for keeping scroll position across related routes.
+- Preserve normal browser behavior for modified clicks, middle-clicks, downloads, non-self targets, and cross-origin links.
+
 ## 0.6.6
 
 - Upgrade all dependencies to address security alerts.

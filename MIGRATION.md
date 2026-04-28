@@ -1,6 +1,6 @@
 # Migration Guide
 
-## 0.6.x → 1.0
+## 0.6.x → 0.7.0
 
 The Router lifecycle is reframed: the router now owns route state internally
 (via `useState` + `useTransition`) and applies it inside a React transition. The
@@ -19,7 +19,6 @@ router or did async work in `onNavigating`.
 | Manual `navigating: true/false` flag | `usePending()` |
 | `route.data[i].component` only | `route.data[i].component` **or** `resolver: () => import(...)` |
 | (no equivalent) | `route.data[i].prepare(ctx)` returning `PreparedHandle[]` |
-| `defineRoute`/`defineRoutes` | Removed — routes are plain objects in plain arrays; path params are injected as props onto the leaf component automatically |
 
 ### Why the change
 
@@ -28,10 +27,11 @@ state lives in your Redux/Zustand store, the router's commit goes through your
 dispatch — which isn't wrapped in `startTransition` — and Suspense fires
 fallbacks at the wrong moment.
 
-Future commit policies (`commit: 'ready'`) make this worse: the router needs to
-hold the previous route on screen *while awaiting* prepare promises. If state
-lives outside, you'd have to expose "pending next route" + "previous route" +
-"is this nav superseded" through your store. That's the router's job, leaking.
+The same applies to delayed fallbacks: the router needs to know when a
+transition is in flight so `<DelayedSuspense>` can hold the previous route for
+`pendingDelayMs` before showing a skeleton. If state lives outside, you'd have
+to expose "pending next route" + "previous route" + "has the threshold elapsed"
+through your store. That's the router's job, leaking.
 
 ### Migrating `onNavigating`
 
@@ -231,10 +231,34 @@ User `onClick` handlers now compose with the router's internal click handling.
 The user handler runs first; call `event.preventDefault()` to opt out of SPA
 navigation for that click.
 
+### Replacing delayed fallback code with `<DelayedSuspense>`
+
+If you had app-level state to suppress skeletons for the first few milliseconds
+of a navigation, delete it and use the built-in boundary:
+
+```tsx
+<Router pendingDelayMs={1000}>
+  <Suspense fallback={null}>
+    <Routes routes={routes} />
+  </Suspense>
+</Router>
+```
+
+```tsx
+<DelayedSuspense fallback={<Skeleton />}>
+  <Panel />
+</DelayedSuspense>
+```
+
+During an in-flight navigation, `<DelayedSuspense>` behaves like a regular
+`Suspense` boundary after the router-level `pendingDelayMs` threshold. Before
+that threshold, its fallback re-suspends so the already-committed route stays on
+screen.
+
 ### What's *not* changing
 
 - Route definition shape (`{ path, component, routes, ... }`) is unchanged. New
-  fields (`resolver`, `prepare`, `navigation`) are additive.
+  fields (`resolver`, `prepare`, `navigation`, `scrollGroup`) are additive.
 - `<Routes routes={...}>`, `<Link>`, `<Navigate>`, `useLinkProps`, `useMakeHref`,
   `useNavigate`, `qs` — unchanged.
 - ESM-default components (`{ default: Component }`) still resolve via plain
@@ -243,10 +267,9 @@ navigation for that click.
 - The `reduceRight` segment-rendering model stays. No `<Outlet />` — parents
   receive `children` like any React component.
 
-### What's coming next
+### What's still not included
 
-These are deferred to later milestones. Migrate to 1.0 first; pick these up as
-they land:
+These are still outside 0.7.0:
 
 - `<DelayedSuspense>` per-instance `delayMs` override (today only the
   Router-level `pendingDelayMs` is configurable).
