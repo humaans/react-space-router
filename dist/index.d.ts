@@ -119,7 +119,7 @@ export interface DelayedSuspenseProps {
 }
 export declare function DelayedSuspense({ fallback, children }: DelayedSuspenseProps): import("react/jsx-runtime").JSX.Element;
 export interface RoutesProps {
-    routes: RouteDefinition[];
+    routes: RouteDefinition<RouteData>[];
     disableScrollToTop?: boolean;
 }
 export declare function Routes({ routes, disableScrollToTop }: RoutesProps): import("react/jsx-runtime").JSX.Element | null;

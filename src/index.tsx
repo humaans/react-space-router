@@ -16,8 +16,8 @@ import {
   type ReactNode,
 } from 'react'
 import {
+  createMatcher,
   createRouter,
-  qs as defaultQs,
   type Mode,
   type NavigateTarget,
   type Qs,
@@ -408,7 +408,7 @@ function DelayedSuspenseHold(): null {
 // ---------------------------------------------------------------------------
 
 export interface RoutesProps {
-  routes: RouteDefinition[]
+  routes: RouteDefinition<RouteData>[]
   disableScrollToTop?: boolean
 }
 
@@ -416,106 +416,6 @@ interface PreparedRoute {
   route: Route
   matched: Route
   handles: PreparedHandle[]
-}
-
-interface FlatRoute {
-  pattern: string
-  data: RouteData[]
-}
-
-const PARAM_SEGMENT_RE = /^:([A-Za-z0-9_]+)([+*?])?$/
-const URL_SUFFIX_RE = /(?:\?([^#]*))?(#.*)?$/
-
-function matchRoutes(routes: RouteDefinition[], url: string, queryParser: Qs = defaultQs): Route | undefined {
-  const flatRoutes = flattenRoutes(routes)
-  for (const route of flatRoutes) {
-    const match = matchRoute(route.pattern, url, queryParser)
-    if (match) {
-      return { ...match, data: route.data } as Route
-    }
-  }
-}
-
-function flattenRoutes(routes: RouteDefinition[]): FlatRoute[] {
-  const flatRoutes: FlatRoute[] = []
-  const parentData: RouteData[] = []
-
-  function addLevel(level: RouteDefinition[]) {
-    for (const route of level) {
-      const { path = '', routes: children, ...routeDataWithoutPath } = route as RouteData
-      const routeData = { path, ...routeDataWithoutPath }
-      flatRoutes.push({ pattern: path, data: parentData.concat([routeData]) })
-      if (children) {
-        parentData.push(routeData)
-        addLevel(children as RouteDefinition[])
-        parentData.pop()
-      }
-    }
-  }
-
-  addLevel(routes)
-  return flatRoutes
-}
-
-function matchRoute(pattern: string, url: string, queryParser: Qs): Omit<Route, 'data'> | undefined {
-  if (!pattern || !url) return
-
-  const suffix = url.match(URL_SUFFIX_RE)
-  const params: Record<string, string> = {}
-  let query: Record<string, unknown> = {}
-  let search = ''
-  let hash = ''
-
-  if (suffix?.[1]) {
-    search = '?' + suffix[1]
-    query = queryParser.parse(suffix[1]) as Record<string, unknown>
-  }
-  if (suffix?.[2]) {
-    hash = suffix[2]
-  }
-
-  if (pattern !== '*') {
-    const urlSegments = segmentize(url.replace(URL_SUFFIX_RE, ''))
-    const patternSegments = segmentize(pattern)
-    const max = Math.max(urlSegments.length, patternSegments.length)
-
-    for (let i = 0; i < max; i++) {
-      const patternSegment = patternSegments[i]
-      const paramMatch = patternSegment?.match(PARAM_SEGMENT_RE)
-
-      if (paramMatch) {
-        const [, name, flags = ''] = paramMatch
-        const plus = flags.includes('+')
-        const star = flags.includes('*')
-        const optional = flags.includes('?')
-        const value = urlSegments[i] || ''
-
-        if (!value && !star && (!optional || plus)) return
-
-        params[name] = decodeURIComponent(value)
-        if (plus || star) {
-          params[name] = urlSegments.slice(i).map(decodeURIComponent).join('/')
-          break
-        }
-      } else if (patternSegment !== urlSegments[i]) {
-        return
-      }
-    }
-  }
-
-  return {
-    pattern,
-    url,
-    pathname: url.replace(URL_SUFFIX_RE, ''),
-    params,
-    query,
-    search,
-    hash,
-  } as Omit<Route, 'data'>
-}
-
-function segmentize(url: string): string[] {
-  return url.replace(/(^\/+|\/+$)/g, '').split('/')
 }
 
 function prepareRoute(route: Route): PreparedHandle[] {
@@ -568,6 +468,7 @@ export function Routes({ routes, disableScrollToTop }: RoutesProps) {
   const pending = useRef<PreparedRoute | null>(null)
   const didSeedInitialRoute = useRef(false)
   const previousRoutes = useRef(routes)
+  const matcher = useMemo(() => createMatcher(routes, { qs }), [routes, qs])
 
   const prepareMatched = useCallback(
     (matched: Route): PreparedRoute => {
@@ -585,7 +486,7 @@ export function Routes({ routes, disableScrollToTop }: RoutesProps) {
 
   if (!didSeedInitialRoute.current && !route) {
     didSeedInitialRoute.current = true
-    const matched = matchRoutes(routes, router.getUrl(), qs)
+    const matched = matcher.match(router.getUrl())
     if (matched) {
       committed.current = prepareMatched(matched)
     }
@@ -601,7 +502,7 @@ export function Routes({ routes, disableScrollToTop }: RoutesProps) {
   useEffect(() => {
     const transition = (next: Route) => {
       const nextUrl = (next as Route & { url?: string; pathname?: string }).url ?? next.pathname
-      const matched = matchRoutes(routes, nextUrl, qs) ?? next
+      const matched = matcher.match(nextUrl) ?? next
       const matchedRoute = transformRoute(matched)
 
       if (committed.current?.route.url === matchedRoute.url) {
@@ -624,7 +525,7 @@ export function Routes({ routes, disableScrollToTop }: RoutesProps) {
       commit(pending.current.route, pending.current.matched)
     }
     return router.listen(routes, transition)
-  }, [router, routes, qs, transformRoute, prepareMatched, commit])
+  }, [router, routes, matcher, transformRoute, prepareMatched, commit])
 
   useEffect(() => {
     if (previousRoutes.current === routes) return
@@ -633,13 +534,13 @@ export function Routes({ routes, disableScrollToTop }: RoutesProps) {
     const currentUrl = route?.url ?? committed.current?.route.url ?? router.getUrl()
     if (!currentUrl) return
 
-    const matched = matchRoutes(routes, currentUrl, qs)
+    const matched = matcher.match(currentUrl)
     if (!matched) return
 
     if (pending.current) releaseHandles(pending.current.handles)
     pending.current = prepareMatched(matched)
     commit(pending.current.route, pending.current.matched)
-  }, [routes, router, qs, prepareMatched, commit, route?.url])
+  }, [routes, router, matcher, prepareMatched, commit, route?.url])
 
   useEffect(() => {
     const prepared = pending.current
