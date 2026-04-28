@@ -177,11 +177,17 @@ Props:
   - `merge` merge partial `to` object into the current route.
 - `replace` replace the current entry in the navigation stack instead of pushing.
 - `current` set to true/false to override automatic current-page detection.
-- `className` may be a function `(isCurrent) => string` for current-aware styling.
-- `style` may be a function `(isCurrent) => CSSProperties`.
-- `extraProps` `(isCurrent) => Record<string, unknown>` — extra props to spread onto the `<a>`.
+- `onClick` user click handler. Runs before the router's internal click handling; call `event.preventDefault()` to stop SPA navigation.
 
 The rest of the props are spread onto the `<a>` element.
+
+Active links receive `aria-current="page"`, so active styling should usually be plain CSS:
+
+```css
+.nav-link[aria-current='page'] {
+  font-weight: 600;
+}
+```
 
 ### `<Navigate />`
 
@@ -220,7 +226,7 @@ Subscribe to the current route. Route is an object of shape `{ url, pathname, pa
 - `pattern` the matched route pattern from the route config.
 - `data` array of nested matched route objects (with components and any custom metadata).
 
-`useRoute()` returns `null` for the very first render before the initial transition lands.
+Route components rendered by `<Routes>` receive the initial route synchronously. Components outside `<Routes>` can still see `null` before the route table has mounted.
 
 ### `usePending`
 
@@ -271,12 +277,23 @@ const linkProps = useLinkProps(to)
 <a {...linkProps} />
 ```
 
-Returns `{ href, aria-current, onClick }` so you can spread them onto your own anchor and get full router behavior without using `<Link />`.
+Returns `{ href, aria-current, onClick, isCurrent, isPending }` so you can build your own anchor and get full router behavior without using `<Link />`. `isCurrent` and `isPending` are non-enumerable, so `<a {...useLinkProps(to)} />` stays safe, but you can still read them for active and per-link loading UI.
 
 Takes a `string` URL or an object — same fields as `useNavigate`, plus:
 
 - `current` override automatic current-page detection.
-- `onClick` a click handler called before the navigation takes place.
+
+For programmatic active-aware UI, read `isCurrent` from the returned props:
+
+```tsx
+const linkProps = useLinkProps('/settings')
+
+return (
+  <a {...linkProps} className={cn('nav-link', linkProps.isCurrent && 'active')}>
+    Settings
+  </a>
+)
+```
 
 ### `useMakeHref`
 

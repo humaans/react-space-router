@@ -142,6 +142,38 @@ test.serial('useLinkProps()', async function (t) {
     onClick: linkProps.onClick,
   })
   t.is(typeof linkProps.onClick, 'function')
+  t.true(linkProps.isCurrent)
+  t.false(linkProps.isPending)
+})
+
+test.serial('Routes seeds the initial route synchronously for route components', async (t) => {
+  setup()
+
+  const root = document.getElementById('root')
+
+  function Home() {
+    const route = useRoute()
+    return <div>route={route?.pathname ?? 'null'}</div>
+  }
+
+  function App() {
+    return (
+      <Router>
+        <Routes routes={[{ path: '/', component: Home }]} />
+      </Router>
+    )
+  }
+
+  act(() => {
+    const r = ReactDOM.createRoot(root)
+    r.render(<App />)
+  })
+
+  t.is(window.document.body.innerHTML, '<div id="root"><div>route=/</div></div>')
+
+  await act(async () => {
+    await Promise.resolve()
+  })
 })
 
 test('qs', async (t) => {
@@ -197,7 +229,9 @@ test.serial('Link click navigates and invokes to.onClick', (t) => {
       component: () => (
         <div>
           <Link href='/stuff'>StringHref</Link>
-          <Link href={{ url: '/stuff', onClick: () => onClickCalls++ }}>ObjectHref</Link>
+          <Link href='/stuff' onClick={() => onClickCalls++}>
+            ObjectHref
+          </Link>
         </div>
       ),
     },
@@ -242,6 +276,51 @@ test.serial('Link click navigates and invokes to.onClick', (t) => {
   t.truthy(stringLink)
 })
 
+test.serial('Link composes user onClick before internal navigation', (t) => {
+  setup()
+
+  const root = document.getElementById('root')
+  let onClickCalls = 0
+
+  const routes = [
+    {
+      path: '/',
+      component: () => (
+        <Link
+          href='/stuff'
+          onClick={(event) => {
+            onClickCalls++
+            event.preventDefault()
+          }}
+        >
+          Blocked
+        </Link>
+      ),
+    },
+    { path: '/stuff', component: () => <div>Stuff</div> },
+  ]
+
+  function App() {
+    return (
+      <Router sync>
+        <Routes routes={routes} />
+      </Router>
+    )
+  }
+
+  act(() => {
+    const r = ReactDOM.createRoot(root)
+    r.render(<App />)
+  })
+
+  act(() => {
+    window.document.querySelector('a')!.click()
+  })
+
+  t.is(onClickCalls, 1)
+  t.is(location.pathname, '/')
+})
+
 test.serial('transformRoute rewrites the route before commit and syncs the URL', async (t) => {
   setup()
 
@@ -270,7 +349,7 @@ test.serial('transformRoute rewrites the route before commit and syncs the URL',
   // Simulate persisted-query restoration: if /people has no `status`, inject one.
   function transformRoute(route: Route): Route | void {
     if (route.pathname === '/people' && !(route as any).query?.status) {
-      const query = { ...((route as any).query ?? {}), status: 'active' }
+      const query = { ...(route as any).query, status: 'active' }
       const search = '?status=active'
       return { ...route, query, search, url: '/people' + search } as Route
     }
@@ -420,7 +499,7 @@ test.serial('Routes resolves ESM-default components and skips null components', 
   t.is(window.document.body.innerHTML, '<div id="root"><section></section></div>')
 })
 
-test.serial('Link honours current override and function className/style/extraProps', (t) => {
+test.serial('Link honours current override and regular className/style props', (t) => {
   setup()
 
   const routes = [
@@ -428,13 +507,7 @@ test.serial('Link honours current override and function className/style/extraPro
       path: '/',
       component: () => (
         <div>
-          <Link
-            href='/stuff'
-            current={true}
-            className={(isCurrent) => (isCurrent ? 'on' : 'off')}
-            style={(isCurrent) => ({ color: isCurrent ? 'red' : 'blue' })}
-            extraProps={(isCurrent) => ({ 'data-active': isCurrent ? 'yes' : 'no' })}
-          >
+          <Link href='/stuff' current={true} className='on' style={{ color: 'red' }} data-active='yes'>
             Forced
           </Link>
           <Link href='/stuff' current={false}>
@@ -466,6 +539,80 @@ test.serial('Link honours current override and function className/style/extraPro
   t.is(forced.getAttribute('style'), 'color: red;')
   t.is(forced.getAttribute('data-active'), 'yes')
   t.is(disabled.getAttribute('aria-current'), null)
+})
+
+test.serial('useLinkProps exposes per-link pending state', async (t) => {
+  setup()
+
+  const root = document.getElementById('root')
+  let resolveSlow: (() => void) | null = null
+  const slowGate = new Promise<void>((r) => {
+    resolveSlow = r
+  })
+
+  function Home() {
+    const slowLink = useLinkProps('/slow')
+    const otherLink = useLinkProps('/other')
+    return (
+      <div>
+        <a
+          href={slowLink.href}
+          onClick={slowLink.onClick}
+          data-current={String(slowLink.isCurrent)}
+          data-pending={String(slowLink.isPending)}
+        >
+          Slow
+        </a>
+        <span data-current-other={String(otherLink.isCurrent)} />
+        <span data-pending-other={String(otherLink.isPending)} />
+      </div>
+    )
+  }
+
+  function Slow() {
+    if (!(Slow as any).ready) {
+      throw slowGate.then(() => {
+        ;(Slow as any).ready = true
+      })
+    }
+    return <div>Slow</div>
+  }
+
+  const routes = [
+    { path: '/', component: Home },
+    { path: '/slow', component: Slow },
+    { path: '/other', component: () => <div>Other</div> },
+  ]
+
+  function App() {
+    return (
+      <Router sync>
+        <Routes routes={routes} />
+      </Router>
+    )
+  }
+
+  await act(async () => {
+    const r = ReactDOM.createRoot(root)
+    r.render(<App />)
+  })
+
+  await act(async () => {
+    window.document.querySelector('a')!.click()
+  })
+
+  t.is(window.document.querySelector('a')?.getAttribute('data-pending'), 'true')
+  t.is(window.document.querySelector('a')?.getAttribute('data-current'), 'false')
+  t.is(window.document.querySelector('[data-current-other]')?.getAttribute('data-current-other'), 'false')
+  t.is(window.document.querySelector('[data-pending-other]')?.getAttribute('data-pending-other'), 'false')
+
+  await act(async () => {
+    resolveSlow!()
+    await Promise.resolve()
+    await Promise.resolve()
+  })
+
+  t.is(window.document.body.innerHTML, '<div id="root"><div>Slow</div></div>')
 })
 
 test.serial('Link rendered alongside Routes in async mode does not crash', async (t) => {

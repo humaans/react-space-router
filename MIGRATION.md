@@ -200,6 +200,37 @@ The kinfolk/Redux/Zustand atom that mirrored the router's state should be
 deleted entirely — it was a relic of the "everything in global state" era and
 breaks Suspense's transition contract.
 
+### Removing function-form `<Link>` props
+
+`<Link>` no longer accepts function-form `className`, function-form `style`, or
+`extraProps`. Use the `aria-current="page"` attribute that `<Link>` already
+sets:
+
+```tsx
+// Before
+<Link href='/settings' className={(current) => (current ? 'nav active' : 'nav')} />
+
+// After
+<Link href='/settings' className='nav' />
+```
+
+```css
+.nav[aria-current='page'] {
+  font-weight: 600;
+}
+```
+
+For active-aware logic that cannot be expressed in CSS, use `useLinkProps()`:
+
+```tsx
+const linkProps = useLinkProps('/settings')
+return <a {...linkProps}>{linkProps.isCurrent ? 'Settings' : 'Go to settings'}</a>
+```
+
+User `onClick` handlers now compose with the router's internal click handling.
+The user handler runs first; call `event.preventDefault()` to opt out of SPA
+navigation for that click.
+
 ### What's *not* changing
 
 - Route definition shape (`{ path, component, routes, ... }`) is unchanged. New
@@ -221,6 +252,5 @@ they land:
   prepare resolves, with a timeout fallback. Today only `'immediate'` works.
 - `defineRoute<Params>()` with typed `<Link to={route} params={...}>`,
   `navigate(route, args)`, etc. Today `defineRoute` is an identity helper.
-- Synchronous initial route seed — remove the brief `null` first render.
 - `useBlocker(predicate)` for cancellable navigation guards (unsaved-changes
   prompts). Don't try to rebuild this with `transformRoute` — different shape.

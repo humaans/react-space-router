@@ -1,7 +1,7 @@
 {
-  "name": "loading-modes",
-  "private": true,
+  "name": "react-space-router-demo",
   "version": "0.0.0",
+  "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -11,7 +11,7 @@
   "dependencies": {
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
-    "react-space-router": "file:../.."
+    "react-space-router": "file:.."
   },
   "devDependencies": {
     "@types/react": "^19.0.0",

@@ -1,6 +1,6 @@
 import { jsx as _jsx } from "react/jsx-runtime";
 import { createContext, lazy as reactLazy, Suspense, useCallback, useContext, useState, useEffect, useMemo, useRef, useTransition, } from 'react';
-import { createRouter, } from 'space-router';
+import { createRouter, qs as defaultQs, } from 'space-router';
 export { qs } from 'space-router';
 export function defineRoute(route) {
     return route;
@@ -36,6 +36,7 @@ function buildPrepareContext(route) {
     };
 }
 export const RouterContext = createContext(undefined);
+const RouteContext = createContext(undefined);
 // Internal context for `<DelayedSuspense>`. Set by `<Router>` based on
 // `usePending()` + a configurable threshold. `holding` is true only during
 // the pre-commit window where we want the previous route to stay on screen.
@@ -51,7 +52,8 @@ export function useInternalRouterInstance() {
     return useRouterCtx().router;
 }
 export function useRoute() {
-    return useRouterCtx().route;
+    const route = useContext(RouteContext);
+    return route === undefined ? useRouterCtx().route : route;
 }
 /**
  * `true` while the router is between navigation start and commit. Backed by
@@ -67,10 +69,11 @@ export function usePending() {
     return useRouterCtx().isPending;
 }
 export function useNavigate() {
-    const { router, route } = useRouterCtx();
+    const { navigate } = useRouterCtx();
+    const route = useRoute();
     return useCallback((to) => {
-        return router.navigate(to, route);
-    }, [router, route]);
+        return navigate(to, route);
+    }, [navigate, route]);
 }
 function makeRouter(routerOpts) {
     const router = createRouter({ mode: routerOpts.mode, qs: routerOpts.qs, sync: routerOpts.sync });
@@ -80,6 +83,9 @@ const DEFAULT_PENDING_DELAY_MS = 1000;
 export function Router({ mode, qs, sync, transformRoute, pendingDelayMs = DEFAULT_PENDING_DELAY_MS, children, }) {
     const [{ router, routerOpts }, setRouter] = useState(() => makeRouter({ mode, qs, sync }));
     const [currRoute, setCurrRoute] = useState(null);
+    const [pendingHref, setPendingHref] = useState(null);
+    const pendingHrefRef = useRef(null);
+    pendingHrefRef.current = pendingHref;
     const [isPending, startRouterTransition] = useTransition();
     // `holding` is true during the pre-commit window where `<DelayedSuspense>`
     // boundaries should re-throw their fallback (so the previous route stays
@@ -102,14 +108,17 @@ export function Router({ mode, qs, sync, transformRoute, pendingDelayMs = DEFAUL
     const commit = useCallback((next) => {
         const transform = transformRef.current;
         const transformed = transform ? (transform(next) ?? next) : next;
+        const matchedUrl = next.url;
+        const transformedUrl = transformed.url;
         startRouterTransition(() => {
             setCurrRoute(transformed);
+            if (pendingHrefRef.current === matchedUrl || pendingHrefRef.current === transformedUrl) {
+                setPendingHref(null);
+            }
         });
         // Sync the address bar if the transform rewrote the URL. We use
         // history.replaceState directly so we don't re-trigger the router's
         // listener loop.
-        const matchedUrl = next.url;
-        const transformedUrl = transformed.url;
         if (transformed !== next &&
             transformedUrl &&
             transformedUrl !== matchedUrl &&
@@ -118,7 +127,22 @@ export function Router({ mode, qs, sync, transformRoute, pendingDelayMs = DEFAUL
             window.history.replaceState({}, '', transformedUrl);
         }
     }, []);
-    const ctx = useMemo(() => ({ router, route: currRoute, commit, isPending }), [router, currRoute, commit, isPending]);
+    const navigate = useCallback((to, curr) => {
+        const href = router.href(to, curr);
+        setPendingHref(href);
+        router.navigate(to, curr);
+        if (!router.match(href)) {
+            setPendingHref(null);
+        }
+    }, [router]);
+    useEffect(() => {
+        if (!pendingHref)
+            return;
+        if (!isPending && currRoute?.url === pendingHref) {
+            setPendingHref(null);
+        }
+    }, [pendingHref, isPending, currRoute?.url]);
+    const ctx = useMemo(() => ({ router, route: currRoute, commit, navigate, isPending, pendingHref, qs }), [router, currRoute, commit, navigate, isPending, pendingHref, qs]);
     useEffect(() => {
         if (routerOpts.mode !== mode || routerOpts.qs !== qs || routerOpts.sync !== sync) {
             setRouter(makeRouter({ mode, qs, sync }));
@@ -140,41 +164,145 @@ const NEVER_RESOLVES = new Promise(() => { });
 function DelayedSuspenseHold() {
     throw NEVER_RESOLVES;
 }
+const PARAM_SEGMENT_RE = /^:([A-Za-z0-9_]+)([+*?])?$/;
+const URL_SUFFIX_RE = /(?:\?([^#]*))?(#.*)?$/;
+function matchRoutes(routes, url, queryParser = defaultQs) {
+    const flatRoutes = flattenRoutes(routes);
+    for (const route of flatRoutes) {
+        const match = matchRoute(route.pattern, url, queryParser);
+        if (match) {
+            return { ...match, data: route.data };
+        }
+    }
+}
+function flattenRoutes(routes) {
+    const flatRoutes = [];
+    const parentData = [];
+    function addLevel(level) {
+        for (const route of level) {
+            const { path = '', routes: children, ...routeData } = route;
+            flatRoutes.push({ pattern: path, data: parentData.concat([routeData]) });
+            if (children) {
+                parentData.push(routeData);
+                addLevel(children);
+                parentData.pop();
+            }
+        }
+    }
+    addLevel(routes);
+    return flatRoutes;
+}
+function matchRoute(pattern, url, queryParser) {
+    if (!pattern || !url)
+        return;
+    const suffix = url.match(URL_SUFFIX_RE);
+    const params = {};
+    let query = {};
+    let search = '';
+    let hash = '';
+    if (suffix?.[1]) {
+        search = '?' + suffix[1];
+        query = queryParser.parse(suffix[1]);
+    }
+    if (suffix?.[2]) {
+        hash = suffix[2];
+    }
+    if (pattern !== '*') {
+        const urlSegments = segmentize(url.replace(URL_SUFFIX_RE, ''));
+        const patternSegments = segmentize(pattern);
+        const max = Math.max(urlSegments.length, patternSegments.length);
+        for (let i = 0; i < max; i++) {
+            const patternSegment = patternSegments[i];
+            const paramMatch = patternSegment?.match(PARAM_SEGMENT_RE);
+            if (paramMatch) {
+                const [, name, flags = ''] = paramMatch;
+                const plus = flags.includes('+');
+                const star = flags.includes('*');
+                const optional = flags.includes('?');
+                const value = urlSegments[i] || '';
+                if (!value && !star && (!optional || plus))
+                    return;
+                params[name] = decodeURIComponent(value);
+                if (plus || star) {
+                    params[name] = urlSegments.slice(i).map(decodeURIComponent).join('/');
+                    break;
+                }
+            }
+            else if (patternSegment !== urlSegments[i]) {
+                return;
+            }
+        }
+    }
+    return {
+        pattern,
+        url,
+        pathname: url.replace(URL_SUFFIX_RE, ''),
+        params,
+        query,
+        search,
+        hash,
+    };
+}
+function segmentize(url) {
+    return url.replace(/(^\/+|\/+$)/g, '').split('/');
+}
+function prepareRoute(route) {
+    const segments = (route.data ?? []);
+    const ctx = buildPrepareContext(route);
+    const handles = [];
+    for (const segment of segments) {
+        if (segment.resolver)
+            preloadResolver(segment.resolver);
+        if (segment.prepare) {
+            const result = segment.prepare(ctx);
+            if (result) {
+                for (const handle of result) {
+                    handles.push(handle);
+                }
+            }
+        }
+    }
+    return handles;
+}
+function releaseHandles(handles) {
+    for (const handle of handles) {
+        try {
+            handle.release();
+        }
+        catch {
+            // best-effort
+        }
+    }
+}
 export function Routes({ routes, disableScrollToTop }) {
-    const { router, route, commit } = useRouterCtx();
-    useScrollToTop(route, disableScrollToTop);
+    const { router, route, commit, qs } = useRouterCtx();
     // Pinned prepare handles for the currently committed navigation. Released
     // when a new navigation commits or when <Routes> unmounts.
     const pinnedHandles = useRef([]);
+    const seededRoute = useRef(null);
     const releasePinned = useCallback(() => {
         const handles = pinnedHandles.current;
         pinnedHandles.current = [];
-        for (const handle of handles) {
-            try {
-                handle.release();
-            }
-            catch {
-                // best-effort
-            }
-        }
+        releaseHandles(handles);
     }, []);
+    if (!route && !seededRoute.current) {
+        const matched = matchRoutes(routes, router.getUrl(), qs);
+        if (matched) {
+            const handles = prepareRoute(matched);
+            seededRoute.current = { route: matched, handles };
+            pinnedHandles.current = handles;
+        }
+    }
+    const activeRoute = route ?? seededRoute.current?.route ?? null;
+    useScrollToTop(activeRoute, disableScrollToTop);
     useEffect(() => {
         const transition = (next) => {
-            const segments = (next.data ?? []);
-            const ctx = buildPrepareContext(next);
-            const nextHandles = [];
-            for (const segment of segments) {
-                if (segment.resolver)
-                    preloadResolver(segment.resolver);
-                if (segment.prepare) {
-                    const result = segment.prepare(ctx);
-                    if (result) {
-                        for (const handle of result) {
-                            nextHandles.push(handle);
-                        }
-                    }
-                }
+            if (seededRoute.current?.route.url === next.url) {
+                seededRoute.current = null;
+                commit(next);
+                return;
             }
+            const nextHandles = prepareRoute(next);
             releasePinned();
             pinnedHandles.current = nextHandles;
             commit(next);
@@ -183,15 +311,16 @@ export function Routes({ routes, disableScrollToTop }) {
     }, [router, routes, commit, releasePinned]);
     useEffect(() => releasePinned, [releasePinned]);
     return useMemo(() => {
-        if (!route)
+        if (!activeRoute)
             return null;
-        return route.data.reduceRight((children, segment) => {
+        const children = activeRoute.data.reduceRight((children, segment) => {
             const props = segment.props ?? {};
             const Component = resolveSegmentComponent(segment);
             // segments without a component act as transparent passthroughs
             return Component ? _jsx(Component, { ...props, children: children }) : children;
         }, null);
-    }, [router, route && route.pathname]);
+        return _jsx(RouteContext.Provider, { value: activeRoute, children: children });
+    }, [activeRoute]);
 }
 function resolveSegmentComponent(segment) {
     if (segment.resolver) {
@@ -227,37 +356,47 @@ export function useMakeHref() {
 }
 export function useLinkProps(to) {
     const target = typeof to === 'string' ? { url: to } : to;
+    const { router, pendingHref } = useRouterCtx();
     const currRoute = useRoute();
     const navigate = useNavigate();
     const makeHref = useMakeHref();
     const href = target.url ? target.url : makeHref(target, currRoute);
-    const isCurrent = typeof target.current === 'undefined'
-        ? currRoute?.pathname === href.replace(/^#/, '').split('?')[0]
-        : target.current;
+    const currentPathname = currRoute?.pathname ?? router.match(router.getUrl())?.pathname;
+    const isCurrent = typeof target.current === 'undefined' ? currentPathname === href.replace(/^#/, '').split('?')[0] : target.current;
     function onClick(event) {
-        if (target.onClick)
-            target.onClick(event);
         if (shouldNavigate(event)) {
             event.preventDefault();
             navigate(target);
         }
     }
-    return {
+    const result = {
         href,
         'aria-current': isCurrent ? 'page' : undefined,
         onClick,
     };
+    Object.defineProperty(result, 'isPending', {
+        enumerable: false,
+        value: pendingHref === href,
+    });
+    Object.defineProperty(result, 'isCurrent', {
+        enumerable: false,
+        value: isCurrent,
+    });
+    return result;
 }
-export function Link({ href: to, replace, current, className, style, extraProps, children, ...anchorProps }) {
+export function Link({ href: to, replace, current, className, style, onClick, children, ...anchorProps }) {
     const linkTo = typeof to === 'string'
         ? { url: to, replace, current }
         : { ...to, replace, current };
     const linkProps = useLinkProps(linkTo);
-    const isCurrent = linkProps['aria-current'] === 'page';
-    const evaluate = (valOrFn) => (typeof valOrFn === 'function' ? valOrFn(isCurrent) : valOrFn);
-    return (_jsx("a", { "aria-current": linkProps['aria-current'], ...anchorProps, className: evaluate(className), style: evaluate(style), ...(extraProps ? extraProps(isCurrent) : {}), href: linkProps.href, 
+    function handleClick(event) {
+        if (onClick)
+            onClick(event);
+        linkProps.onClick(event);
+    }
+    return (_jsx("a", { "aria-current": linkProps['aria-current'], ...anchorProps, className: className, style: style, href: linkProps.href, 
         // eslint-disable-next-line react/jsx-handler-names
-        onClick: linkProps.onClick, children: children }));
+        onClick: handleClick, children: children }));
 }
 export function Navigate({ to }) {
     const [navigated, setNavigated] = useState(false);

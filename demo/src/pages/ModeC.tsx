@@ -24,15 +24,15 @@ export default function ModeC() {
       <div className='mode-header'>
         <h1>Mode (c) — Timed Fallback</h1>
         <p>
-          Acts like (b) until the navigation has been pending for more than the threshold; then flips to (a) and
-          commits with skeletons in place of any still-pending data.
+          Acts like (b) until the navigation has been pending for more than the threshold; then flips to (a) and commits
+          with skeletons in place of any still-pending data.
         </p>
       </div>
 
       <div className='recipe'>
         Recipe: wrap each section in <code>&lt;DelayedSuspense fallback={'{<Skeleton/>}'}&gt;</code>. The router holds
-        the previous route until <code>pendingDelayMs</code> (1000ms) has elapsed; past that, the boundaries fall
-        back to skeletons.
+        the previous route until <code>pendingDelayMs</code> (1000ms) has elapsed; past that, the boundaries fall back
+        to skeletons.
       </div>
 
       <h2>Feed</h2>
@@ -51,8 +51,8 @@ export default function ModeC() {
       </DelayedSuspense>
 
       <p className='note'>
-        Threshold: 1000ms. If the slow read (6000ms) hasn't resolved by then, you'll see this last section commit
-        with a skeleton in place of <strong>Related</strong>.
+        Threshold: 1000ms. If the slow read (6000ms) hasn't resolved by then, you'll see this last section commit with a
+        skeleton in place of <strong>Related</strong>.
       </p>
     </>
   )

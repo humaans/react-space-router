@@ -47,11 +47,17 @@ export interface RouteData {
 }
 export declare function defineRoute<T extends RouteData>(route: T): T;
 export declare function defineRoutes<T extends readonly RouteData[]>(routes: T): T;
+export type To = string | (NavigateTarget & {
+    current?: boolean;
+});
 interface RouterContextValue {
     router: SpaceRouter;
     route: Route | null;
     commit: (route: Route) => void;
+    navigate: (to: To, curr?: Route) => void;
     isPending: boolean;
+    pendingHref: string | null;
+    qs: Qs | undefined;
 }
 export declare const RouterContext: import("react").Context<RouterContextValue | undefined>;
 export declare function useInternalRouterInstance(): SpaceRouter;
@@ -116,30 +122,26 @@ export interface RoutesProps {
     routes: RouteDefinition[];
     disableScrollToTop?: boolean;
 }
-export declare function Routes({ routes, disableScrollToTop }: RoutesProps): ReactNode;
+export declare function Routes({ routes, disableScrollToTop }: RoutesProps): import("react/jsx-runtime").JSX.Element | null;
 export declare function useMakeHref(): (to: import("space-router").To, curr?: Route<Record<string, unknown>> | undefined) => string;
-export type To = string | (NavigateTarget & {
-    onClick?: (e: MouseEvent<HTMLAnchorElement>) => void;
-    current?: boolean;
-});
 export interface LinkPropsResult {
     href: string;
     'aria-current': 'page' | undefined;
     onClick: (e: MouseEvent<HTMLAnchorElement>) => void;
+    isCurrent: boolean;
+    isPending: boolean;
 }
 export declare function useLinkProps(to: To): LinkPropsResult;
-type FnOr<T> = T | ((isCurrent: boolean) => T);
 export interface LinkOwnProps {
     href?: To;
     replace?: boolean;
     current?: boolean;
-    className?: FnOr<string | undefined>;
-    style?: FnOr<CSSProperties | undefined>;
-    extraProps?: (isCurrent: boolean) => Record<string, unknown>;
+    className?: string;
+    style?: CSSProperties;
     children?: ReactNode;
 }
-export type LinkProps = LinkOwnProps & Omit<AnchorHTMLAttributes<HTMLAnchorElement>, keyof LinkOwnProps | 'onClick'>;
-export declare function Link({ href: to, replace, current, className, style, extraProps, children, ...anchorProps }: LinkProps): import("react/jsx-runtime").JSX.Element;
+export type LinkProps = LinkOwnProps & Omit<AnchorHTMLAttributes<HTMLAnchorElement>, keyof LinkOwnProps>;
+export declare function Link({ href: to, replace, current, className, style, onClick, children, ...anchorProps }: LinkProps): import("react/jsx-runtime").JSX.Element;
 export interface NavigateProps {
     to: To;
 }

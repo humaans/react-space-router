@@ -57,23 +57,23 @@ export function Shell({ children }: { children: ReactNode }) {
       <aside className='sidebar'>
         <h1>Loading Modes</h1>
         <nav>
-          <Link href='/' className={(c) => `nav-link${c ? ' current' : ''}`}>
+          <Link href='/' className='nav-link'>
             Overview
             <small>How to read this demo</small>
           </Link>
-          <Link href='/mode-a' className={(c) => `nav-link${c ? ' current' : ''}`}>
+          <Link href='/mode-a' className='nav-link'>
             (a) Immediate + skeletons
             <small>Show new shell + skeletons fast</small>
           </Link>
-          <Link href='/mode-b' className={(c) => `nav-link${c ? ' current' : ''}`}>
+          <Link href='/mode-b' className='nav-link'>
             (b) Wait for ready
             <small>Hold old page until everything's ready</small>
           </Link>
-          <Link href='/mode-c' className={(c) => `nav-link${c ? ' current' : ''}`}>
+          <Link href='/mode-c' className='nav-link'>
             (c) Timed fallback
             <small>(b) for 1s, then fall back to (a)</small>
           </Link>
-          <Link href='/mode-d/atlas' current={isModeD} className={(c) => `nav-link${c ? ' current' : ''}`}>
+          <Link href='/mode-d/atlas' current={isModeD} className='nav-link'>
             (d) Detail swap fade
             <small>Fade old item, wait for new item</small>
           </Link>

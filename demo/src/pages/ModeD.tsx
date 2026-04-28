@@ -81,7 +81,7 @@ export default function ModeD() {
                     if (!isCurrent) setPendingItemId(item.id)
                   },
                 }}
-                className={() => `item-link${isRequested ? ' requested' : ''}`}
+                className={`item-link${isRequested ? ' requested' : ''}`}
               >
                 <strong>{item.name}</strong>
                 <small>{item.meta}</small>

@@ -17,6 +17,7 @@ import {
 } from 'react'
 import {
   createRouter,
+  qs as defaultQs,
   type Mode,
   type NavigateTarget,
   type Qs,
@@ -125,14 +126,24 @@ function buildPrepareContext(route: Route): RoutePrepareContext {
 // Router context
 // ---------------------------------------------------------------------------
 
+export type To =
+  | string
+  | (NavigateTarget & {
+      current?: boolean
+    })
+
 interface RouterContextValue {
   router: SpaceRouter
   route: Route | null
   commit: (route: Route) => void
+  navigate: (to: To, curr?: Route) => void
   isPending: boolean
+  pendingHref: string | null
+  qs: Qs | undefined
 }
 
 export const RouterContext = createContext<RouterContextValue | undefined>(undefined)
+const RouteContext = createContext<Route | null | undefined>(undefined)
 
 // Internal context for `<DelayedSuspense>`. Set by `<Router>` based on
 // `usePending()` + a configurable threshold. `holding` is true only during
@@ -152,7 +163,8 @@ export function useInternalRouterInstance(): SpaceRouter {
 }
 
 export function useRoute(): Route | null {
-  return useRouterCtx().route
+  const route = useContext(RouteContext)
+  return route === undefined ? useRouterCtx().route : route
 }
 
 /**
@@ -170,12 +182,13 @@ export function usePending(): boolean {
 }
 
 export function useNavigate() {
-  const { router, route } = useRouterCtx()
+  const { navigate } = useRouterCtx()
+  const route = useRoute()
   return useCallback(
     (to: To) => {
-      return router.navigate(to, route as Route | undefined)
+      return navigate(to, route as Route | undefined)
     },
-    [router, route],
+    [navigate, route],
   )
 }
 
@@ -238,6 +251,9 @@ export function Router({
   const [{ router, routerOpts }, setRouter] = useState<InternalRouter>(() => makeRouter({ mode, qs, sync }))
 
   const [currRoute, setCurrRoute] = useState<Route | null>(null)
+  const [pendingHref, setPendingHref] = useState<string | null>(null)
+  const pendingHrefRef = useRef<string | null>(null)
+  pendingHrefRef.current = pendingHref
   const [isPending, startRouterTransition] = useTransition()
 
   // `holding` is true during the pre-commit window where `<DelayedSuspense>`
@@ -263,16 +279,19 @@ export function Router({
   const commit = useCallback((next: Route) => {
     const transform = transformRef.current
     const transformed = transform ? (transform(next) ?? next) : next
+    const matchedUrl = (next as Route & { url?: string }).url
+    const transformedUrl = (transformed as Route & { url?: string }).url
 
     startRouterTransition(() => {
       setCurrRoute(transformed)
+      if (pendingHrefRef.current === matchedUrl || pendingHrefRef.current === transformedUrl) {
+        setPendingHref(null)
+      }
     })
 
     // Sync the address bar if the transform rewrote the URL. We use
     // history.replaceState directly so we don't re-trigger the router's
     // listener loop.
-    const matchedUrl = (next as Route & { url?: string }).url
-    const transformedUrl = (transformed as Route & { url?: string }).url
     if (
       transformed !== next &&
       transformedUrl &&
@@ -284,9 +303,28 @@ export function Router({
     }
   }, [])
 
+  const navigate = useCallback(
+    (to: To, curr?: Route) => {
+      const href = router.href(to, curr)
+      setPendingHref(href)
+      router.navigate(to, curr)
+      if (!router.match(href)) {
+        setPendingHref(null)
+      }
+    },
+    [router],
+  )
+
+  useEffect(() => {
+    if (!pendingHref) return
+    if (!isPending && currRoute?.url === pendingHref) {
+      setPendingHref(null)
+    }
+  }, [pendingHref, isPending, currRoute?.url])
+
   const ctx = useMemo<RouterContextValue>(
-    () => ({ router, route: currRoute, commit, isPending }),
-    [router, currRoute, commit, isPending],
+    () => ({ router, route: currRoute, commit, navigate, isPending, pendingHref, qs }),
+    [router, currRoute, commit, navigate, isPending, pendingHref, qs],
   )
 
   useEffect(() => {
@@ -351,43 +389,175 @@ export interface RoutesProps {
   disableScrollToTop?: boolean
 }
 
+interface PreparedRoute {
+  route: Route
+  handles: PreparedHandle[]
+}
+
+interface FlatRoute {
+  pattern: string
+  data: RouteData[]
+}
+
+const PARAM_SEGMENT_RE = /^:([A-Za-z0-9_]+)([+*?])?$/
+const URL_SUFFIX_RE = /(?:\?([^#]*))?(#.*)?$/
+
+function matchRoutes(routes: RouteDefinition[], url: string, queryParser: Qs = defaultQs): Route | undefined {
+  const flatRoutes = flattenRoutes(routes)
+  for (const route of flatRoutes) {
+    const match = matchRoute(route.pattern, url, queryParser)
+    if (match) {
+      return { ...match, data: route.data } as Route
+    }
+  }
+}
+
+function flattenRoutes(routes: RouteDefinition[]): FlatRoute[] {
+  const flatRoutes: FlatRoute[] = []
+  const parentData: RouteData[] = []
+
+  function addLevel(level: RouteDefinition[]) {
+    for (const route of level) {
+      const { path = '', routes: children, ...routeData } = route as RouteData
+      flatRoutes.push({ pattern: path, data: parentData.concat([routeData]) })
+      if (children) {
+        parentData.push(routeData)
+        addLevel(children as RouteDefinition[])
+        parentData.pop()
+      }
+    }
+  }
+
+  addLevel(routes)
+  return flatRoutes
+}
+
+function matchRoute(pattern: string, url: string, queryParser: Qs): Omit<Route, 'data'> | undefined {
+  if (!pattern || !url) return
+
+  const suffix = url.match(URL_SUFFIX_RE)
+  const params: Record<string, string> = {}
+  let query: Record<string, unknown> = {}
+  let search = ''
+  let hash = ''
+
+  if (suffix?.[1]) {
+    search = '?' + suffix[1]
+    query = queryParser.parse(suffix[1]) as Record<string, unknown>
+  }
+  if (suffix?.[2]) {
+    hash = suffix[2]
+  }
+
+  if (pattern !== '*') {
+    const urlSegments = segmentize(url.replace(URL_SUFFIX_RE, ''))
+    const patternSegments = segmentize(pattern)
+    const max = Math.max(urlSegments.length, patternSegments.length)
+
+    for (let i = 0; i < max; i++) {
+      const patternSegment = patternSegments[i]
+      const paramMatch = patternSegment?.match(PARAM_SEGMENT_RE)
+
+      if (paramMatch) {
+        const [, name, flags = ''] = paramMatch
+        const plus = flags.includes('+')
+        const star = flags.includes('*')
+        const optional = flags.includes('?')
+        const value = urlSegments[i] || ''
+
+        if (!value && !star && (!optional || plus)) return
+
+        params[name] = decodeURIComponent(value)
+        if (plus || star) {
+          params[name] = urlSegments.slice(i).map(decodeURIComponent).join('/')
+          break
+        }
+      } else if (patternSegment !== urlSegments[i]) {
+        return
+      }
+    }
+  }
+
+  return {
+    pattern,
+    url,
+    pathname: url.replace(URL_SUFFIX_RE, ''),
+    params,
+    query,
+    search,
+    hash,
+  } as Omit<Route, 'data'>
+}
+
+function segmentize(url: string): string[] {
+  return url.replace(/(^\/+|\/+$)/g, '').split('/')
+}
+
+function prepareRoute(route: Route): PreparedHandle[] {
+  const segments = (route.data ?? []) as RouteData[]
+  const ctx = buildPrepareContext(route)
+  const handles: PreparedHandle[] = []
+
+  for (const segment of segments) {
+    if (segment.resolver) preloadResolver(segment.resolver)
+    if (segment.prepare) {
+      const result = segment.prepare(ctx)
+      if (result) {
+        for (const handle of result) {
+          handles.push(handle)
+        }
+      }
+    }
+  }
+
+  return handles
+}
+
+function releaseHandles(handles: PreparedHandle[]) {
+  for (const handle of handles) {
+    try {
+      handle.release()
+    } catch {
+      // best-effort
+    }
+  }
+}
+
 export function Routes({ routes, disableScrollToTop }: RoutesProps) {
-  const { router, route, commit } = useRouterCtx()
-  useScrollToTop(route, disableScrollToTop)
+  const { router, route, commit, qs } = useRouterCtx()
 
   // Pinned prepare handles for the currently committed navigation. Released
   // when a new navigation commits or when <Routes> unmounts.
   const pinnedHandles = useRef<PreparedHandle[]>([])
+  const seededRoute = useRef<PreparedRoute | null>(null)
+
   const releasePinned = useCallback(() => {
     const handles = pinnedHandles.current
     pinnedHandles.current = []
-    for (const handle of handles) {
-      try {
-        handle.release()
-      } catch {
-        // best-effort
-      }
-    }
+    releaseHandles(handles)
   }, [])
+
+  if (!route && !seededRoute.current) {
+    const matched = matchRoutes(routes, router.getUrl(), qs)
+    if (matched) {
+      const handles = prepareRoute(matched)
+      seededRoute.current = { route: matched, handles }
+      pinnedHandles.current = handles
+    }
+  }
+
+  const activeRoute = route ?? seededRoute.current?.route ?? null
+  useScrollToTop(activeRoute, disableScrollToTop)
 
   useEffect(() => {
     const transition = (next: Route) => {
-      const segments = (next.data ?? []) as RouteData[]
-      const ctx = buildPrepareContext(next)
-      const nextHandles: PreparedHandle[] = []
-
-      for (const segment of segments) {
-        if (segment.resolver) preloadResolver(segment.resolver)
-        if (segment.prepare) {
-          const result = segment.prepare(ctx)
-          if (result) {
-            for (const handle of result) {
-              nextHandles.push(handle)
-            }
-          }
-        }
+      if (seededRoute.current?.route.url === next.url) {
+        seededRoute.current = null
+        commit(next)
+        return
       }
 
+      const nextHandles = prepareRoute(next)
       releasePinned()
       pinnedHandles.current = nextHandles
       commit(next)
@@ -398,15 +568,17 @@ export function Routes({ routes, disableScrollToTop }: RoutesProps) {
   useEffect(() => releasePinned, [releasePinned])
 
   return useMemo(() => {
-    if (!route) return null
+    if (!activeRoute) return null
 
-    return (route.data as RouteData[]).reduceRight<ReactNode>((children, segment) => {
+    const children = (activeRoute.data as RouteData[]).reduceRight<ReactNode>((children, segment) => {
       const props = (segment as { props?: Record<string, unknown> }).props ?? {}
       const Component = resolveSegmentComponent(segment)
       // segments without a component act as transparent passthroughs
       return Component ? <Component {...props}>{children}</Component> : children
     }, null)
-  }, [router, route && route.pathname])
+
+    return <RouteContext.Provider value={activeRoute}>{children}</RouteContext.Provider>
+  }, [activeRoute])
 }
 
 function resolveSegmentComponent(segment: RouteData): ComponentType<any> | null {
@@ -445,90 +617,84 @@ export function useMakeHref() {
   return href
 }
 
-export type To =
-  | string
-  | (NavigateTarget & {
-      onClick?: (e: MouseEvent<HTMLAnchorElement>) => void
-      current?: boolean
-    })
-
 export interface LinkPropsResult {
   href: string
   'aria-current': 'page' | undefined
   onClick: (e: MouseEvent<HTMLAnchorElement>) => void
+  isCurrent: boolean
+  isPending: boolean
 }
 
 export function useLinkProps(to: To): LinkPropsResult {
-  const target: NavigateTarget & { onClick?: (e: MouseEvent<HTMLAnchorElement>) => void; current?: boolean } =
-    typeof to === 'string' ? { url: to } : to
+  const target: NavigateTarget & { current?: boolean } = typeof to === 'string' ? { url: to } : to
 
+  const { router, pendingHref } = useRouterCtx()
   const currRoute = useRoute()
   const navigate = useNavigate()
   const makeHref = useMakeHref()
 
   const href = target.url ? target.url : makeHref(target, currRoute as Route | undefined)
+  const currentPathname = currRoute?.pathname ?? router.match(router.getUrl())?.pathname
   const isCurrent =
-    typeof target.current === 'undefined'
-      ? currRoute?.pathname === href.replace(/^#/, '').split('?')[0]
-      : target.current
+    typeof target.current === 'undefined' ? currentPathname === href.replace(/^#/, '').split('?')[0] : target.current
 
   function onClick(event: MouseEvent<HTMLAnchorElement>) {
-    if (target.onClick) target.onClick(event)
-
     if (shouldNavigate(event)) {
       event.preventDefault()
       navigate(target)
     }
   }
 
-  return {
+  const result = {
     href,
     'aria-current': isCurrent ? 'page' : undefined,
     onClick,
-  }
-}
+  } as LinkPropsResult
 
-type FnOr<T> = T | ((isCurrent: boolean) => T)
+  Object.defineProperty(result, 'isPending', {
+    enumerable: false,
+    value: pendingHref === href,
+  })
+  Object.defineProperty(result, 'isCurrent', {
+    enumerable: false,
+    value: isCurrent,
+  })
+
+  return result
+}
 
 export interface LinkOwnProps {
   href?: To
   replace?: boolean
   current?: boolean
-  className?: FnOr<string | undefined>
-  style?: FnOr<CSSProperties | undefined>
-  extraProps?: (isCurrent: boolean) => Record<string, unknown>
+  className?: string
+  style?: CSSProperties
   children?: ReactNode
 }
 
-export type LinkProps = LinkOwnProps & Omit<AnchorHTMLAttributes<HTMLAnchorElement>, keyof LinkOwnProps | 'onClick'>
+export type LinkProps = LinkOwnProps & Omit<AnchorHTMLAttributes<HTMLAnchorElement>, keyof LinkOwnProps>
 
-export function Link({
-  href: to,
-  replace,
-  current,
-  className,
-  style,
-  extraProps,
-  children,
-  ...anchorProps
-}: LinkProps) {
+export function Link({ href: to, replace, current, className, style, onClick, children, ...anchorProps }: LinkProps) {
   const linkTo: To =
     typeof to === 'string'
       ? { url: to, replace, current }
-      : { ...(to as NavigateTarget & { onClick?: any; current?: boolean }), replace, current }
+      : { ...(to as NavigateTarget & { current?: boolean }), replace, current }
   const linkProps = useLinkProps(linkTo)
-  const isCurrent = linkProps['aria-current'] === 'page'
-  const evaluate = <T,>(valOrFn: FnOr<T>): T => (typeof valOrFn === 'function' ? (valOrFn as any)(isCurrent) : valOrFn)
+
+  function handleClick(event: MouseEvent<HTMLAnchorElement>) {
+    if (onClick) onClick(event)
+    linkProps.onClick(event)
+  }
+
   return (
     <a
       aria-current={linkProps['aria-current']}
       {...anchorProps}
-      className={evaluate(className)}
-      style={evaluate(style)}
-      {...(extraProps ? extraProps(isCurrent) : {})}
+      className={className}
+      style={style}
       href={linkProps.href}
       // eslint-disable-next-line react/jsx-handler-names
-      onClick={linkProps.onClick}
+      onClick={handleClick}
     >
       {children}
     </a>
