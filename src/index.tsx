@@ -123,6 +123,10 @@ function buildPrepareContext(route: Route): RoutePrepareContext {
   }
 }
 
+function routeHasRedirect(route: Route | undefined): boolean {
+  return !!route?.data?.some((segment) => Boolean((segment as { redirect?: unknown }).redirect))
+}
+
 // ---------------------------------------------------------------------------
 // Router context
 // ---------------------------------------------------------------------------
@@ -255,8 +259,6 @@ export function Router({
 
   const [currRoute, setCurrRoute] = useState<Route | null>(null)
   const [pendingHref, setPendingHref] = useState<string | null>(null)
-  const pendingHrefRef = useRef<string | null>(null)
-  pendingHrefRef.current = pendingHref
   const [isPending, startRouterTransition] = useTransition()
 
   // `holding` is true during the pre-commit window where `<DelayedSuspense>`
@@ -306,9 +308,11 @@ export function Router({
 
       startRouterTransition(() => {
         setCurrRoute(next)
-        if (pendingHrefRef.current === matchedUrl || pendingHrefRef.current === transformedUrl) {
-          setPendingHref(null)
-        }
+        setPendingHref((current) => {
+          if (!current) return current
+          if (current === matchedUrl || current === transformedUrl) return null
+          return routeHasRedirect(router.match(current)) ? null : current
+        })
       })
 
       // Sync the address bar if the transform rewrote the URL. We use
@@ -316,7 +320,7 @@ export function Router({
       // listener loop.
       syncRouteUrl(matched, next)
     },
-    [syncRouteUrl],
+    [router, syncRouteUrl],
   )
 
   const navigate = useCallback(
@@ -330,13 +334,6 @@ export function Router({
     },
     [router],
   )
-
-  useEffect(() => {
-    if (!pendingHref) return
-    if (!isPending && currRoute?.url === pendingHref) {
-      setPendingHref(null)
-    }
-  }, [pendingHref, isPending, currRoute?.url])
 
   const ctx = useMemo<RouterContextValue>(
     () => ({
@@ -570,6 +567,7 @@ export function Routes({ routes, disableScrollToTop }: RoutesProps) {
   const committed = useRef<PreparedRoute | null>(null)
   const pending = useRef<PreparedRoute | null>(null)
   const didSeedInitialRoute = useRef(false)
+  const previousRoutes = useRef(routes)
 
   const prepareMatched = useCallback(
     (matched: Route): PreparedRoute => {
@@ -607,6 +605,10 @@ export function Routes({ routes, disableScrollToTop }: RoutesProps) {
       const matchedRoute = transformRoute(matched)
 
       if (committed.current?.route.url === matchedRoute.url) {
+        if (pending.current) {
+          releaseHandles(pending.current.handles)
+          pending.current = null
+        }
         commit(committed.current.route, committed.current.matched)
         return
       }
@@ -625,6 +627,21 @@ export function Routes({ routes, disableScrollToTop }: RoutesProps) {
   }, [router, routes, qs, transformRoute, prepareMatched, commit])
 
   useEffect(() => {
+    if (previousRoutes.current === routes) return
+    previousRoutes.current = routes
+
+    const currentUrl = route?.url ?? committed.current?.route.url ?? router.getUrl()
+    if (!currentUrl) return
+
+    const matched = matchRoutes(routes, currentUrl, qs)
+    if (!matched) return
+
+    if (pending.current) releaseHandles(pending.current.handles)
+    pending.current = prepareMatched(matched)
+    commit(pending.current.route, pending.current.matched)
+  }, [routes, router, qs, prepareMatched, commit, route?.url])
+
+  useEffect(() => {
     const prepared = pending.current
     if (!route || !prepared || prepared.route.url !== route.url) return
 
@@ -632,7 +649,7 @@ export function Routes({ routes, disableScrollToTop }: RoutesProps) {
     committed.current = prepared
     pending.current = null
     if (previous) releaseHandles(previous.handles)
-  }, [route?.url])
+  }, [route])
 
   useEffect(() => releaseAll, [releaseAll])
 
@@ -782,10 +799,10 @@ export interface LinkOwnProps {
 export type LinkProps = LinkOwnProps & Omit<AnchorHTMLAttributes<HTMLAnchorElement>, keyof LinkOwnProps>
 
 export function Link({ href: to, replace, current, className, style, onClick, children, ...anchorProps }: LinkProps) {
-  const linkTo: To =
-    typeof to === 'string'
-      ? { url: to, replace, current }
-      : { ...(to as NavigateTarget & { current?: boolean }), replace, current }
+  const linkTo: NavigateTarget & { current?: boolean } =
+    typeof to === 'string' ? { url: to } : { ...(to as NavigateTarget & { current?: boolean }) }
+  if (replace !== undefined) linkTo.replace = replace
+  if (current !== undefined) linkTo.current = current
   const linkProps = useLinkProps(linkTo)
 
   function handleClick(event: MouseEvent<HTMLAnchorElement>) {
@@ -813,15 +830,17 @@ export interface NavigateProps {
 }
 
 export function Navigate({ to }: NavigateProps) {
-  const [navigated, setNavigated] = useState(false)
+  const router = useInternalRouterInstance()
   const navigate = useNavigate()
+  const route = useRoute()
+  const href = router.href(to, route as Route | undefined)
+  const navigatedHref = useRef<string | null>(null)
 
   useEffect(() => {
-    if (!navigated) {
-      navigate(to)
-      setNavigated(true)
-    }
-  }, [navigated])
+    if (navigatedHref.current === href) return
+    navigatedHref.current = href
+    navigate(to)
+  }, [href, navigate, to])
 
   return null
 }
