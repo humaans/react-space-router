@@ -26,19 +26,19 @@ export default function ModeA() {
       </div>
 
       <h2>User</h2>
-      {/* Fast data (200ms) — usually resolved by the time we commit; renders inline. */}
+      {/* Fast data (100ms) — usually resolved by the time we commit; renders inline. */}
       <Suspense fallback={<UserSkeleton />}>
         <UserCard />
       </Suspense>
 
       <h2>Posts</h2>
-      {/* Medium (1000ms) — likely pending on commit; skeleton fires. */}
+      {/* Medium (500ms) — likely pending on commit; skeleton fires. */}
       <Suspense fallback={<PostsSkeleton />}>
         <Posts />
       </Suspense>
 
       <h2>Analytics</h2>
-      {/* Slow (6000ms) — definitely pending; skeleton fires longest. */}
+      {/* Slow (3000ms) — definitely pending; skeleton fires longest. */}
       <Suspense fallback={<AnalyticsSkeleton />}>
         <Analytics />
       </Suspense>

@@ -7,7 +7,7 @@ import { read } from '../data'
  *
  * The whole pattern is just `<DelayedSuspense>` — a router-aware Suspense
  * boundary whose fallback is delayed until the in-flight nav has been
- * pending for `pendingDelayMs` (configured on `<Router>`, default 1000ms).
+ * pending for `pendingDelayMs` (configured on `<Router>`, 500ms in this demo).
  *
  *   Pre-commit, under threshold: fallback re-throws → outer transition
  *                                holds the previous route.
@@ -31,8 +31,8 @@ export default function ModeC() {
 
       <div className='recipe'>
         Recipe: wrap each section in <code>&lt;DelayedSuspense fallback={'{<Skeleton/>}'}&gt;</code>. The router holds
-        the previous route until <code>pendingDelayMs</code> (1000ms) has elapsed; past that, the boundaries fall back
-        to skeletons.
+        the previous route until <code>pendingDelayMs</code> (500ms) has elapsed; past that, the boundaries fall back to
+        skeletons.
       </div>
 
       <h2>Feed</h2>
@@ -51,7 +51,7 @@ export default function ModeC() {
       </DelayedSuspense>
 
       <p className='note'>
-        Threshold: 1000ms. If the slow read (6000ms) hasn't resolved by then, you'll see this last section commit with a
+        Threshold: 500ms. If the slow read (3000ms) hasn't resolved by then, you'll see this last section commit with a
         skeleton in place of <strong>Related</strong>.
       </p>
     </>
