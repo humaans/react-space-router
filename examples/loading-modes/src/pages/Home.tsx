@@ -6,8 +6,8 @@ export default function Home() {
       <div className='mode-header'>
         <h1>Loading Modes Demo</h1>
         <p>
-          Three pages. Same router, same data layer, same latencies. The only difference is where each page places its{' '}
-          <code>&lt;Suspense&gt;</code> boundaries.
+          Four pages. Same router, same data layer, same latency model. The first three differ only in where each page
+          places its <code>&lt;Suspense&gt;</code> boundaries; the fourth adds a local same-surface fade.
         </p>
       </div>
 
@@ -62,6 +62,14 @@ export default function Home() {
         </p>
       </div>
 
+      <div className='card'>
+        <h3>(d) Detail swap fade</h3>
+        <p className='dim'>
+          A detail page with an item list. Item-to-item clicks fade the currently rendered item while the next item
+          loads, then swap only once the new item can render. Leaving the page does not trigger that local fade.
+        </p>
+      </div>
+
       <h2>How this is implemented</h2>
       <p>
         Same <code>&lt;Router&gt;</code>, same router code (every nav goes through <code>startTransition</code>), same{' '}
@@ -78,8 +86,12 @@ export default function Home() {
           route until everything resolves.
         </li>
         <li>
-          <strong>(c)</strong> — wrap in <code>&lt;DelayedSuspense fallback={'{<Skeleton/>}'}&gt;</code>. Behaves
-          like (b) for the first <code>pendingDelayMs</code> (1s), then like (a).
+          <strong>(c)</strong> — wrap in <code>&lt;DelayedSuspense fallback={'{<Skeleton/>}'}&gt;</code>. Behaves like
+          (b) for the first <code>pendingDelayMs</code> (1s), then like (a).
+        </li>
+        <li>
+          <strong>(d)</strong> — no inner boundary around the detail read. Same-page item links set a local fade state;
+          the router transition keeps the old committed detail on screen until the next item is ready.
         </li>
       </ul>
 
