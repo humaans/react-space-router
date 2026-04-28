@@ -29,6 +29,10 @@ const PAYLOADS: Record<string, string> = {
   comments: '8 new comments across 3 threads',
   analytics: '24,910 views this week · ↑ 14% week-over-week',
   related: 'You might also like: figbird, space-router, kinfolk',
+  'item-atlas': 'Atlas ships with enterprise SSO, lifecycle reporting, and role-based access controls.',
+  'item-beacon': 'Beacon includes approvals, compensation bands, and policy acknowledgements.',
+  'item-courier': 'Courier tracks async onboarding, probation milestones, and team introductions.',
+  'item-delta': 'Delta monitors payroll checks, banking details, and month-end completion.',
 }
 
 export function clearCache() {

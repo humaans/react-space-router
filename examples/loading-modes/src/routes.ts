@@ -6,6 +6,7 @@ import { prepare, slowImport } from './data'
 export const LATENCIES = {
   fast: 200,
   medium: 1000,
+  detail: 2200,
   slow: 6000,
 }
 
@@ -50,5 +51,11 @@ export const routes = defineRoutes([
       prepare('comments', LATENCIES.medium),
       prepare('related', LATENCIES.slow),
     ],
+  },
+  {
+    path: '/mode-d/:id',
+    resolver: slowImport(CHUNK_MS, () => import('./pages/ModeD')),
+    prepare: ({ params }) => [prepare(`item-${params.id}`, LATENCIES.detail)],
+    scrollGroup: 'mode-d',
   },
 ])

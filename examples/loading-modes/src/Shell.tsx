@@ -48,39 +48,34 @@ function CurrentRoute() {
 }
 
 export function Shell({ children }: { children: ReactNode }) {
+  const route = useRoute()
+  const isModeD = route?.pathname?.startsWith('/mode-d/')
+
   return (
     <div className='app'>
       <ProgressBar />
       <aside className='sidebar'>
         <h1>Loading Modes</h1>
         <nav>
-          <Link
-            href='/'
-            className={(c) => `nav-link${c ? ' current' : ''}`}
-          >
+          <Link href='/' className={(c) => `nav-link${c ? ' current' : ''}`}>
             Overview
             <small>How to read this demo</small>
           </Link>
-          <Link
-            href='/mode-a'
-            className={(c) => `nav-link${c ? ' current' : ''}`}
-          >
+          <Link href='/mode-a' className={(c) => `nav-link${c ? ' current' : ''}`}>
             (a) Immediate + skeletons
             <small>Show new shell + skeletons fast</small>
           </Link>
-          <Link
-            href='/mode-b'
-            className={(c) => `nav-link${c ? ' current' : ''}`}
-          >
+          <Link href='/mode-b' className={(c) => `nav-link${c ? ' current' : ''}`}>
             (b) Wait for ready
             <small>Hold old page until everything's ready</small>
           </Link>
-          <Link
-            href='/mode-c'
-            className={(c) => `nav-link${c ? ' current' : ''}`}
-          >
+          <Link href='/mode-c' className={(c) => `nav-link${c ? ' current' : ''}`}>
             (c) Timed fallback
             <small>(b) for 1s, then fall back to (a)</small>
+          </Link>
+          <Link href='/mode-d/atlas' current={isModeD} className={(c) => `nav-link${c ? ' current' : ''}`}>
+            (d) Detail swap fade
+            <small>Fade old item, wait for new item</small>
           </Link>
         </nav>
         <div className='sidebar-footer'>
