@@ -15,9 +15,11 @@ React Space Router is a set of hooks and components for keeping your app in sync
 - Code-split routes via `resolver` (`React.lazy` under the hood)
 - Per-route `prepare(ctx)` for fetch-as-you-render data loading
 - Pending state via `usePending()` (backed by `useTransition`)
+- Delayed route fallbacks via `<DelayedSuspense>`
 - Optional pre-commit `transformRoute` hook for URL rewrites
+- Path params injected as component props
 - Built in query string parser
-- Scrolls to top after navigation
+- Scrolls to top after navigation, with `scrollGroup` support
 - Preserves cmd/ctrl/alt/shift click and mouse middle click
 
 ## Why
@@ -95,6 +97,7 @@ Props:
 - `qs` a custom query string parser of shape `{ parse, stringify }`.
 - `sync` if `true`, the underlying space-router fires synchronous transitions (useful in tests).
 - `transformRoute(route)` an optional pure, synchronous function that runs between match and commit. Return a modified `Route` to change what gets committed; if its `url` differs from the matched URL, the router calls `history.replaceState` so the address bar matches. Use this for things like persisted-query restoration. Must not be async.
+- `pendingDelayMs` how long `<DelayedSuspense>` holds the previous route before rendering its fallback during an in-flight navigation. Default: `1000`.
 
 ### `<Routes />`
 
@@ -102,20 +105,19 @@ Props:
 <Routes routes={[{ path: '/', component: Home }]} />
 ```
 
-Renders the components that match the current route based on the route config. Nested ancestor segments wrap their descendants automatically — parents render `{children}` to position the matched child.
+Renders the components that match the current route based on the route config. Nested ancestor segments wrap their descendants automatically — parents render `{children}` to position the matched child. Segments without a `component` or `resolver` are transparent wrappers for their descendants.
 
-When a navigation happens, every matched segment's `resolver()` and `prepare()` fire in parallel, so chunk download and data loading overlap. The destination's nearest `<Suspense>` boundary handles any still-cold reads.
+When a navigation happens, every matched segment's `resolver()` is preloaded and every matched segment's `prepare()` is called, so chunk download and data loading can overlap. The router does not await the returned prepare promises before committing; the destination's nearest `<Suspense>` boundary handles any still-cold reads.
 
 Props:
 
-- `routes` an array of route definitions, where each route is an object of shape `{ path, component, resolver, prepare, navigation, props, redirect, scrollGroup, routes, ...metadata }`:
+- `routes` an array of route definitions, where each route is an object of shape `{ path, component, resolver, prepare, navigation, props, scrollGroup, routes, ...metadata }`:
   - `path` URL pattern, may include `:named` segments.
   - `component` a React component to render. Accepts an ESM-default module shape (`{ default: Component }`) too.
   - `resolver` `() => import('./Screen')` — a dynamic import. The router preloads this at navigation time and renders via `React.lazy`. Cold imports suspend at the destination's Suspense boundary.
   - `prepare(ctx)` a function called at navigation time with `{ pathname, url, params, query }`. Returns an array of `PreparedHandle` objects (e.g. from a data layer's `prepare()` call). The router pins them for the lifetime of the committed navigation and releases them when the next navigation commits.
-  - `navigation` per-route navigation options. Currently supports `commit: 'immediate'` (the only mode). `commit: 'ready'` is reserved for a future release.
+  - `navigation` currently only accepts `commit: 'immediate'`, which is the default behavior. Alternate commit policies are not implemented.
   - `props` props to pass to the segment's component.
-  - `redirect` a string or `(route) => to` redirecting upon entering this route.
   - `scrollGroup` a string that groups routes; navigations within a group don't scroll to top.
   - `routes` nested route definitions.
   - `...metadata` any other keys you want — they're available on `route.data[i]`.
@@ -123,7 +125,7 @@ Props:
 
 ### Path params as component props
 
-When the router commits a route, it spreads the matched path params onto the leaf segment's component as own props. Each segment receives only the params declared in its own `path` — wrapping layouts that didn't declare those params get nothing extra.
+When the router commits a route, it spreads matched path params onto route segment components as own props. Each segment receives only the params declared in its own `path` — wrapping layouts that didn't declare those params get nothing extra, while a parent layout that declares `:orgId` receives `orgId` and a child leaf that declares `:issueId` receives `issueId`.
 
 ```js
 const routes = [
@@ -156,6 +158,20 @@ interface PreparedHandle {
   key?: string | number
 }
 ```
+
+The router stores the handles and calls `release()`. Your data layer decides what `promise`, `priority`, and `key` mean; the router does not inspect `priority` or `key`.
+
+### `<DelayedSuspense />`
+
+```js
+<DelayedSuspense fallback={<Skeleton />}>
+  <Panel />
+</DelayedSuspense>
+```
+
+A router-aware `Suspense` boundary. During an in-flight route transition it re-throws its fallback for the first `pendingDelayMs` milliseconds, which lets the already-committed outer route stay on screen. After the threshold, or outside a pending navigation, it behaves like regular `Suspense` and renders its fallback.
+
+Use it for routes where you want to avoid flashing a skeleton for fast navigations but still show a loading state for slower data.
 
 ### `<Link />`
 
@@ -213,7 +229,7 @@ Get the underlying Space Router instance. See [space-router docs](https://kidkar
 const route = useRoute()
 ```
 
-Subscribe to the current route. Route is an object of shape `{ url, pathname, params, query, search, hash, pattern, data }`:
+Subscribe to the current route. Route is `null` before a route has been committed outside `<Routes>`, otherwise an object of shape `{ url, pathname, params, query, search, hash, pattern, data }`:
 
 - `url` full relative URL string including query string and hash if any.
 - `pathname` the pathname portion.
@@ -328,5 +344,6 @@ See [MIGRATION.md](https://github.com/humaans/react-space-router/blob/master/MIG
 - `onNavigating`/`onNavigated`/`useRoute` props have been removed from `<Router>`. Route state lives inside the router now.
 - Use `resolver` on a route segment instead of awaiting `import()` in `onNavigating`.
 - Use `usePending()` instead of a manual `navigating: true/false` flag.
+- Use `<DelayedSuspense>` for delayed skeleton fallbacks during route transitions.
 - Use `transformRoute` for the one case that actually needs a pre-commit hook (e.g. persisted-query restoration).
 - Replace external Redux/Zustand/atom-backed route state with direct `useRoute()` reads.
