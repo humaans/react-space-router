@@ -1,6 +1,6 @@
 import { jsx as _jsx } from "react/jsx-runtime";
 import { createContext, lazy as reactLazy, Suspense, useCallback, useContext, useState, useEffect, useMemo, useRef, useTransition, } from 'react';
-import { createRouter, qs as defaultQs, } from 'space-router';
+import { createMatcher, createRouter, } from 'space-router';
 export { qs } from 'space-router';
 const resolverPromiseCache = new WeakMap();
 const resolverComponentCache = new WeakMap();
@@ -177,89 +177,6 @@ const NEVER_RESOLVES = new Promise(() => { });
 function DelayedSuspenseHold() {
     throw NEVER_RESOLVES;
 }
-const PARAM_SEGMENT_RE = /^:([A-Za-z0-9_]+)([+*?])?$/;
-const URL_SUFFIX_RE = /(?:\?([^#]*))?(#.*)?$/;
-function matchRoutes(routes, url, queryParser = defaultQs) {
-    const flatRoutes = flattenRoutes(routes);
-    for (const route of flatRoutes) {
-        const match = matchRoute(route.pattern, url, queryParser);
-        if (match) {
-            return { ...match, data: route.data };
-        }
-    }
-}
-function flattenRoutes(routes) {
-    const flatRoutes = [];
-    const parentData = [];
-    function addLevel(level) {
-        for (const route of level) {
-            const { path = '', routes: children, ...routeDataWithoutPath } = route;
-            const routeData = { path, ...routeDataWithoutPath };
-            flatRoutes.push({ pattern: path, data: parentData.concat([routeData]) });
-            if (children) {
-                parentData.push(routeData);
-                addLevel(children);
-                parentData.pop();
-            }
-        }
-    }
-    addLevel(routes);
-    return flatRoutes;
-}
-function matchRoute(pattern, url, queryParser) {
-    if (!pattern || !url)
-        return;
-    const suffix = url.match(URL_SUFFIX_RE);
-    const params = {};
-    let query = {};
-    let search = '';
-    let hash = '';
-    if (suffix?.[1]) {
-        search = '?' + suffix[1];
-        query = queryParser.parse(suffix[1]);
-    }
-    if (suffix?.[2]) {
-        hash = suffix[2];
-    }
-    if (pattern !== '*') {
-        const urlSegments = segmentize(url.replace(URL_SUFFIX_RE, ''));
-        const patternSegments = segmentize(pattern);
-        const max = Math.max(urlSegments.length, patternSegments.length);
-        for (let i = 0; i < max; i++) {
-            const patternSegment = patternSegments[i];
-            const paramMatch = patternSegment?.match(PARAM_SEGMENT_RE);
-            if (paramMatch) {
-                const [, name, flags = ''] = paramMatch;
-                const plus = flags.includes('+');
-                const star = flags.includes('*');
-                const optional = flags.includes('?');
-                const value = urlSegments[i] || '';
-                if (!value && !star && (!optional || plus))
-                    return;
-                params[name] = decodeURIComponent(value);
-                if (plus || star) {
-                    params[name] = urlSegments.slice(i).map(decodeURIComponent).join('/');
-                    break;
-                }
-            }
-            else if (patternSegment !== urlSegments[i]) {
-                return;
-            }
-        }
-    }
-    return {
-        pattern,
-        url,
-        pathname: url.replace(URL_SUFFIX_RE, ''),
-        params,
-        query,
-        search,
-        hash,
-    };
-}
-function segmentize(url) {
-    return url.replace(/(^\/+|\/+$)/g, '').split('/');
-}
 function prepareRoute(route) {
     const segments = (route.data ?? []);
     const ctx = buildPrepareContext(route);
@@ -307,6 +224,7 @@ export function Routes({ routes, disableScrollToTop }) {
     const pending = useRef(null);
     const didSeedInitialRoute = useRef(false);
     const previousRoutes = useRef(routes);
+    const matcher = useMemo(() => createMatcher(routes, { qs }), [routes, qs]);
     const prepareMatched = useCallback((matched) => {
         const transformed = transformRoute(matched);
         return { route: transformed, matched, handles: prepareRoute(transformed) };
@@ -318,7 +236,7 @@ export function Routes({ routes, disableScrollToTop }) {
     }, []);
     if (!didSeedInitialRoute.current && !route) {
         didSeedInitialRoute.current = true;
-        const matched = matchRoutes(routes, router.getUrl(), qs);
+        const matched = matcher.match(router.getUrl());
         if (matched) {
             committed.current = prepareMatched(matched);
         }
@@ -332,7 +250,7 @@ export function Routes({ routes, disableScrollToTop }) {
     useEffect(() => {
         const transition = (next) => {
             const nextUrl = next.url ?? next.pathname;
-            const matched = matchRoutes(routes, nextUrl, qs) ?? next;
+            const matched = matcher.match(nextUrl) ?? next;
             const matchedRoute = transformRoute(matched);
             if (committed.current?.route.url === matchedRoute.url) {
                 if (pending.current) {
@@ -352,7 +270,7 @@ export function Routes({ routes, disableScrollToTop }) {
             commit(pending.current.route, pending.current.matched);
         };
         return router.listen(routes, transition);
-    }, [router, routes, qs, transformRoute, prepareMatched, commit]);
+    }, [router, routes, matcher, transformRoute, prepareMatched, commit]);
     useEffect(() => {
         if (previousRoutes.current === routes)
             return;
@@ -360,14 +278,14 @@ export function Routes({ routes, disableScrollToTop }) {
         const currentUrl = route?.url ?? committed.current?.route.url ?? router.getUrl();
         if (!currentUrl)
             return;
-        const matched = matchRoutes(routes, currentUrl, qs);
+        const matched = matcher.match(currentUrl);
         if (!matched)
             return;
         if (pending.current)
             releaseHandles(pending.current.handles);
         pending.current = prepareMatched(matched);
         commit(pending.current.route, pending.current.matched);
-    }, [routes, router, qs, prepareMatched, commit, route?.url]);
+    }, [routes, router, matcher, prepareMatched, commit, route?.url]);
     useEffect(() => {
         const prepared = pending.current;
         if (!route || !prepared || prepared.route.url !== route.url)
