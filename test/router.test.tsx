@@ -1559,6 +1559,49 @@ test.serial('Link with download attribute lets the browser handle it', (t) => {
   t.is(location.pathname, '/')
 })
 
+test.serial('Link with same-page hash lets the browser handle it', (t) => {
+  setup()
+
+  const root = document.getElementById('root')
+
+  const routes = [
+    {
+      path: '/',
+      component: () => (
+        <div>
+          <Link href='#target'>Jump</Link>
+          <section id='target'>Target</section>
+        </div>
+      ),
+    },
+    { path: '/target', component: () => <div>Wrong route</div> },
+  ]
+
+  function App() {
+    return (
+      <Router sync>
+        <Routes routes={routes} />
+      </Router>
+    )
+  }
+
+  act(() => {
+    const r = ReactDOM.createRoot(root)
+    r.render(<App />)
+  })
+
+  const link = window.document.querySelector('a')!
+  let event: MouseEvent
+  act(() => {
+    event = dispatchClick(link)
+  })
+
+  t.false(event!.defaultPrevented)
+  t.is(location.pathname, '/')
+  t.regex(window.document.body.innerHTML, /Target/)
+  t.notRegex(window.document.body.innerHTML, /Wrong route/)
+})
+
 test.serial('Routes pins prepare handles for the committed nav and releases on the next', async (t) => {
   setup()
 
