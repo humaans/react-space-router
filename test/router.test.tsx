@@ -1,6 +1,7 @@
 import test from 'ava'
 import { act, Component, Suspense, useEffect, useState, type ReactNode } from 'react'
 import ReactDOM from 'react-dom/client'
+import { renderToString } from 'react-dom/server'
 import { JSDOM, VirtualConsole } from 'jsdom'
 import {
   Router,
@@ -123,6 +124,36 @@ test.serial('usage', async function (t) {
   })
 
   t.is(window.document.body.innerHTML, '<div id="root"><div>Stuff</div></div>')
+})
+
+test.serial('Router and Link render without browser globals', (t) => {
+  const previous = {
+    window: g.window,
+    document: g.document,
+    history: g.history,
+    location: g.location,
+  }
+
+  delete g.window
+  delete g.document
+  delete g.history
+  delete g.location
+
+  try {
+    const html = renderToString(
+      <Router>
+        <Link href='/x'>X</Link>
+        <Routes routes={[{ path: '/', component: () => <div>Home</div> }]} />
+      </Router>,
+    )
+
+    t.is(html, '<a href="/x">X</a>')
+  } finally {
+    g.window = previous.window
+    g.document = previous.document
+    g.history = previous.history
+    g.location = previous.location
+  }
 })
 
 test.serial('useLinkProps()', async function (t) {
