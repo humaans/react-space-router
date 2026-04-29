@@ -466,7 +466,6 @@ export function Routes({ routes, disableScrollToTop }: RoutesProps) {
   // when a new navigation commits or when <Routes> unmounts.
   const committed = useRef<PreparedRoute | null>(null)
   const pending = useRef<PreparedRoute | null>(null)
-  const didSeedInitialRoute = useRef(false)
   const previousRoutes = useRef(routes)
   const matcher = useMemo(() => createMatcher(routes, { qs }), [routes, qs])
 
@@ -484,20 +483,29 @@ export function Routes({ routes, disableScrollToTop }: RoutesProps) {
     pending.current = null
   }, [])
 
-  if (!didSeedInitialRoute.current && !route) {
-    didSeedInitialRoute.current = true
+  const initialRoute = useMemo<Pick<PreparedRoute, 'route' | 'matched'> | null>(() => {
+    if (route) return null
     const matched = matcher.match(router.getUrl())
     if (matched) {
-      committed.current = prepareMatched(matched)
+      return { route: transformRoute(matched), matched }
     }
-  }
+    return null
+  }, [route, router, matcher, transformRoute])
 
-  const activeRoute = route ?? committed.current?.route ?? null
-  useScrollToTop(activeRoute, disableScrollToTop)
+  const activeRoute = route ?? committed.current?.route ?? initialRoute?.route ?? null
 
   useEffect(() => {
-    if (committed.current) syncRouteUrl(committed.current.matched, committed.current.route)
-  }, [syncRouteUrl])
+    if (!initialRoute || route || committed.current || pending.current) return
+
+    const prepared = {
+      ...initialRoute,
+      handles: prepareRoute(initialRoute.route),
+    }
+    committed.current = prepared
+    syncRouteUrl(prepared.matched, prepared.route)
+  }, [initialRoute, route, syncRouteUrl])
+
+  useScrollToTop(activeRoute, disableScrollToTop)
 
   useEffect(() => {
     const transition = (next: Route) => {
