@@ -24,6 +24,12 @@ React Space Router is a set of hooks and components for keeping your app in sync
 
 "Perfection is achieved when there is nothing left to take away." React Space Router is built upon Space Router, a framework agnostic tiny core that handles URL listening, route matching and navigation. React Space Router wraps that core into an idiomatic set of React components and hooks. The hope is you'll find React Space Router refreshingly simple compared to the existing alternatives, while still offering enough extensibility for modern Suspense-driven UIs.
 
+## Scope
+
+RSP is a client-side React router for production SPAs. SSR is intentionally out of scope.
+
+If you need SSR, use a framework/router designed around request-time rendering. RSP optimizes for rich authenticated apps where client routing, Suspense-aware navigation, and data cache lifecycles matter more than first-request HTML.
+
 ## Install
 
 ```sh

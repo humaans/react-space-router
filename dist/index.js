@@ -446,7 +446,7 @@ export function shouldNavigate(e) {
             return false;
         if (a.hasAttribute('download'))
             return false;
-        if (a.origin && a.origin !== window.location.origin)
+        if (typeof window !== 'undefined' && a.origin && a.origin !== window.location.origin)
             return false;
     }
     return true;

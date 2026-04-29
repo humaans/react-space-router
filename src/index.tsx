@@ -756,7 +756,7 @@ export function shouldNavigate(e: MouseEvent): boolean {
     // and cross-origin or non-http(s) protocols (mailto:, tel:, ...)
     if (a.target && a.target !== '_self') return false
     if (a.hasAttribute('download')) return false
-    if (a.origin && a.origin !== window.location.origin) return false
+    if (typeof window !== 'undefined' && a.origin && a.origin !== window.location.origin) return false
   }
   return true
 }
