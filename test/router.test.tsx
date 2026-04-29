@@ -153,6 +153,62 @@ test.serial('Router and Link render without browser globals', (t) => {
   }
 })
 
+test.serial('Routes does not prepare the initial route during render', (t) => {
+  let prepareCalls = 0
+
+  const routes = [
+    {
+      path: '/',
+      prepare: () => {
+        prepareCalls++
+      },
+      component: () => <div>Home</div>,
+    },
+  ]
+
+  const matched = {
+    pattern: '/',
+    url: '/',
+    pathname: '/',
+    params: {},
+    query: {},
+    search: '',
+    hash: '',
+    data: routes,
+  } as Route
+
+  const router = {
+    getUrl: () => '/',
+    match: () => matched,
+    listen: () => () => {},
+    href: () => '/',
+    navigate: () => {},
+  }
+
+  const html = renderToString(
+    <RouterContext.Provider
+      value={
+        {
+          router,
+          route: null,
+          transformRoute: (route: Route) => route,
+          syncRouteUrl: () => {},
+          commit: () => {},
+          navigate: () => {},
+          isPending: false,
+          pendingHref: null,
+          qs: undefined,
+        } as any
+      }
+    >
+      <Routes routes={routes} />
+    </RouterContext.Provider>,
+  )
+
+  t.is(html, '<div>Home</div>')
+  t.is(prepareCalls, 0)
+})
+
 test.serial('useLinkProps()', async function (t) {
   setup()
 
