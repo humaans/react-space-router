@@ -757,6 +757,15 @@ export function shouldNavigate(e: MouseEvent): boolean {
     if (a.target && a.target !== '_self') return false
     if (a.hasAttribute('download')) return false
     if (typeof window !== 'undefined' && a.origin && a.origin !== window.location.origin) return false
+    if (
+      typeof window !== 'undefined' &&
+      a.hash &&
+      a.origin === window.location.origin &&
+      a.pathname === window.location.pathname &&
+      a.search === window.location.search
+    ) {
+      return false
+    }
   }
   return true
 }

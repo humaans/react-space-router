@@ -448,6 +448,13 @@ export function shouldNavigate(e) {
             return false;
         if (typeof window !== 'undefined' && a.origin && a.origin !== window.location.origin)
             return false;
+        if (typeof window !== 'undefined' &&
+            a.hash &&
+            a.origin === window.location.origin &&
+            a.pathname === window.location.pathname &&
+            a.search === window.location.search) {
+            return false;
+        }
     }
     return true;
 }
