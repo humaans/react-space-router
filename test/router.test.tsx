@@ -85,7 +85,7 @@ test.serial('usage', async function (t) {
   function Home() {
     return (
       <div>
-        <Link to='/stuff'>Stuff</Link>Hello
+        <Link href='/stuff'>Stuff</Link>Hello
       </div>
     )
   }
@@ -114,10 +114,7 @@ test.serial('usage', async function (t) {
     r.render(<App />)
   })
 
-  t.is(
-    window.document.body.innerHTML,
-    '<div id="root"><div><a aria-current="page" to="/stuff" href="/">Stuff</a>Hello</div></div>',
-  )
+  t.is(window.document.body.innerHTML, '<div id="root"><div><a href="/stuff">Stuff</a>Hello</div></div>')
 
   act(() => {
     router.navigate('/stuff')
