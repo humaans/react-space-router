@@ -37,7 +37,7 @@ export interface RouteData {
     path?: string;
     component?: ComponentType<any> | {
         default: ComponentType<any>;
-    };
+    } | null;
     resolver?: RouteResolver;
     prepare?: RoutePrepare;
     navigation?: RouteNavigationOptions;
