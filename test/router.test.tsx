@@ -1,5 +1,5 @@
 import test from 'ava'
-import { act, Component, Suspense, useEffect, useState, type ReactNode } from 'react'
+import { act, Component, StrictMode, Suspense, useEffect, useState, type ReactNode } from 'react'
 import ReactDOM from 'react-dom/client'
 import { renderToString } from 'react-dom/server'
 import { JSDOM, VirtualConsole } from 'jsdom'
@@ -13,6 +13,7 @@ import {
   useInternalRouterInstance,
   useLinkProps,
   usePending,
+  usePendingRoute,
   useRoute,
   qs,
   type PreparedHandle,
@@ -45,12 +46,12 @@ function setup() {
   g.window.scrollTo = () => {}
   g.document = dom.window.document
   g.history = {
+    // Like the real pushState, this does NOT fire popstate — space-router
+    // schedules its own emit after pushing. Tests that simulate back/forward
+    // dispatch a PopStateEvent explicitly.
     pushState(_state: unknown, _title: string, url: string) {
       g.location.href = url
       g.location.pathname = url
-
-      const popstate = new dom.window.PopStateEvent('popstate')
-      dom.window.dispatchEvent(popstate)
     },
     replaceState() {
       // no-op for tests; real replaceState would update the address bar
@@ -153,7 +154,7 @@ test.serial('Router and Link render without browser globals', (t) => {
   }
 })
 
-test.serial('Routes does not prepare the initial route during render', (t) => {
+test.serial('Routes prepares the initial route during the first render', (t) => {
   let prepareCalls = 0
 
   const routes = [
@@ -191,12 +192,9 @@ test.serial('Routes does not prepare the initial route during render', (t) => {
         {
           router,
           route: null,
-          transformRoute: (route: Route) => route,
-          syncRouteUrl: () => {},
-          commit: () => {},
           navigate: () => {},
           isPending: false,
-          pendingHref: null,
+          pending: null,
           qs: undefined,
         } as any
       }
@@ -206,7 +204,184 @@ test.serial('Routes does not prepare the initial route during render', (t) => {
   )
 
   t.is(html, '<div>Home</div>')
-  t.is(prepareCalls, 0)
+  // Prepare runs during the first render — before segment components read
+  // from the data cache — so cold direct loads suspend on prepared data.
+  t.is(prepareCalls, 1)
+})
+
+test.serial('direct load renders routes whose components read prepared data', async (t) => {
+  setup()
+  g.location.href = '/profile'
+  g.location.pathname = '/profile'
+
+  const root = document.getElementById('root')
+
+  // A strict fetch-as-you-render data layer: read() throws an Error (not a
+  // promise) if the key was never prepared.
+  const cache = new Map<string, { promise: Promise<void> | null; value: string | null }>()
+  const prepareKey = (key: string): PreparedHandle[] => {
+    let entry = cache.get(key)
+    if (!entry) {
+      const e: { promise: Promise<void> | null; value: string | null } = { promise: null, value: null }
+      e.promise = Promise.resolve().then(() => {
+        e.value = 'ready'
+        e.promise = null
+      })
+      cache.set(key, e)
+      entry = e
+    }
+    return [{ promise: entry.promise ?? Promise.resolve(), release: () => {} }]
+  }
+  const readKey = (key: string): string => {
+    const entry = cache.get(key)
+    if (!entry) throw new Error(`read("${key}") called before prepare`)
+    if (entry.promise) throw entry.promise
+    return entry.value!
+  }
+
+  function Profile() {
+    return <div>{readKey('profile')}</div>
+  }
+
+  const routes = [{ path: '/profile', prepare: () => prepareKey('profile'), component: Profile }]
+
+  function App() {
+    return (
+      <Router sync>
+        <Suspense fallback={null}>
+          <Routes routes={routes} />
+        </Suspense>
+      </Router>
+    )
+  }
+
+  await act(async () => {
+    const r = ReactDOM.createRoot(root)
+    r.render(<App />)
+  })
+
+  t.is(window.document.body.innerHTML, '<div id="root"><div>ready</div></div>')
+})
+
+test.serial('initial route prepare stays leak-free under StrictMode double rendering', async (t) => {
+  setup()
+
+  const root = document.getElementById('root')
+  let prepareCalls = 0
+  let releaseCalls = 0
+
+  const routes = [
+    {
+      path: '/',
+      prepare: (): PreparedHandle[] => {
+        prepareCalls++
+        return [{ promise: Promise.resolve(), release: () => releaseCalls++ }]
+      },
+      component: () => <div>Home</div>,
+    },
+    { path: '/next', component: () => <div>Next</div> },
+  ]
+
+  let router
+
+  function Capture() {
+    const r = useInternalRouterInstance()
+    useEffect(() => {
+      router = r
+    }, [r])
+    return null
+  }
+
+  function App() {
+    return (
+      <StrictMode>
+        <Router sync>
+          <Capture />
+          <Routes routes={routes} />
+        </Router>
+      </StrictMode>
+    )
+  }
+
+  await act(async () => {
+    const r = ReactDOM.createRoot(root)
+    r.render(<App />)
+  })
+
+  t.is(window.document.body.innerHTML, '<div id="root"><div>Home</div></div>')
+
+  await act(async () => {
+    router.navigate('/next')
+  })
+
+  t.is(window.document.body.innerHTML, '<div id="root"><div>Next</div></div>')
+  // Every prepared handle set was eventually released — the double render
+  // reused one prepare, and no handles leaked through the StrictMode
+  // mount/unmount/remount cycle.
+  t.is(releaseCalls, prepareCalls)
+  t.true(prepareCalls >= 1)
+})
+
+test.serial('Routes renders against a bare RouterContext without a Router', async (t) => {
+  setup()
+
+  const root = document.getElementById('root')
+  const prepared: string[] = []
+
+  const makeRoutes = (label: string) => [
+    {
+      path: '/',
+      prepare: () => {
+        prepared.push(label)
+      },
+      component: () => <div>{label}</div>,
+    },
+  ]
+
+  const routesA = makeRoutes('A')
+  const routesB = makeRoutes('B')
+
+  const router = {
+    getUrl: () => '/',
+    match: () => undefined,
+    listen: () => () => {},
+    href: () => '/',
+    navigate: () => {},
+  }
+
+  const ctx = {
+    router,
+    route: null,
+    navigate: () => {},
+    isPending: false,
+    pending: null,
+    qs: undefined,
+  } as any
+
+  function App({ routes }: { routes: typeof routesA }) {
+    return (
+      <RouterContext.Provider value={ctx}>
+        <Routes routes={routes} />
+      </RouterContext.Provider>
+    )
+  }
+
+  let r
+  await act(async () => {
+    r = ReactDOM.createRoot(root)
+    r.render(<App routes={routesA} />)
+  })
+
+  t.is(window.document.body.innerHTML, '<div id="root"><div>A</div></div>')
+  t.deepEqual(prepared, ['A'])
+
+  // Without a <Router> driving commits, swapping the route map still
+  // re-prepares via the default no-op internals instead of crashing.
+  await act(async () => {
+    r.render(<App routes={routesB} />)
+  })
+
+  t.deepEqual(prepared, ['A', 'B'])
 })
 
 test.serial('useLinkProps()', async function (t) {
@@ -360,6 +535,34 @@ test.serial('useInternalRouterInstance throws outside Router', (t) => {
   }
 })
 
+test.serial('useRoute throws outside Router', (t) => {
+  setup()
+
+  const root = document.getElementById('root')
+
+  function NoRouter() {
+    useRoute()
+    return null
+  }
+
+  const originalConsoleError = console.error
+  console.error = () => {}
+
+  try {
+    t.throws(
+      () => {
+        act(() => {
+          const r = ReactDOM.createRoot(root)
+          r.render(<NoRouter />)
+        })
+      },
+      { message: /Application must be wrapped in <Router \/>/ },
+    )
+  } finally {
+    console.error = originalConsoleError
+  }
+})
+
 test.serial('Link click navigates and invokes to.onClick', (t) => {
   setup()
 
@@ -403,9 +606,11 @@ test.serial('Link click navigates and invokes to.onClick', (t) => {
   t.is(onClickCalls, 1)
   t.is(window.document.body.innerHTML, '<div id="root"><div>Stuff</div></div>')
 
-  // also exercise the string-href Link path (re-render home first)
+  // also exercise the string-href Link path (re-render home first, via a
+  // simulated browser back)
   act(() => {
     history.pushState({}, '', '/')
+    window.dispatchEvent(new window.PopStateEvent('popstate'))
   })
 
   act(() => {
@@ -573,47 +778,6 @@ test.serial('transformRoute applies before initial route prepare', async (t) => 
   t.regex(window.document.body.innerHTML, /status=active/)
   t.is(preparedStatus, 'active')
   t.is(preparedUrl, '/people?status=active')
-})
-
-test.serial('prepare context falls back when transformRoute omits optional route fields', async (t) => {
-  setup()
-  history.pushState({}, '', '/bare')
-
-  const root = document.getElementById('root')
-  const prepared: unknown[] = []
-
-  const routes = [
-    {
-      path: '/bare',
-      prepare: (ctx) => {
-        prepared.push(ctx)
-      },
-      component: () => <div>Bare</div>,
-    },
-  ]
-
-  function App() {
-    return (
-      <Router
-        sync
-        transformRoute={(route) =>
-          ({
-            data: route.data,
-          }) as Route
-        }
-      >
-        <Routes routes={routes} disableScrollToTop />
-      </Router>
-    )
-  }
-
-  await act(async () => {
-    const r = ReactDOM.createRoot(root)
-    r.render(<App />)
-  })
-
-  t.is(window.document.body.innerHTML, '<div id="root"><div>Bare</div></div>')
-  t.deepEqual(prepared, [{ pathname: '', url: '', params: {}, query: {} }])
 })
 
 test.serial('usePending flips while a transition is in flight', async (t) => {
@@ -1167,6 +1331,238 @@ test.serial('useLinkProps exposes per-link pending state', async (t) => {
   })
 
   t.is(window.document.body.innerHTML, '<div id="root"><div>Slow</div></div>')
+})
+
+test.serial('usePendingRoute exposes the transformed in-flight route and clears on settle', async (t) => {
+  setup()
+
+  const root = document.getElementById('root')
+  let resolveSlow: (() => void) | null = null
+  const slowGate = new Promise<void>((r) => {
+    resolveSlow = r
+  })
+  let ready = false
+
+  function Probe() {
+    const pendingRoute = usePendingRoute()
+    const props = useLinkProps('/items/beacon')
+    return (
+      <div>
+        <a href={props.href} onClick={props.onClick} data-pending={String(props.isPending)}>
+          Beacon
+        </a>
+        <span data-pending-id={pendingRoute?.params.id ?? 'none'} />
+        <span data-pending-url={pendingRoute?.url ?? 'none'} />
+      </div>
+    )
+  }
+
+  function Item() {
+    if (!ready) {
+      throw slowGate.then(() => {
+        ready = true
+      })
+    }
+    return <div>Item</div>
+  }
+
+  const routes = [
+    { path: '/', component: () => null },
+    { path: '/items/:id', component: Item },
+  ]
+
+  function App() {
+    return (
+      <Router sync transformRoute={(route) => ({ ...route, url: `${route.url}?via=transform` })}>
+        <Probe />
+        <Routes routes={routes} />
+      </Router>
+    )
+  }
+
+  await act(async () => {
+    const r = ReactDOM.createRoot(root)
+    r.render(<App />)
+  })
+
+  t.is(window.document.querySelector('[data-pending-id]')?.getAttribute('data-pending-id'), 'none')
+
+  await act(async () => {
+    window.document.querySelector('a')!.click()
+  })
+
+  // mid-flight: the pending route is matched and transformed, params readable
+  t.is(window.document.querySelector('[data-pending-id]')?.getAttribute('data-pending-id'), 'beacon')
+  t.is(
+    window.document.querySelector('[data-pending-url]')?.getAttribute('data-pending-url'),
+    '/items/beacon?via=transform',
+  )
+  // per-link pending still matches the pre-transform href links are written in
+  t.is(window.document.querySelector('a')?.getAttribute('data-pending'), 'true')
+
+  await act(async () => {
+    resolveSlow!()
+    await Promise.resolve()
+    await Promise.resolve()
+  })
+
+  t.is(window.document.querySelector('[data-pending-id]')?.getAttribute('data-pending-id'), 'none')
+  t.true(window.document.body.innerHTML.includes('<div>Item</div>'))
+})
+
+test.serial('usePendingRoute registers history-driven navigations', async (t) => {
+  setup()
+
+  const root = document.getElementById('root')
+  let resolveSlow: (() => void) | null = null
+  const slowGate = new Promise<void>((r) => {
+    resolveSlow = r
+  })
+  let ready = false
+
+  function Probe() {
+    const pendingRoute = usePendingRoute()
+    return <span data-pending-path={pendingRoute?.pathname ?? 'none'} />
+  }
+
+  function Slow() {
+    if (!ready) {
+      throw slowGate.then(() => {
+        ready = true
+      })
+    }
+    return <div>Slow</div>
+  }
+
+  const routes = [
+    { path: '/', component: () => <div>Home</div> },
+    { path: '/slow', component: Slow },
+  ]
+
+  function App() {
+    return (
+      <Router sync>
+        <Probe />
+        <Routes routes={routes} />
+      </Router>
+    )
+  }
+
+  await act(async () => {
+    const r = ReactDOM.createRoot(root)
+    r.render(<App />)
+  })
+
+  // simulate the browser back/forward button: change the URL and dispatch
+  // popstate without going through navigate()
+  await act(async () => {
+    g.location.href = '/slow'
+    g.location.pathname = '/slow'
+    window.dispatchEvent(new window.PopStateEvent('popstate'))
+  })
+
+  t.is(window.document.querySelector('[data-pending-path]')?.getAttribute('data-pending-path'), '/slow')
+  // the previous page stays committed while the destination suspends
+  t.true(window.document.body.innerHTML.includes('<div>Home</div>'))
+
+  await act(async () => {
+    resolveSlow!()
+    await Promise.resolve()
+    await Promise.resolve()
+  })
+
+  t.is(window.document.querySelector('[data-pending-path]')?.getAttribute('data-pending-path'), 'none')
+  t.true(window.document.body.innerHTML.includes('<div>Slow</div>'))
+})
+
+test.serial('async-mode popstate after a cold load holds the previous route and paints pending state', async (t) => {
+  setup()
+  g.location.href = '/items/courier'
+  g.location.pathname = '/items/courier'
+
+  const root = document.getElementById('root')
+  const wait = (ms: number) => new Promise((r) => setTimeout(r, ms))
+
+  // strict fetch-as-you-render data layer, like the demo's
+  const cache = new Map<string, { promise: Promise<void> | null; value: string | null }>()
+  const prepareKey = (key: string, ms: number): PreparedHandle[] => {
+    let entry = cache.get(key)
+    if (entry === undefined) {
+      const e: { promise: Promise<void> | null; value: string | null } = { promise: null, value: null }
+      e.promise = wait(ms).then(() => {
+        e.value = key
+        e.promise = null
+      })
+      cache.set(key, e)
+      entry = e
+    }
+    return [{ promise: entry.promise ?? Promise.resolve(), release: () => {} }]
+  }
+  const readKey = (key: string): string => {
+    const entry = cache.get(key)
+    if (entry === undefined) throw new Error(`read(${key}) before prepare`)
+    if (entry.promise) throw entry.promise
+    return entry.value as string
+  }
+
+  function Item({ id }: { id?: string }) {
+    // consumes the pending route INSIDE the suspended boundary, like a
+    // detail-swap fade would
+    const pendingRoute = usePendingRoute()
+    const pendingId = pendingRoute?.params.id ?? null
+    const fading = pendingId != null && pendingId !== id
+    return (
+      <div data-detail data-fading={String(fading)}>
+        {readKey(`item-${id}`)}
+      </div>
+    )
+  }
+
+  const routes = [
+    {
+      path: '/items/:id',
+      resolver: () => wait(30).then(() => ({ default: Item })),
+      prepare: ({ params }: { params: Record<string, string> }) => prepareKey(`item-${params.id}`, 100),
+    },
+  ]
+
+  function App() {
+    return (
+      <Router>
+        <Suspense fallback={null}>
+          <Routes routes={routes} />
+        </Suspense>
+      </Router>
+    )
+  }
+
+  await act(async () => {
+    ReactDOM.createRoot(root).render(<App />)
+  })
+  await act(async () => {
+    await wait(250)
+  })
+  t.is(document.querySelector('[data-detail]')?.textContent, 'item-courier')
+
+  // simulate the browser back button to an uncached item
+  await act(async () => {
+    g.location.href = '/items/beacon'
+    g.location.pathname = '/items/beacon'
+    window.dispatchEvent(new window.PopStateEvent('popstate'))
+  })
+  await act(async () => {
+    await wait(50)
+  })
+
+  // mid-flight: previous detail held, pending route painted into the held tree
+  t.is(document.querySelector('[data-detail]')?.textContent, 'item-courier')
+  t.is(document.querySelector('[data-detail]')?.getAttribute('data-fading'), 'true')
+
+  await act(async () => {
+    await wait(200)
+  })
+  t.is(document.querySelector('[data-detail]')?.textContent, 'item-beacon')
+  t.is(document.querySelector('[data-detail]')?.getAttribute('data-fading'), 'false')
 })
 
 test.serial('Link rendered alongside Routes in async mode does not crash', async (t) => {

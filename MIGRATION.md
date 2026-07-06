@@ -258,7 +258,7 @@ screen.
 ### What's *not* changing
 
 - Route definition shape (`{ path, component, routes, ... }`) is unchanged. New
-  fields (`resolver`, `prepare`, `navigation`, `scrollGroup`) are additive.
+  fields (`resolver`, `prepare`, `scrollGroup`) are additive.
 - `<Routes routes={...}>`, `<Link>`, `<Navigate>`, `useLinkProps`, `useMakeHref`,
   `useNavigate`, `qs` — unchanged.
 - ESM-default components (`{ default: Component }`) still resolve via plain

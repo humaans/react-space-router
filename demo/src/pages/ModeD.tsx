@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react'
-import { Link, shouldNavigate, usePending } from 'react-space-router'
+import React, { useMemo } from 'react'
+import { Link, usePendingRoute } from 'react-space-router'
 import { read } from '../data'
 
 const ITEMS = [
@@ -28,27 +28,28 @@ const ITEMS = [
 /**
  * Mode (d): a same-surface detail swap.
  *
- * Item-to-item clicks set a local "exiting" state before navigating, so the
- * currently committed detail fades out while the destination route suspends.
- * Because the detail read is not wrapped in an inner Suspense boundary, the
- * new detail only commits after its prepared data is ready.
+ * `usePendingRoute()` exposes the route the router is transitioning toward,
+ * so the requested item is derived straight from the router — no local
+ * state, no click interception. The committed detail fades out while the
+ * destination route suspends; because the detail read is not wrapped in an
+ * inner Suspense boundary, the new detail only commits once its prepared
+ * data is ready.
  *
- * Leaving this route does not set that local state, so cross-page navigation
- * falls back to whatever the destination page opted into.
+ * Navigating to a different page changes the pending route's pattern, so
+ * the fade stops and the destination page's own loading mode takes over.
+ * Browser back/forward between items fades too — the router registers
+ * history navigations the same way as clicks.
  */
 // Path is `/mode-d/:id` — the router injects `id` as a prop, so the page
 // component declares it directly instead of reaching for `useRoute()`.
 export default function ModeD({ id = ITEMS[0].id }: { id?: string }) {
-  const pending = usePending()
   const currentId = id
-  const [pendingItemId, setPendingItemId] = useState<string | null>(null)
 
-  useEffect(() => {
-    setPendingItemId(null)
-  }, [currentId])
+  const pendingRoute = usePendingRoute()
+  const pendingItemId = pendingRoute?.pattern === '/mode-d/:id' ? pendingRoute.params.id : null
+  const isFading = pendingItemId != null && pendingItemId !== currentId
 
   const currentItem = useMemo(() => ITEMS.find((item) => item.id === currentId) ?? ITEMS[0], [currentId])
-  const isFading = pending && pendingItemId != null && pendingItemId !== currentId
 
   return (
     <>
@@ -61,7 +62,7 @@ export default function ModeD({ id = ITEMS[0].id }: { id?: string }) {
       </div>
 
       <div className='recipe'>
-        Recipe: item links set local exiting state before navigation. The detail read has no inner{' '}
+        Recipe: derive the requested item from <code>usePendingRoute()</code>. The detail read has no inner{' '}
         <code>&lt;Suspense&gt;</code>, so the router-level transition holds the old committed detail until the new one
         can render.
       </div>
@@ -79,9 +80,6 @@ export default function ModeD({ id = ITEMS[0].id }: { id?: string }) {
                   url: `/mode-d/${item.id}`,
                   current: isCurrent,
                 }}
-                onClick={(event) => {
-                  if (!isCurrent && shouldNavigate(event)) setPendingItemId(item.id)
-                }}
                 className={`item-link${isRequested ? ' requested' : ''}`}
               >
                 <strong>{item.name}</strong>
@@ -97,9 +95,9 @@ export default function ModeD({ id = ITEMS[0].id }: { id?: string }) {
       </div>
 
       <p className='note'>
-        Click between items, then try leaving for (a), (b), or (c). Only item-to-item navigation fades this detail
-        surface; page-to-page navigation keeps the old page steady while the destination mode decides what loading UI
-        appears.
+        Click between items — browser back/forward fades too. Then try leaving for (a), (b), or (c): only item-to-item
+        navigation fades this detail surface; page-to-page navigation keeps the old page steady while the destination
+        mode decides what loading UI appears.
       </p>
     </>
   )

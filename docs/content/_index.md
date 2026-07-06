@@ -14,7 +14,7 @@ React Space Router is a set of hooks and components for keeping your app in sync
 - Nested routes
 - Code-split routes via `resolver` (`React.lazy` under the hood)
 - Per-route `prepare(ctx)` for fetch-as-you-render data loading
-- Pending state via `usePending()` (backed by `useTransition`)
+- Pending state via `usePending()` and `usePendingRoute()` (backed by `useTransition`)
 - Delayed route fallbacks via `<DelayedSuspense>`
 - Optional pre-commit `transformRoute` hook for URL rewrites
 - Path params injected as component props
@@ -107,16 +107,15 @@ Props:
 
 Renders the components that match the current route based on the route config. Nested ancestor segments wrap their descendants automatically — parents render `{children}` to position the matched child. Segments without a `component` or `resolver` are transparent wrappers for their descendants.
 
-When a navigation happens, every matched segment's `resolver()` is preloaded and every matched segment's `prepare()` is called, so chunk download and data loading can overlap. The router does not await the returned prepare promises before committing; the destination's nearest `<Suspense>` boundary handles any still-cold reads.
+When a navigation happens, every matched segment's `resolver()` is preloaded and every matched segment's `prepare()` is called, so chunk download and data loading can overlap. The router does not await the returned prepare promises before committing; the destination's nearest `<Suspense>` boundary handles any still-cold reads. This includes cold direct loads: the initial route's `resolver()` and `prepare()` are kicked off during the first render, before its components read from the data cache.
 
 Props:
 
-- `routes` an array of route definitions, where each route is an object of shape `{ path, component, resolver, prepare, navigation, props, scrollGroup, routes, ...metadata }`:
+- `routes` an array of route definitions, where each route is an object of shape `{ path, component, resolver, prepare, props, scrollGroup, routes, ...metadata }`:
   - `path` URL pattern, may include `:named` segments.
   - `component` a React component to render. Accepts an ESM-default module shape (`{ default: Component }`) too.
   - `resolver` `() => import('./Screen')` — a dynamic import. The router preloads this at navigation time and renders via `React.lazy`. Cold imports suspend at the destination's Suspense boundary.
   - `prepare(ctx)` a function called at navigation time with `{ pathname, url, params, query }`. Returns an array of `PreparedHandle` objects (e.g. from a data layer's `prepare()` call). The router pins them for the lifetime of the committed navigation and releases them when the next navigation commits.
-  - `navigation` currently only accepts `commit: 'immediate'`, which is the default behavior. Alternate commit policies are not implemented.
   - `props` props to pass to the segment's component.
   - `scrollGroup` a string that groups routes; navigations within a group don't scroll to top.
   - `routes` nested route definitions.
@@ -154,12 +153,10 @@ The shape returned by `prepare()` functions. The router collects these from ever
 interface PreparedHandle {
   promise: Promise<unknown>
   release(): void
-  priority?: 'route' | 'defer'
-  key?: string | number
 }
 ```
 
-The router stores the handles and calls `release()`. Your data layer decides what `promise`, `priority`, and `key` mean; the router does not inspect `priority` or `key`.
+The router stores the handles and calls `release()`. Your data layer decides what `promise` means; extra fields on the handle are ignored.
 
 ### `<DelayedSuspense />`
 
@@ -260,6 +257,25 @@ function LoadingBar() {
 ```
 
 Don't use it for skeletons — those belong in destination Suspense boundaries.
+
+### `usePendingRoute`
+
+```js
+const pendingRoute = usePendingRoute()
+```
+
+The route the router is currently transitioning toward, or `null` when idle. Set for every navigation source — link clicks, programmatic `navigate()`, and browser back/forward — from commit until the transition settles. Like `useRoute()`, the returned route is post-`transformRoute`.
+
+Where `usePending()` answers "is a navigation happening", `usePendingRoute()` answers "where to". Use it for destination-aware pending UI: highlighting the requested item in a list, fading the surface being replaced, or reading the destination's `params` before it commits:
+
+```tsx
+function ItemList({ currentId }) {
+  const pendingRoute = usePendingRoute()
+  const pendingItemId = pendingRoute?.pattern === '/items/:id' ? pendingRoute.params.id : null
+  const isFading = pendingItemId != null && pendingItemId !== currentId
+  // fade the current detail while the next item loads...
+}
+```
 
 ### `useNavigate`
 

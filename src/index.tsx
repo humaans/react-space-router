@@ -27,6 +27,7 @@ import {
 } from 'space-router'
 
 export { qs } from 'space-router'
+export type { Route } from 'space-router'
 
 // ---------------------------------------------------------------------------
 // Route preparation
@@ -47,8 +48,6 @@ export interface RoutePrepareContext {
 export interface PreparedHandle {
   promise: Promise<unknown>
   release(): void
-  priority?: 'route' | 'defer'
-  key?: string | number
 }
 
 export type RoutePrepare = (ctx: RoutePrepareContext) => readonly PreparedHandle[] | PreparedHandle[] | void
@@ -57,23 +56,12 @@ export type ResolverModule = { default: ComponentType<any> }
 
 export type RouteResolver = () => Promise<ResolverModule>
 
-export interface RouteNavigationOptions {
-  /**
-   * `'immediate'` (default): commit the new route synchronously inside a React
-   * transition; let any unresolved route-priority data suspend at the
-   * destination's `<Suspense>` boundary.
-   *
-   * `'ready'` is reserved for a follow-up release.
-   */
-  commit?: 'immediate'
-}
-
 export interface RouteData {
   path?: string
   component?: ComponentType<any> | { default: ComponentType<any> } | null
   resolver?: RouteResolver
   prepare?: RoutePrepare
-  navigation?: RouteNavigationOptions
+  props?: Record<string, unknown>
   scrollGroup?: string
   routes?: RouteData[]
   [extra: string]: unknown
@@ -109,24 +97,6 @@ function getResolverComponent(resolver: AnyResolver): ComponentType<any> {
   return component
 }
 
-function buildPrepareContext(route: Route): RoutePrepareContext {
-  const r = route as Route & {
-    pathname?: string
-    params?: Record<string, string | number>
-    query?: Record<string, unknown>
-  }
-  return {
-    pathname: r.pathname ?? '',
-    url: (r as Route & { url?: string }).url ?? r.pathname ?? '',
-    params: r.params ?? {},
-    query: r.query ?? {},
-  }
-}
-
-function routeHasRedirect(route: Route | undefined): boolean {
-  return !!route?.data?.some((segment) => Boolean((segment as { redirect?: unknown }).redirect))
-}
-
 // ---------------------------------------------------------------------------
 // Router context
 // ---------------------------------------------------------------------------
@@ -137,20 +107,41 @@ export type To =
       current?: boolean
     })
 
+// The in-flight navigation, set at commit and cleared when the transition
+// settles. `route` is post-transform (what `usePendingRoute()` returns);
+// `matchedUrl` is the pre-transform URL links are written in, kept so
+// `useLinkProps().isPending` can match against hrefs.
+interface PendingNavigation {
+  route: Route<RouteData>
+  matchedUrl: string
+}
+
 interface RouterContextValue {
-  router: SpaceRouter
-  route: Route | null
-  transformRoute: (route: Route) => Route
-  syncRouteUrl: (matched: Route, transformed: Route) => void
-  commit: (route: Route, matched?: Route) => void
-  navigate: (to: To, curr?: Route) => void
+  router: SpaceRouter<RouteData>
+  route: Route<RouteData> | null
+  navigate: (to: To, curr?: Route<RouteData>) => void
   isPending: boolean
-  pendingHref: string | null
+  pending: PendingNavigation | null
   qs: Qs | undefined
 }
 
 export const RouterContext = createContext<RouterContextValue | undefined>(undefined)
-const RouteContext = createContext<Route | null | undefined>(undefined)
+const RouteContext = createContext<Route<RouteData> | null | undefined>(undefined)
+
+// Plumbing between <Router> and <Routes>, kept out of the public RouterContext.
+// The defaults let <Routes> render against a bare RouterContext (e.g. in
+// renderToString tests) without a <Router> driving commits.
+interface RouterInternals {
+  transformRoute: (route: Route<RouteData>) => Route<RouteData>
+  syncRouteUrl: (matched: Route<RouteData>, transformed: Route<RouteData>) => void
+  commit: (route: Route<RouteData>, matched?: Route<RouteData>) => void
+}
+
+const RouterInternalsContext = createContext<RouterInternals>({
+  transformRoute: (route) => route,
+  syncRouteUrl: () => {},
+  commit: () => {},
+})
 
 // Internal context for `<DelayedSuspense>`. Set by `<Router>` based on
 // `usePending()` + a configurable threshold. `holding` is true only during
@@ -165,13 +156,18 @@ function useRouterCtx(): RouterContextValue {
   return ctx
 }
 
-export function useInternalRouterInstance(): SpaceRouter {
+export function useInternalRouterInstance(): SpaceRouter<RouteData> {
   return useRouterCtx().router
 }
 
-export function useRoute(): Route | null {
+export function useRoute(): Route<RouteData> | null {
+  const ctx = useContext(RouterContext)
   const route = useContext(RouteContext)
-  return route === undefined ? useRouterCtx().route : route
+  if (route !== undefined) return route
+  if (!ctx) {
+    throw new Error('Application must be wrapped in <Router />')
+  }
+  return ctx.route
 }
 
 /**
@@ -188,12 +184,26 @@ export function usePending(): boolean {
   return useRouterCtx().isPending
 }
 
+/**
+ * The route the router is currently transitioning toward, or `null` when
+ * idle. Set for every navigation source — link clicks, programmatic
+ * `navigate()`, browser back/forward — from commit until the transition
+ * settles. Like `useRoute()`, the returned route is post-`transformRoute`.
+ *
+ * Use this for destination-aware pending UI: highlighting the requested
+ * item in a list, fading the surface being replaced, or reading
+ * `pendingRoute.params` without waiting for the commit.
+ */
+export function usePendingRoute(): Route<RouteData> | null {
+  return useRouterCtx().pending?.route ?? null
+}
+
 export function useNavigate() {
   const { navigate } = useRouterCtx()
   const route = useRoute()
   return useCallback(
     (to: To) => {
-      return navigate(to, route as Route | undefined)
+      return navigate(to, route ?? undefined)
     },
     [navigate, route],
   )
@@ -210,12 +220,12 @@ interface RouterOpts {
 }
 
 interface InternalRouter {
-  router: SpaceRouter
+  router: SpaceRouter<RouteData>
   routerOpts: RouterOpts
 }
 
 function makeRouter(routerOpts: RouterOpts): InternalRouter {
-  const router = createRouter({ mode: routerOpts.mode, qs: routerOpts.qs, sync: routerOpts.sync })
+  const router = createRouter<RouteData>({ mode: routerOpts.mode, qs: routerOpts.qs, sync: routerOpts.sync })
   return { router, routerOpts }
 }
 
@@ -228,7 +238,7 @@ function makeRouter(routerOpts: RouterOpts): InternalRouter {
  *
  * Must be pure and synchronous.
  */
-export type TransformRoute = (route: Route) => Route | void
+export type TransformRoute = (route: Route<RouteData>) => Route<RouteData> | void
 
 export interface RouterProps {
   mode?: Mode
@@ -257,8 +267,8 @@ export function Router({
 }: RouterProps) {
   const [{ router, routerOpts }, setRouter] = useState<InternalRouter>(() => makeRouter({ mode, qs, sync }))
 
-  const [currRoute, setCurrRoute] = useState<Route | null>(null)
-  const [pendingHref, setPendingHref] = useState<string | null>(null)
+  const [currRoute, setCurrRoute] = useState<Route<RouteData> | null>(null)
+  const [pending, setPending] = useState<PendingNavigation | null>(null)
   const [isPending, startRouterTransition] = useTransition()
 
   // `holding` is true during the pre-commit window where `<DelayedSuspense>`
@@ -276,78 +286,99 @@ export function Router({
     return () => clearTimeout(t)
   }, [isPending, pendingDelayMs])
 
+  // Tracks whether we're inside the browser task that dispatched a popstate
+  // event. React 19 flushes state updates scheduled during popstate
+  // synchronously (to cooperate with the browser's scroll restoration) — but
+  // a synchronous "transition" that suspends shows Suspense fallbacks
+  // instead of holding the previous route, and pending state never paints.
+  // Commits for back/forward escape to a macrotask (see commit below) so
+  // they get the same async transition semantics as link clicks.
+  const inPopstateTask = useRef(false)
+  const commitSeq = useRef(0)
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const mark = () => {
+      inPopstateTask.current = true
+      setTimeout(() => {
+        inPopstateTask.current = false
+      }, 0)
+    }
+    window.addEventListener('popstate', mark)
+    return () => window.removeEventListener('popstate', mark)
+  }, [])
+
   // Keep the latest transform in a ref so commit() can stay referentially
   // stable while always using the freshest function.
   const transformRef = useRef(transformRoute)
   transformRef.current = transformRoute
 
-  const applyTransform = useCallback((next: Route) => {
+  const applyTransform = useCallback((next: Route<RouteData>) => {
     const transform = transformRef.current
     return transform ? (transform(next) ?? next) : next
   }, [])
 
-  const syncRouteUrl = useCallback((matched: Route, transformed: Route) => {
-    const matchedUrl = (matched as Route & { url?: string }).url
-    const transformedUrl = (transformed as Route & { url?: string }).url
-
+  const syncRouteUrl = useCallback((matched: Route<RouteData>, transformed: Route<RouteData>) => {
     if (
       transformed !== matched &&
-      transformedUrl &&
-      transformedUrl !== matchedUrl &&
+      transformed.url &&
+      transformed.url !== matched.url &&
       typeof window !== 'undefined' &&
       window.history
     ) {
-      window.history.replaceState({}, '', transformedUrl)
+      window.history.replaceState({}, '', transformed.url)
     }
   }, [])
 
   const commit = useCallback(
-    (next: Route, matched: Route = next) => {
-      const matchedUrl = (matched as Route & { url?: string }).url
-      const transformedUrl = (next as Route & { url?: string }).url
-
-      startRouterTransition(() => {
-        setCurrRoute(next)
-        setPendingHref((current) => {
-          if (!current) return current
-          if (current === matchedUrl || current === transformedUrl) return null
-          return routeHasRedirect(router.match(current)) ? null : current
+    (next: Route<RouteData>, matched: Route<RouteData> = next) => {
+      const run = () => {
+        // The urgent set makes the pending navigation visible immediately;
+        // the clear is deferred inside the transition so it only lands once
+        // the destination has settled. Commit is the single owner of pending
+        // state, which is why clicks, programmatic navigation, and browser
+        // back/forward all register the same way.
+        setPending({ route: next, matchedUrl: matched.url })
+        startRouterTransition(() => {
+          setCurrRoute(next)
+          setPending(null)
         })
-      })
 
-      // Sync the address bar if the transform rewrote the URL. We use
-      // history.replaceState directly so we don't re-trigger the router's
-      // listener loop.
-      syncRouteUrl(matched, next)
-    },
-    [router, syncRouteUrl],
-  )
+        // Sync the address bar if the transform rewrote the URL. We use
+        // history.replaceState directly so we don't re-trigger the router's
+        // listener loop.
+        syncRouteUrl(matched, next)
+      }
 
-  const navigate = useCallback(
-    (to: To, curr?: Route) => {
-      const href = router.href(to, curr)
-      setPendingHref(href)
-      router.navigate(to, curr)
-      if (!router.match(href)) {
-        setPendingHref(null)
+      const seq = ++commitSeq.current
+      if (!sync && inPopstateTask.current) {
+        // Escape the popstate task so React treats this as a regular async
+        // transition. The seq guard drops the deferred commit if a newer
+        // navigation committed in the meantime.
+        setTimeout(() => {
+          if (commitSeq.current === seq) run()
+        }, 0)
+      } else {
+        run()
       }
     },
-    [router],
+    [sync, syncRouteUrl],
   )
 
   const ctx = useMemo<RouterContextValue>(
     () => ({
       router,
       route: currRoute,
-      transformRoute: applyTransform,
-      syncRouteUrl,
-      commit,
-      navigate,
+      navigate: router.navigate,
       isPending,
-      pendingHref,
+      pending,
       qs,
     }),
-    [router, currRoute, applyTransform, syncRouteUrl, commit, navigate, isPending, pendingHref, qs],
+    [router, currRoute, isPending, pending, qs],
+  )
+
+  const internals = useMemo<RouterInternals>(
+    () => ({ transformRoute: applyTransform, syncRouteUrl, commit }),
+    [applyTransform, syncRouteUrl, commit],
   )
 
   useEffect(() => {
@@ -358,7 +389,9 @@ export function Router({
 
   return (
     <RouterContext.Provider value={ctx}>
-      <DelayedSuspenseContext.Provider value={holding}>{children}</DelayedSuspenseContext.Provider>
+      <RouterInternalsContext.Provider value={internals}>
+        <DelayedSuspenseContext.Provider value={holding}>{children}</DelayedSuspenseContext.Provider>
+      </RouterInternalsContext.Provider>
     </RouterContext.Provider>
   )
 }
@@ -413,24 +446,26 @@ export interface RoutesProps {
 }
 
 interface PreparedRoute {
-  route: Route
-  matched: Route
+  route: Route<RouteData>
+  matched: Route<RouteData>
   handles: PreparedHandle[]
 }
 
-function prepareRoute(route: Route): PreparedHandle[] {
-  const segments = (route.data ?? []) as RouteData[]
-  const ctx = buildPrepareContext(route)
+function prepareRoute(route: Route<RouteData>): PreparedHandle[] {
+  const ctx: RoutePrepareContext = {
+    pathname: route.pathname,
+    url: route.url,
+    params: route.params,
+    query: route.query,
+  }
   const handles: PreparedHandle[] = []
 
-  for (const segment of segments) {
+  for (const segment of route.data) {
     if (segment.resolver) preloadResolver(segment.resolver)
     if (segment.prepare) {
       const result = segment.prepare(ctx)
       if (result) {
-        for (const handle of result) {
-          handles.push(handle)
-        }
+        handles.push(...result)
       }
     }
   }
@@ -448,19 +483,9 @@ function releaseHandles(handles: PreparedHandle[]) {
   }
 }
 
-function releaseUniqueHandles(handleGroups: PreparedHandle[][]) {
-  const released = new Set<PreparedHandle>()
-  for (const handles of handleGroups) {
-    for (const handle of handles) {
-      if (released.has(handle)) continue
-      released.add(handle)
-      releaseHandles([handle])
-    }
-  }
-}
-
 export function Routes({ routes, disableScrollToTop }: RoutesProps) {
-  const { router, route, transformRoute, syncRouteUrl, commit, qs } = useRouterCtx()
+  const { router, route, qs } = useRouterCtx()
+  const { transformRoute, syncRouteUrl, commit } = useContext(RouterInternalsContext)
 
   // Pinned prepare handles for the currently committed navigation. Released
   // when a new navigation commits or when <Routes> unmounts.
@@ -469,16 +494,9 @@ export function Routes({ routes, disableScrollToTop }: RoutesProps) {
   const previousRoutes = useRef(routes)
   const matcher = useMemo(() => createMatcher(routes, { qs }), [routes, qs])
 
-  const prepareMatched = useCallback(
-    (matched: Route): PreparedRoute => {
-      const transformed = transformRoute(matched)
-      return { route: transformed, matched, handles: prepareRoute(transformed) }
-    },
-    [transformRoute],
-  )
-
   const releaseAll = useCallback(() => {
-    releaseUniqueHandles([committed.current?.handles ?? [], pending.current?.handles ?? []])
+    const handles = new Set([...(committed.current?.handles ?? []), ...(pending.current?.handles ?? [])])
+    releaseHandles([...handles])
     committed.current = null
     pending.current = null
   }, [])
@@ -492,15 +510,32 @@ export function Routes({ routes, disableScrollToTop }: RoutesProps) {
     return null
   }, [route, router, matcher, transformRoute])
 
+  // Kick off the initial route's prepare during the first render, before the
+  // segment components below render and read from the data cache. An effect
+  // can't do this: when the initial render suspends (e.g. on a cold lazy
+  // chunk), React defers all effects inside the suspended boundary until the
+  // content commits — by which point the components have already rendered
+  // against an unseeded cache. Preparing here also lets chunk download and
+  // data loading overlap on direct loads, same as on navigations. The
+  // sanctioned lazy ref init keeps this idempotent across StrictMode's
+  // double render; the initial-commit effect below adopts the handles into
+  // the normal release lifecycle. If the render is discarded before any
+  // effect runs (e.g. renderToString), the handles are never released.
+  const initialPrepared = useRef<PreparedRoute | null>(null)
+  if (initialRoute && !committed.current && initialPrepared.current?.route.url !== initialRoute.route.url) {
+    initialPrepared.current = { ...initialRoute, handles: prepareRoute(initialRoute.route) }
+  }
+
   const activeRoute = route ?? committed.current?.route ?? initialRoute?.route ?? null
 
   useEffect(() => {
     if (!initialRoute || route || committed.current || pending.current) return
 
-    const prepared = {
-      ...initialRoute,
-      handles: prepareRoute(initialRoute.route),
-    }
+    const prepared =
+      initialPrepared.current?.route.url === initialRoute.route.url
+        ? initialPrepared.current
+        : { ...initialRoute, handles: prepareRoute(initialRoute.route) }
+    initialPrepared.current = null
     committed.current = prepared
     syncRouteUrl(prepared.matched, prepared.route)
   }, [initialRoute, route, syncRouteUrl])
@@ -508,12 +543,14 @@ export function Routes({ routes, disableScrollToTop }: RoutesProps) {
   useScrollToTop(activeRoute, disableScrollToTop)
 
   useEffect(() => {
-    const transition = (next: Route) => {
-      const nextUrl = (next as Route & { url?: string; pathname?: string }).url ?? next.pathname
-      const matched = matcher.match(nextUrl) ?? next
-      const matchedRoute = transformRoute(matched)
+    const transition = (next: Route<RouteData>) => {
+      // Transform fresh on every navigation — the transform's output can
+      // legitimately change between navigations to the same matched URL
+      // (e.g. a persisted-query merge whose store changed), so the fast
+      // paths below must compare against today's transform.
+      const transformed = transformRoute(next)
 
-      if (committed.current?.route.url === matchedRoute.url) {
+      if (committed.current?.route.url === transformed.url) {
         if (pending.current) {
           releaseHandles(pending.current.handles)
           pending.current = null
@@ -522,18 +559,18 @@ export function Routes({ routes, disableScrollToTop }: RoutesProps) {
         return
       }
 
-      if (pending.current?.route.url === matchedRoute.url) {
+      if (pending.current?.route.url === transformed.url) {
         commit(pending.current.route, pending.current.matched)
         return
       }
 
       if (pending.current) releaseHandles(pending.current.handles)
 
-      pending.current = prepareMatched(matched)
+      pending.current = { route: transformed, matched: next, handles: prepareRoute(transformed) }
       commit(pending.current.route, pending.current.matched)
     }
     return router.listen(routes, transition)
-  }, [router, routes, matcher, transformRoute, prepareMatched, commit])
+  }, [router, routes, transformRoute, commit])
 
   useEffect(() => {
     if (previousRoutes.current === routes) return
@@ -546,9 +583,10 @@ export function Routes({ routes, disableScrollToTop }: RoutesProps) {
     if (!matched) return
 
     if (pending.current) releaseHandles(pending.current.handles)
-    pending.current = prepareMatched(matched)
+    const transformed = transformRoute(matched)
+    pending.current = { route: transformed, matched, handles: prepareRoute(transformed) }
     commit(pending.current.route, pending.current.matched)
-  }, [routes, router, matcher, prepareMatched, commit, route?.url])
+  }, [routes, router, matcher, transformRoute, commit, route?.url])
 
   useEffect(() => {
     const prepared = pending.current
@@ -575,19 +613,12 @@ export function Routes({ routes, disableScrollToTop }: RoutesProps) {
     //
     // Static `props` declared on the route definition win on key collision
     // so consumers can intentionally override a path-injected param.
-    const segments = activeRoute.data as RouteData[]
-    const matchedParams = ((activeRoute as Route & { params?: Record<string, string> }).params ?? {}) as Record<
-      string,
-      string
-    >
-
-    const children = segments.reduceRight<ReactNode>((children, segment) => {
-      const segProps = (segment as { props?: Record<string, unknown> }).props ?? {}
+    const children = activeRoute.data.reduceRight<ReactNode>((children, segment) => {
       const Component = resolveSegmentComponent(segment)
       if (!Component) return children
-      const ownParams = paramsDeclaredBy(segment.path, matchedParams)
+      const ownParams = paramsDeclaredBy(segment.path, activeRoute.params)
       return (
-        <Component {...ownParams} {...segProps}>
+        <Component {...ownParams} {...segment.props}>
           {children}
         </Component>
       )
@@ -597,6 +628,8 @@ export function Routes({ routes, disableScrollToTop }: RoutesProps) {
   }, [activeRoute])
 }
 
+// Mirrors space-router's `:name` path param grammar. The modifier flags
+// (`+*?`) that can follow a param don't affect name extraction.
 const PATH_PARAM_NAME_RE = /:([A-Za-z0-9_]+)/g
 
 /**
@@ -618,19 +651,18 @@ function resolveSegmentComponent(segment: RouteData): ComponentType<any> | null 
   if (segment.resolver) {
     return getResolverComponent(segment.resolver)
   }
-  if (!segment.component) return null
-  const c = segment.component as { default?: ComponentType<any> } & ComponentType<any>
-  return c.default || c
+  const component = segment.component
+  if (!component) return null
+  return typeof component === 'function' ? component : component.default
 }
 
-function useScrollToTop(route: Route | null, disabled?: boolean) {
+function useScrollToTop(route: Route<RouteData> | null, disabled?: boolean) {
   const prevScrollGroup = useRef<string | undefined>(undefined)
 
   useEffect(() => {
     if (!route || disabled) return
 
-    const datas = route.data
-    const data = datas[datas.length - 1] as { scrollGroup?: string }
+    const data = route.data[route.data.length - 1]
     const scrollGroup = data.scrollGroup || route.pathname
     if (prevScrollGroup.current !== scrollGroup) {
       prevScrollGroup.current = scrollGroup
@@ -661,12 +693,12 @@ export interface LinkPropsResult {
 export function useLinkProps(to: To): LinkPropsResult {
   const target: NavigateTarget & { current?: boolean } = typeof to === 'string' ? { url: to } : to
 
-  const { router, pendingHref } = useRouterCtx()
+  const { router, pending } = useRouterCtx()
   const currRoute = useRoute()
   const navigate = useNavigate()
   const makeHref = useMakeHref()
 
-  const href = target.url ? target.url : makeHref(target, currRoute as Route | undefined)
+  const href = target.url ? target.url : makeHref(target, currRoute ?? undefined)
   const currentPathname = currRoute?.pathname ?? router.match(router.getUrl())?.pathname
   const isCurrent =
     typeof target.current === 'undefined' ? currentPathname === href.replace(/^#/, '').split('?')[0] : target.current
@@ -686,7 +718,7 @@ export function useLinkProps(to: To): LinkPropsResult {
 
   Object.defineProperty(result, 'isPending', {
     enumerable: false,
-    value: pendingHref === href,
+    value: pending != null && (pending.matchedUrl === href || pending.route.url === href),
   })
   Object.defineProperty(result, 'isCurrent', {
     enumerable: false,
@@ -742,7 +774,7 @@ export function Navigate({ to }: NavigateProps) {
   const router = useInternalRouterInstance()
   const navigate = useNavigate()
   const route = useRoute()
-  const href = router.href(to, route as Route | undefined)
+  const href = router.href(to, route ?? undefined)
   const navigatedHref = useRef<string | null>(null)
 
   useEffect(() => {

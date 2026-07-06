@@ -1,6 +1,7 @@
 import { type AnchorHTMLAttributes, type ComponentType, type CSSProperties, type MouseEvent, type ReactNode } from 'react';
 import { type Mode, type NavigateTarget, type Qs, type Route, type RouteDefinition, type Router as SpaceRouter } from 'space-router';
 export { qs } from 'space-router';
+export type { Route } from 'space-router';
 export interface RoutePrepareContext {
     pathname: string;
     url: string;
@@ -15,24 +16,12 @@ export interface RoutePrepareContext {
 export interface PreparedHandle {
     promise: Promise<unknown>;
     release(): void;
-    priority?: 'route' | 'defer';
-    key?: string | number;
 }
 export type RoutePrepare = (ctx: RoutePrepareContext) => readonly PreparedHandle[] | PreparedHandle[] | void;
 export type ResolverModule = {
     default: ComponentType<any>;
 };
 export type RouteResolver = () => Promise<ResolverModule>;
-export interface RouteNavigationOptions {
-    /**
-     * `'immediate'` (default): commit the new route synchronously inside a React
-     * transition; let any unresolved route-priority data suspend at the
-     * destination's `<Suspense>` boundary.
-     *
-     * `'ready'` is reserved for a follow-up release.
-     */
-    commit?: 'immediate';
-}
 export interface RouteData {
     path?: string;
     component?: ComponentType<any> | {
@@ -40,7 +29,7 @@ export interface RouteData {
     } | null;
     resolver?: RouteResolver;
     prepare?: RoutePrepare;
-    navigation?: RouteNavigationOptions;
+    props?: Record<string, unknown>;
     scrollGroup?: string;
     routes?: RouteData[];
     [extra: string]: unknown;
@@ -48,20 +37,21 @@ export interface RouteData {
 export type To = string | (NavigateTarget & {
     current?: boolean;
 });
+interface PendingNavigation {
+    route: Route<RouteData>;
+    matchedUrl: string;
+}
 interface RouterContextValue {
-    router: SpaceRouter;
-    route: Route | null;
-    transformRoute: (route: Route) => Route;
-    syncRouteUrl: (matched: Route, transformed: Route) => void;
-    commit: (route: Route, matched?: Route) => void;
-    navigate: (to: To, curr?: Route) => void;
+    router: SpaceRouter<RouteData>;
+    route: Route<RouteData> | null;
+    navigate: (to: To, curr?: Route<RouteData>) => void;
     isPending: boolean;
-    pendingHref: string | null;
+    pending: PendingNavigation | null;
     qs: Qs | undefined;
 }
 export declare const RouterContext: import("react").Context<RouterContextValue | undefined>;
-export declare function useInternalRouterInstance(): SpaceRouter;
-export declare function useRoute(): Route | null;
+export declare function useInternalRouterInstance(): SpaceRouter<RouteData>;
+export declare function useRoute(): Route<RouteData> | null;
 /**
  * `true` while the router is between navigation start and commit. Backed by
  * React's `useTransition` — flips on as soon as `navigate()` runs and flips off
@@ -73,6 +63,17 @@ export declare function useRoute(): Route | null;
  * in destination Suspense boundaries.
  */
 export declare function usePending(): boolean;
+/**
+ * The route the router is currently transitioning toward, or `null` when
+ * idle. Set for every navigation source — link clicks, programmatic
+ * `navigate()`, browser back/forward — from commit until the transition
+ * settles. Like `useRoute()`, the returned route is post-`transformRoute`.
+ *
+ * Use this for destination-aware pending UI: highlighting the requested
+ * item in a list, fading the surface being replaced, or reading
+ * `pendingRoute.params` without waiting for the commit.
+ */
+export declare function usePendingRoute(): Route<RouteData> | null;
 export declare function useNavigate(): (to: To) => void;
 /**
  * Optional pre-commit transform. Runs synchronously between match and commit.
@@ -83,7 +84,7 @@ export declare function useNavigate(): (to: To) => void;
  *
  * Must be pure and synchronous.
  */
-export type TransformRoute = (route: Route) => Route | void;
+export type TransformRoute = (route: Route<RouteData>) => Route<RouteData> | void;
 export interface RouterProps {
     mode?: Mode;
     qs?: Qs;
@@ -98,7 +99,7 @@ export interface RouterProps {
     pendingDelayMs?: number;
     children?: ReactNode;
 }
-export declare function Router({ mode, qs, sync, transformRoute, pendingDelayMs, children, }: RouterProps): import("react/jsx-runtime").JSX.Element;
+export declare function Router({ mode, qs, sync, transformRoute, pendingDelayMs, children, }: RouterProps): import("react").JSX.Element;
 /**
  * A `<Suspense>` boundary whose fallback is *delayed* during an in-flight
  * router navigation: until the router has been pending for `pendingDelayMs`
@@ -117,13 +118,13 @@ export interface DelayedSuspenseProps {
     fallback: ReactNode;
     children?: ReactNode;
 }
-export declare function DelayedSuspense({ fallback, children }: DelayedSuspenseProps): import("react/jsx-runtime").JSX.Element;
+export declare function DelayedSuspense({ fallback, children }: DelayedSuspenseProps): import("react").JSX.Element;
 export interface RoutesProps {
     routes: RouteDefinition<RouteData>[];
     disableScrollToTop?: boolean;
 }
-export declare function Routes({ routes, disableScrollToTop }: RoutesProps): import("react/jsx-runtime").JSX.Element | null;
-export declare function useMakeHref(): (to: import("space-router").To, curr?: Route<Record<string, unknown>> | undefined) => string;
+export declare function Routes({ routes, disableScrollToTop }: RoutesProps): import("react").JSX.Element | null;
+export declare function useMakeHref(): (to: import("space-router").To, curr?: Route<RouteData> | undefined) => string;
 export interface LinkPropsResult {
     href: string;
     'aria-current': 'page' | undefined;
@@ -141,7 +142,7 @@ export interface LinkOwnProps {
     children?: ReactNode;
 }
 export type LinkProps = LinkOwnProps & Omit<AnchorHTMLAttributes<HTMLAnchorElement>, keyof LinkOwnProps>;
-export declare function Link({ href: to, replace, current, className, style, onClick, children, ...anchorProps }: LinkProps): import("react/jsx-runtime").JSX.Element;
+export declare function Link({ href: to, replace, current, className, style, onClick, children, ...anchorProps }: LinkProps): import("react").JSX.Element;
 export interface NavigateProps {
     to: To;
 }

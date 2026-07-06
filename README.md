@@ -12,7 +12,7 @@ React Space Router is a set of hooks and components for keeping your app in sync
 - Nested routes
 - Code-split routes via `resolver` (`React.lazy` under the hood)
 - Per-route `prepare(ctx)` for fetch-as-you-render data loading
-- Pending state via `usePending()` (backed by `useTransition`)
+- Pending state via `usePending()` and `usePendingRoute()` (backed by `useTransition`)
 - Delayed route fallbacks via `<DelayedSuspense>`
 - Optional pre-commit `transformRoute` hook for URL rewrites
 - Path params injected as component props
@@ -89,6 +89,7 @@ function IssueSection() {
 - `useRoute()` returns the current route: `{ url, pathname, params, query, search, hash, pattern, data }`.
 - `useNavigate()` returns a programmatic navigation function accepting a string URL or Space Router target object.
 - `usePending()` returns React transition pending state for route navigation.
+- `usePendingRoute()` returns the route an in-flight navigation is heading to (post-transform), or `null` when idle. Covers clicks, programmatic navigation, and browser back/forward.
 - `useLinkProps(to)` returns anchor props plus non-enumerable `isCurrent` and `isPending`.
 - `useMakeHref()` returns the underlying `router.href` helper.
 - `useInternalRouterInstance()` exposes the underlying Space Router instance for rare escape-hatch use.
@@ -106,8 +107,6 @@ function IssueSection() {
 interface PreparedHandle {
   promise: Promise<unknown>
   release(): void
-  priority?: 'route' | 'defer'
-  key?: string | number
 }
 ```
 
