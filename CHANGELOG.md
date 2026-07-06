@@ -11,7 +11,7 @@
 - Add per-link pending state through `useLinkProps(to).isPending`.
 - Add `usePendingRoute()` exposing the transformed route an in-flight navigation is heading to. Registers clicks, programmatic navigation, and browser back/forward alike.
 - Prepare the initial route during the first render so cold direct loads suspend on prepared data instead of reading an unseeded cache, and so chunk download and data loading overlap on direct loads too.
-- Commit browser back/forward navigations outside the popstate task. React 19 flushes popstate-scheduled updates synchronously, which showed Suspense fallbacks instead of holding the previous route and never painted pending state; escaping to a macrotask restores the same async transition semantics as link clicks.
+- Deliver browser back/forward navigations outside the popstate task, via space-router 1.2's pluggable `schedule` option. React 19 flushes popstate-scheduled updates synchronously, which showed Suspense fallbacks instead of holding the previous route and never painted pending state; deferring traversal emits to a macrotask restores the same async transition semantics as link clicks.
 - Add `scrollGroup` for keeping scroll position across related routes.
 - Preserve normal browser behavior for modified clicks, middle-clicks, downloads, non-self targets, and cross-origin links.
 

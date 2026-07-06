@@ -1475,6 +1475,51 @@ test.serial('usePendingRoute registers history-driven navigations', async (t) =>
   t.true(window.document.body.innerHTML.includes('<div>Slow</div>'))
 })
 
+test.serial('popstate emits are deferred to a macrotask in async mode', async (t) => {
+  setup()
+  const root = document.getElementById('root')
+
+  const routes = [
+    { path: '/', component: () => <div>Home</div> },
+    { path: '/next', component: () => <div>Next</div> },
+  ]
+
+  function App() {
+    return (
+      <Router>
+        <Routes routes={routes} />
+      </Router>
+    )
+  }
+
+  await act(async () => {
+    ReactDOM.createRoot(root).render(<App />)
+  })
+  t.true(window.document.body.innerHTML.includes('<div>Home</div>'))
+
+  // Dispatch popstate and drain only microtasks: the route must NOT have
+  // committed yet. The traversal emit is deferred to a macrotask (via the
+  // space-router `schedule` option) so React treats back/forward as a
+  // regular async transition instead of a synchronous popstate flush.
+  await act(async () => {
+    g.location.href = '/next'
+    g.location.pathname = '/next'
+    window.dispatchEvent(new window.PopStateEvent('popstate'))
+    await Promise.resolve()
+    await Promise.resolve()
+    await Promise.resolve()
+  })
+  t.true(
+    window.document.body.innerHTML.includes('<div>Home</div>'),
+    'traversal emit must not commit within the popstate task',
+  )
+
+  await act(async () => {
+    await new Promise((r) => setTimeout(r, 10))
+  })
+  t.true(window.document.body.innerHTML.includes('<div>Next</div>'))
+})
+
 test.serial('async-mode popstate after a cold load holds the previous route and paints pending state', async (t) => {
   setup()
   g.location.href = '/items/courier'

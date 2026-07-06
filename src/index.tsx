@@ -225,7 +225,19 @@ interface InternalRouter {
 }
 
 function makeRouter(routerOpts: RouterOpts): InternalRouter {
-  const router = createRouter<RouteData>({ mode: routerOpts.mode, qs: routerOpts.qs, sync: routerOpts.sync })
+  const { mode, qs, sync } = routerOpts
+  const router = createRouter<RouteData>({
+    mode,
+    qs,
+    sync,
+    // React 19 flushes state updates scheduled during the popstate task
+    // synchronously (to cooperate with the browser's scroll restoration) —
+    // but a synchronous "transition" that suspends shows Suspense fallbacks
+    // instead of holding the previous route, and pending state never paints.
+    // Deliver traversal emits in a macrotask so back/forward gets the same
+    // async transition semantics as link clicks.
+    schedule: sync ? undefined : (fire, { traversal }) => (traversal ? setTimeout(fire, 0) : queueMicrotask(fire)),
+  })
   return { router, routerOpts }
 }
 
@@ -286,27 +298,6 @@ export function Router({
     return () => clearTimeout(t)
   }, [isPending, pendingDelayMs])
 
-  // Tracks whether we're inside the browser task that dispatched a popstate
-  // event. React 19 flushes state updates scheduled during popstate
-  // synchronously (to cooperate with the browser's scroll restoration) — but
-  // a synchronous "transition" that suspends shows Suspense fallbacks
-  // instead of holding the previous route, and pending state never paints.
-  // Commits for back/forward escape to a macrotask (see commit below) so
-  // they get the same async transition semantics as link clicks.
-  const inPopstateTask = useRef(false)
-  const commitSeq = useRef(0)
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    const mark = () => {
-      inPopstateTask.current = true
-      setTimeout(() => {
-        inPopstateTask.current = false
-      }, 0)
-    }
-    window.addEventListener('popstate', mark)
-    return () => window.removeEventListener('popstate', mark)
-  }, [])
-
   // Keep the latest transform in a ref so commit() can stay referentially
   // stable while always using the freshest function.
   const transformRef = useRef(transformRoute)
@@ -331,37 +322,23 @@ export function Router({
 
   const commit = useCallback(
     (next: Route<RouteData>, matched: Route<RouteData> = next) => {
-      const run = () => {
-        // The urgent set makes the pending navigation visible immediately;
-        // the clear is deferred inside the transition so it only lands once
-        // the destination has settled. Commit is the single owner of pending
-        // state, which is why clicks, programmatic navigation, and browser
-        // back/forward all register the same way.
-        setPending({ route: next, matchedUrl: matched.url })
-        startRouterTransition(() => {
-          setCurrRoute(next)
-          setPending(null)
-        })
+      // The urgent set makes the pending navigation visible immediately;
+      // the clear is deferred inside the transition so it only lands once
+      // the destination has settled. Commit is the single owner of pending
+      // state, which is why clicks, programmatic navigation, and browser
+      // back/forward all register the same way.
+      setPending({ route: next, matchedUrl: matched.url })
+      startRouterTransition(() => {
+        setCurrRoute(next)
+        setPending(null)
+      })
 
-        // Sync the address bar if the transform rewrote the URL. We use
-        // history.replaceState directly so we don't re-trigger the router's
-        // listener loop.
-        syncRouteUrl(matched, next)
-      }
-
-      const seq = ++commitSeq.current
-      if (!sync && inPopstateTask.current) {
-        // Escape the popstate task so React treats this as a regular async
-        // transition. The seq guard drops the deferred commit if a newer
-        // navigation committed in the meantime.
-        setTimeout(() => {
-          if (commitSeq.current === seq) run()
-        }, 0)
-      } else {
-        run()
-      }
+      // Sync the address bar if the transform rewrote the URL. We use
+      // history.replaceState directly so we don't re-trigger the router's
+      // listener loop.
+      syncRouteUrl(matched, next)
     },
-    [sync, syncRouteUrl],
+    [syncRouteUrl],
   )
 
   const ctx = useMemo<RouterContextValue>(
