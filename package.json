@@ -51,17 +51,17 @@
   },
   "devDependencies": {
     "@swc-node/register": "^1.11.1",
-    "@swc/core": "^1.15.30",
-    "@types/react": "^19.0.0",
-    "ava": "^7.0.0",
+    "@swc/core": "^1.15.43",
+    "@types/react": "^19.2.17",
+    "ava": "^8.0.1",
     "c8": "^11.0.0",
     "gh-pages": "^6.3.0",
-    "jsdom": "^29.0.2",
-    "oxfmt": "^0.46.0",
-    "oxlint": "^1.61.0",
-    "react": "^19.2.5",
-    "react-dom": "^19.2.5",
-    "typescript": "^5.9.0"
+    "jsdom": "^29.1.1",
+    "oxfmt": "^0.57.0",
+    "oxlint": "^1.72.0",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "typescript": "^6.0.3"
   },
   "peerDependencies": {
     "react": ">=18"
@@ -70,10 +70,10 @@
     "files": [
       "test/*.test.*"
     ],
-    "extensions": {
-      "ts": "module",
-      "tsx": "module"
-    },
+    "extensions": [
+      "ts",
+      "tsx"
+    ],
     "nodeArguments": [
       "--import=@swc-node/register/esm-register"
     ]
