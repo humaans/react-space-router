@@ -12,6 +12,7 @@ import {
   DelayedSuspense,
   useInternalRouterInstance,
   useLinkProps,
+  useNavigate,
   usePending,
   usePendingRoute,
   useRoute,
@@ -1322,6 +1323,75 @@ test.serial('useLinkProps exposes per-link pending state', async (t) => {
   t.is(window.document.querySelector('a')?.getAttribute('data-pending'), 'true')
   t.is(window.document.querySelector('a')?.getAttribute('data-current'), 'false')
   t.is(window.document.querySelector('[data-current-other]')?.getAttribute('data-current-other'), 'false')
+  t.is(window.document.querySelector('[data-pending-other]')?.getAttribute('data-pending-other'), 'false')
+
+  await act(async () => {
+    resolveSlow!()
+    await Promise.resolve()
+    await Promise.resolve()
+  })
+
+  t.is(window.document.body.innerHTML, '<div id="root"><div>Slow</div></div>')
+})
+
+test.serial('useLinkProps matches pending and current state for hash-prefixed hrefs in hash mode', async (t) => {
+  setup()
+  // Hash-mode navigation goes through location.assign + a hashchange event;
+  // the stubbed location doesn't implement either, so wire them up here.
+  g.location.assign = (url: string) => {
+    g.location.hash = url
+    window.dispatchEvent(new window.Event('hashchange'))
+  }
+
+  const root = document.getElementById('root')
+  let resolveSlow: (() => void) | null = null
+  const slowGate = new Promise<void>((r) => {
+    resolveSlow = r
+  })
+
+  function Home() {
+    const navigate = useNavigate()
+    const slowLink = useLinkProps('#/slow')
+    const otherLink = useLinkProps('#/other')
+    return (
+      <div>
+        <button onClick={() => navigate('/slow')}>Go</button>
+        <span data-current={String(slowLink.isCurrent)} data-pending={String(slowLink.isPending)} />
+        <span data-pending-other={String(otherLink.isPending)} />
+      </div>
+    )
+  }
+
+  function Slow() {
+    if (!(Slow as any).ready) {
+      throw slowGate.then(() => {
+        ;(Slow as any).ready = true
+      })
+    }
+    return <div>Slow</div>
+  }
+
+  const routes = [
+    { path: '/', component: Home },
+    { path: '/slow', component: Slow },
+    { path: '/other', component: () => <div>Other</div> },
+  ]
+
+  await act(async () => {
+    const r = ReactDOM.createRoot(root)
+    r.render(
+      <Router sync mode='hash'>
+        <Routes routes={routes} />
+      </Router>,
+    )
+  })
+
+  await act(async () => {
+    window.document.querySelector('button')!.click()
+  })
+
+  t.is(window.document.querySelector('[data-pending]')?.getAttribute('data-pending'), 'true')
+  t.is(window.document.querySelector('[data-pending]')?.getAttribute('data-current'), 'false')
   t.is(window.document.querySelector('[data-pending-other]')?.getAttribute('data-pending-other'), 'false')
 
   await act(async () => {

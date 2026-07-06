@@ -260,9 +260,9 @@ export function Routes({ routes, disableScrollToTop }) {
     useEffect(() => {
         if (!initialRoute || route || committed.current || pending.current)
             return;
-        const prepared = initialPrepared.current?.route.url === initialRoute.route.url
-            ? initialPrepared.current
-            : { ...initialRoute, handles: prepareRoute(initialRoute.route) };
+        // The render phase above always prepared this exact route before this
+        // effect can run, so adopt its handles directly.
+        const prepared = initialPrepared.current;
         initialPrepared.current = null;
         committed.current = prepared;
         syncRouteUrl(prepared.matched, prepared.route);
@@ -401,8 +401,11 @@ export function useLinkProps(to) {
     const navigate = useNavigate();
     const makeHref = useMakeHref();
     const href = target.url ? target.url : makeHref(target, currRoute ?? undefined);
+    // Hash-mode hrefs are written with a leading `#` (e.g. `#/users`), but
+    // route urls from the router never carry it — strip it before comparing.
+    const hrefUrl = href.replace(/^#/, '');
     const currentPathname = currRoute?.pathname ?? router.match(router.getUrl())?.pathname;
-    const isCurrent = typeof target.current === 'undefined' ? currentPathname === href.replace(/^#/, '').split('?')[0] : target.current;
+    const isCurrent = typeof target.current === 'undefined' ? currentPathname === hrefUrl.split('?')[0] : target.current;
     function onClick(event) {
         if (shouldNavigate(event)) {
             event.preventDefault();
@@ -416,7 +419,7 @@ export function useLinkProps(to) {
     };
     Object.defineProperty(result, 'isPending', {
         enumerable: false,
-        value: pending != null && (pending.matchedUrl === href || pending.route.url === href),
+        value: pending != null && (pending.matchedUrl === hrefUrl || pending.route.url === hrefUrl),
     });
     Object.defineProperty(result, 'isCurrent', {
         enumerable: false,
