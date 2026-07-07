@@ -4,4 +4,5 @@ coverage
 .DS_Store
 docs/public
 docs/resources/_gen
+docs/.hugo_build.lock
 demo/dist

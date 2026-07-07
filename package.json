@@ -44,7 +44,9 @@
     "watch": "tsc -w",
     "release": "np --no-release-draft",
     "release:beta": "np --tag=beta --no-release-draft",
-    "release:docs": "hugo -s docs && gh-pages -d docs/public"
+    "docs:watch": "hugo server -s docs",
+    "docs:build": "hugo -s docs",
+    "release:docs": "npm run docs:build && gh-pages -d docs/public"
   },
   "dependencies": {
     "space-router": "^1.3.0"
