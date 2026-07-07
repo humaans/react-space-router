@@ -509,9 +509,16 @@ export function Routes({ routes, disableScrollToTop }: RoutesProps) {
   useEffect(() => {
     if (!initialRoute || route || committed.current || pending.current) return
 
-    // The render phase above always prepared this exact route before this
-    // effect can run, so adopt its handles directly.
-    const prepared = initialPrepared.current!
+    // Usually the render phase prepared this exact route and we adopt its
+    // handles. The fallback is reachable, not dead: under StrictMode's
+    // mount→cleanup→remount cycle the first mount adopts the handles and
+    // nulls the ref, the cleanup releases them via releaseAll, and this
+    // effect then runs again with the same closure — the route must be
+    // re-prepared because the original handles were already released.
+    const prepared =
+      initialPrepared.current?.route.url === initialRoute.route.url
+        ? initialPrepared.current
+        : { ...initialRoute, handles: prepareRoute(initialRoute.route) }
     initialPrepared.current = null
     committed.current = prepared
     syncRouteUrl(prepared.matched, prepared.route)

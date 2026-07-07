@@ -155,18 +155,24 @@ test.serial('initial route prepare stays leak-free under StrictMode double rende
 
   function App() {
     return (
-      <StrictMode>
-        <Router sync>
-          <Capture />
-          <Routes routes={routes} />
-        </Router>
-      </StrictMode>
+      <Router sync>
+        <Capture />
+        <Routes routes={routes} />
+      </Router>
     )
   }
 
   await act(async () => {
     const r = ReactDOM.createRoot(root)
-    r.render(<App />)
+    // StrictMode must wrap from the root render call: React only runs the
+    // mount->unmount->remount effect simulation for root-level StrictMode,
+    // so nesting it inside a component would silently skip the very cycle
+    // this test exists to exercise.
+    r.render(
+      <StrictMode>
+        <App />
+      </StrictMode>,
+    )
   })
 
   t.is(window.document.body.innerHTML, '<div id="root"><div>Home</div></div>')
@@ -743,4 +749,69 @@ test.serial('Routes releases pending handles when navigation returns to the comm
   })
 
   t.is(window.document.body.innerHTML, '<div id="root"><div>Home</div></div>')
+})
+
+test.serial('initial route prepare stays leak-free under StrictMode in async mode', async (t) => {
+  setup()
+
+  const root = document.getElementById('root')
+  let prepareCalls = 0
+  let releaseCalls = 0
+
+  const routes = [
+    {
+      path: '/',
+      prepare: (): PreparedHandle[] => {
+        prepareCalls++
+        return [{ promise: Promise.resolve(), release: () => releaseCalls++ }]
+      },
+      component: () => <div>Home</div>,
+    },
+    { path: '/next', component: () => <div>Next</div> },
+  ]
+
+  let router
+
+  function Capture() {
+    const r = useInternalRouterInstance()
+    useEffect(() => {
+      router = r
+    }, [r])
+    return null
+  }
+
+  function App() {
+    return (
+      <Router>
+        <Capture />
+        <Routes routes={routes} />
+      </Router>
+    )
+  }
+
+  await act(async () => {
+    const r = ReactDOM.createRoot(root)
+    // Root-level StrictMode (see the sync variant above). In async mode the
+    // initial emit is still queued when StrictMode's simulated unmount
+    // releases the adopted handles, so the remounted adoption effect must
+    // take the re-prepare path rather than adopt.
+    r.render(
+      <StrictMode>
+        <App />
+      </StrictMode>,
+    )
+  })
+
+  t.is(window.document.body.innerHTML, '<div id="root"><div>Home</div></div>')
+
+  await act(async () => {
+    router.navigate('/next')
+  })
+
+  t.is(window.document.body.innerHTML, '<div id="root"><div>Next</div></div>')
+  // In async mode the initial emit is deferred, so StrictMode's simulated
+  // unmount releases the adopted handles before the route commits — the
+  // remounted adoption effect must re-prepare rather than adopt.
+  t.is(releaseCalls, prepareCalls)
+  t.true(prepareCalls >= 1)
 })
