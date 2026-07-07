@@ -439,6 +439,16 @@ export function useMakeHref() {
     const { href } = useSpaceRouter();
     return href;
 }
+function normalizeLinkTarget(to) {
+    return typeof to === 'string' ? { url: to } : to;
+}
+// Resolve a link target to the href written into anchors, plus the
+// router-comparable url. Hash-mode hrefs carry a leading `#` (e.g. `#/users`)
+// that route urls from the router never do — `url` has it stripped.
+function resolveLinkHref(router, route, target) {
+    const href = target.url ? target.url : router.href(target, route ?? undefined);
+    return { href, url: href.replace(/^#/, '') };
+}
 /**
  * Returns a function that warms a navigation target without navigating:
  * matches the URL, applies `transformRoute`, preloads matched `resolver`
@@ -452,9 +462,8 @@ export function usePrefetch() {
     const route = useRoute();
     const { transformRoute, data } = useContext(RouterInternalsContext);
     return useCallback((to) => {
-        const target = typeof to === 'string' ? { url: to } : to;
-        const href = target.url ? target.url : router.href(target, route ?? undefined);
-        const matched = router.match(href.replace(/^#/, ''));
+        const { url } = resolveLinkHref(router, route, normalizeLinkTarget(to));
+        const matched = router.match(url);
         if (matched)
             prefetchRoute(transformRoute(matched), data);
     }, [router, route, transformRoute, data]);
@@ -463,14 +472,10 @@ export function usePrefetch() {
 // the target, build the href, and derive current/pending state against the
 // router's committed and in-flight routes.
 function useLinkTarget(to) {
-    const target = typeof to === 'string' ? { url: to } : to;
+    const target = normalizeLinkTarget(to);
     const { router, pending } = useRouterCtx();
     const currRoute = useRoute();
-    const makeHref = useMakeHref();
-    const href = target.url ? target.url : makeHref(target, currRoute ?? undefined);
-    // Hash-mode hrefs are written with a leading `#` (e.g. `#/users`), but
-    // route urls from the router never carry it — strip it before comparing.
-    const hrefUrl = href.replace(/^#/, '');
+    const { href, url: hrefUrl } = resolveLinkHref(router, currRoute, target);
     const currentPathname = currRoute?.pathname ?? router.match(router.getUrl())?.pathname;
     const isCurrent = typeof target.current === 'undefined' ? currentPathname === hrefUrl.split('?')[0] : target.current;
     const isPending = pending != null && (pending.matchedUrl === hrefUrl || pending.route.url === hrefUrl);
