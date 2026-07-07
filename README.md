@@ -6,8 +6,9 @@
 <h4 align="center"><a href="https://github.com/KidkArolis/space-router">Space Router</a> bindings for React</a></h4>
 <br />
 
-React Space Router is a set of hooks and components for keeping your app in sync with the URL and performing page navigations. Suspense-aware and built around React's transition machinery. A library built by and used at [Humaans](https://humaans.io/).
+React Space Router is a set of hooks and components for keeping your app in sync with the URL and performing page navigations. Suspense-native and built around React's transition machinery. A library built by and used at [Humaans](https://humaans.io/).
 
+- Suspense-native — routes suspend while their code and data load, and navigations run as transitions, so the previous page stays up instead of flashing fallbacks
 - React hooks based
 - Nested routes
 - Code-split routes via `resolver` (`React.lazy` under the hood)
@@ -93,7 +94,7 @@ function IssueSection() {
 - `useLinkProps(to)` returns spreadable anchor props: `{ href, aria-current, data-pending, onClick }`. Style current links with `a[aria-current='page']` and in-flight links with `a[data-pending]` in CSS.
 - `useLinkState(to)` returns `{ isCurrent, isPending }` for programmatic per-target state — tabs, sidebar items, breadcrumb spinners.
 - `useMakeHref()` returns the underlying `router.href` helper.
-- `useInternalRouterInstance()` exposes the underlying Space Router instance for rare escape-hatch use.
+- `useSpaceRouter()` exposes the underlying Space Router instance for rare escape-hatch use.
 
 ### Utilities
 

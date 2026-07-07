@@ -8,8 +8,9 @@ toc: true
 
 > [Space Router](https://kidkarolis.github.io/space-router/) bindings for React
 
-React Space Router is a set of hooks and components for keeping your app in sync with the URL and performing page navigations. Suspense-aware and built around React's transition machinery. A library built by and used at [Humaans](https://humaans.io/).
+React Space Router is a set of hooks and components for keeping your app in sync with the URL and performing page navigations. Suspense-native and built around React's transition machinery. A library built by and used at [Humaans](https://humaans.io/).
 
+- Suspense-native — routes suspend while their code and data load, and navigations run as transitions, so the previous page stays up instead of flashing fallbacks
 - React hooks based
 - Nested routes
 - Code-split routes via `resolver` (`React.lazy` under the hood)
@@ -85,6 +86,62 @@ function Settings() {
 }
 ```
 
+## Loading UI
+
+Where you place Suspense boundaries in the destination page decides what a navigation looks like. The rule, from React itself: a transition holds the previous page only when a suspension would hide already-visible content — boundaries that mount fresh as part of the new page show their fallbacks immediately.
+
+Take one route:
+
+```js
+const routes = [
+  {
+    path: '/inbox',
+    resolver: () => import('./Inbox'),
+    prepare: () => [inbox.prepare()],
+  },
+]
+```
+
+**Go to the destination immediately, skeletons inside.** An inner boundary mounts with the page, so the route commits right away and the skeleton shows while data loads:
+
+```jsx
+export default function Inbox() {
+  return (
+    <>
+      <Header />
+      <Suspense fallback={<ListSkeleton />}>
+        <MessageList /> {/* reads inbox data, suspends if not ready */}
+      </Suspense>
+    </>
+  )
+}
+```
+
+**Hold the previous page until the data is ready.** No inner boundary — the page itself suspends, so the transition keeps the previous page on screen:
+
+```jsx
+export default function Inbox() {
+  const messages = inbox.read()
+  return <MessageList messages={messages} />
+}
+```
+
+**Hybrid.** Hold the previous page for `pendingDelayMs`, then degrade to the skeleton if data is still loading:
+
+```jsx
+export default function Inbox() {
+  return (
+    <DelayedSuspense fallback={<ListSkeleton />}>
+      <MessageList />
+    </DelayedSuspense>
+  )
+}
+```
+
+One caveat: a cold `resolver` chunk always holds the previous page briefly — a boundary inside a chunk that hasn't downloaded yet can't show a fallback. The router minimizes that window by preloading the chunk the moment navigation starts, in parallel with `prepare()`.
+
+The [demo](https://github.com/humaans/react-space-router/tree/master/demo) shows these modes side by side over simulated latencies — run it with `npm run demo`.
+
 ## API
 
 ### `<Router />`
@@ -96,7 +153,7 @@ Props:
 - `mode` one of `history`, `hash`, `memory` — default is `history`.
 - `qs` a custom query string parser of shape `{ parse, stringify }`.
 - `sync` if `true`, the underlying space-router fires synchronous transitions (useful in tests).
-- `transformRoute(route)` an optional pure, synchronous function that runs between match and commit. Return a modified `Route` to change what gets committed; if its `url` differs from the matched URL, the router calls `history.replaceState` so the address bar matches. Use this for things like persisted-query restoration. Must not be async.
+- `transformRoute(route)` an optional pure, synchronous function that runs between match and commit. Return a modified `Route` to change what gets committed; if its `url` differs from the matched URL, the router silently replaces the URL (mode-aware, so it works in hash mode too) so the address bar matches. Use this for things like persisted-query restoration. Must not be async.
 - `pendingDelayMs` how long `<DelayedSuspense>` holds the previous route before rendering its fallback during an in-flight navigation. Default: `1000`.
 
 ### `<Routes />`
@@ -122,7 +179,7 @@ Props:
   - `...metadata` any other keys you want — they're available on `route.data[i]`.
 - `disableScrollToTop` disables the scroll-to-top behavior after each navigation.
 
-### Path params as component props
+#### Path params as component props
 
 When the router commits a route, it spreads matched path params onto route segment components as own props. Each segment receives only the params declared in its own `path` — wrapping layouts that didn't declare those params get nothing extra, while a parent layout that declares `:orgId` receives `orgId` and a child leaf that declares `:issueId` receives `issueId`.
 
@@ -192,11 +249,14 @@ Props:
 
 The rest of the props are spread onto the `<a>` element.
 
-Active links receive `aria-current="page"`, so active styling should usually be plain CSS:
+Active links receive `aria-current="page"` and links whose navigation is in flight receive `data-pending`, so both states should usually be styled in plain CSS:
 
 ```css
 .nav-link[aria-current='page'] {
   font-weight: 600;
+}
+.nav-link[data-pending] {
+  opacity: 0.6;
 }
 ```
 
@@ -212,10 +272,10 @@ Props:
 
 - `to` `string` or object — same shape as `useNavigate`'s argument.
 
-### `useInternalRouterInstance`
+### `useSpaceRouter`
 
 ```js
-const router = useInternalRouterInstance()
+const router = useSpaceRouter()
 ```
 
 Get the underlying Space Router instance. See [space-router docs](https://kidkarolis.github.io/space-router/) for details. Rarely needed — the other hooks cover the common cases.
@@ -364,14 +424,5 @@ Check whether a click event should result in a router navigation or be left to t
 - target=\_blank or other non-self targets
 - `download` attribute
 - cross-origin or non-http(s) URLs
+- same-page `#hash` links — the browser scrolls to the anchor natively
 
-## Migrating from 0.6.x
-
-See [MIGRATION.md](https://github.com/humaans/react-space-router/blob/master/MIGRATION.md) for the full migration guide. Headlines:
-
-- `onNavigating`/`onNavigated`/`useRoute` props have been removed from `<Router>`. Route state lives inside the router now.
-- Use `resolver` on a route segment instead of awaiting `import()` in `onNavigating`.
-- Use `usePending()` instead of a manual `navigating: true/false` flag.
-- Use `<DelayedSuspense>` for delayed skeleton fallbacks during route transitions.
-- Use `transformRoute` for the one case that actually needs a pre-commit hook (e.g. persisted-query restoration).
-- Replace external Redux/Zustand/atom-backed route state with direct `useRoute()` reads.

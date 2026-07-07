@@ -1,19 +1,22 @@
 ## 0.7.0
 
-- **Breaking**: move route state inside `<Router>` and remove the old prop-based lifecycle hooks (`useRoute`, `onNavigating`, `onNavigated`). Read the current route with `useRoute()` and observe committed route changes with regular React effects.
-- **Breaking**: remove function-form `<Link>` props and `extraProps`. Use `aria-current="page"` and `data-pending` for CSS styling, or `useLinkState()` when active/pending state needs to affect rendered output.
-- Add Suspense-aware route transitions backed by React `useTransition`, exposed through `usePending()`.
-- Add route `resolver` support for code-split route segments. Resolvers are preloaded during navigation and rendered through `React.lazy`.
-- Add route `prepare(ctx)` support for fetch-as-you-render data loading. Returned `PreparedHandle`s are pinned while the route is committed and released on the next commit or `<Routes>` unmount.
-- Add `<DelayedSuspense>` and `pendingDelayMs` for delayed skeleton fallbacks during in-flight route navigations.
-- Add `transformRoute(route)` for synchronous pre-commit route rewrites, including URL replacement when the transformed route changes `url`.
-- Inject matched path params as props onto the route segment that declares each param.
-- Add per-link pending state: `<Link>` and `useLinkProps(to)` set a `data-pending` attribute while the link's navigation is in flight (style with `a[data-pending]`), and `useLinkState(to)` returns `{ isCurrent, isPending }` for programmatic reads.
-- Add `usePendingRoute()` exposing the transformed route an in-flight navigation is heading to. Registers clicks, programmatic navigation, and browser back/forward alike.
-- Prepare the initial route during the first render so cold direct loads suspend on prepared data instead of reading an unseeded cache, and so chunk download and data loading overlap on direct loads too.
-- Deliver browser back/forward navigations outside the popstate task, via space-router 1.2's pluggable `schedule` option. React 19 flushes popstate-scheduled updates synchronously, which showed Suspense fallbacks instead of holding the previous route and never painted pending state; deferring traversal emits to a macrotask restores the same async transition semantics as link clicks.
-- Add `scrollGroup` for keeping scroll position across related routes.
-- Preserve normal browser behavior for modified clicks, middle-clicks, downloads, non-self targets, and cross-origin links.
+The router is now built around React's transition machinery: navigations run inside `useTransition`, Suspense keeps the previous route on screen while the destination loads, and the destination's code and data are kicked off as soon as navigation begins. See the [docs](https://humaans.github.io/react-space-router/) for usage guides and [MIGRATION.md](./MIGRATION.md) for a step-by-step migration from 0.6.x.
+
+### Breaking
+
+- Route state lives inside `<Router>`; the prop-based lifecycle hooks (`useRoute`, `onNavigating`, `onNavigated`) are removed. Read the current route with `useRoute()`, run post-navigation logic in regular effects, and replace `onNavigating`-based preloading with per-route `resolver` and `prepare`.
+- Function-form `<Link>` props (`className`, `style`, `extraProps`) are removed. Style current and pending links in plain CSS via the `aria-current="page"` and `data-pending` attributes, or use `useLinkState(to)` when the state needs to affect rendered output.
+- `useInternalRouterInstance` is renamed to `useSpaceRouter`. Same escape hatch, same return value — the underlying space-router instance.
+
+### New
+
+- Suspense-aware navigation: the previous route stays on screen and interactive while the destination suspends. Pending state comes for free — `usePending()` for "is a navigation happening", `usePendingRoute()` for "where to", and a per-link `data-pending` attribute (plus `useLinkState(to)`) for "was it this link" — for clicks, programmatic navigation, and browser back/forward alike.
+- Code-split routes via `resolver: () => import('./Page')`, preloaded at navigation time and rendered through `React.lazy`.
+- Fetch-as-you-render data loading via route `prepare(ctx)` — fetches start when navigation begins (including cold direct loads), in parallel with chunk download, and the returned `PreparedHandle`s stay pinned while the route is committed.
+- `<DelayedSuspense>` and `pendingDelayMs` for browser-style loading: hold the previous page briefly, then degrade to a skeleton.
+- `transformRoute(route)` pre-commit hook for URL rewrites (e.g. persisted-query restoration), with automatic address-bar sync.
+- Matched path params are injected as props onto the route segment that declares them.
+- `scrollGroup` for keeping scroll position across related routes.
 
 ## 0.6.6
 
