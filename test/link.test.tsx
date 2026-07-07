@@ -3,7 +3,16 @@
 import test from 'ava'
 import { act, useEffect } from 'react'
 import ReactDOM from 'react-dom/client'
-import { Router, Routes, Link, Navigate, useInternalRouterInstance, useLinkProps, useNavigate } from '../src/index.tsx'
+import {
+  Router,
+  Routes,
+  Link,
+  Navigate,
+  useInternalRouterInstance,
+  useLinkProps,
+  useLinkState,
+  useNavigate,
+} from '../src/index.tsx'
 import { g, setup, dispatchClick } from './helpers.ts'
 
 test.serial('useLinkProps()', async function (t) {
@@ -17,11 +26,14 @@ test.serial('useLinkProps()', async function (t) {
   ]
 
   let linkProps
+  let linkState
 
   function Stuff() {
     const _linkProps = useLinkProps('/stuff')
+    const _linkState = useLinkState('/stuff')
     useEffect(() => {
       linkProps = _linkProps
+      linkState = _linkState
     }, [])
 
     return <div>Stuff</div>
@@ -42,12 +54,12 @@ test.serial('useLinkProps()', async function (t) {
 
   t.deepEqual(linkProps, {
     'aria-current': 'page',
+    'data-pending': undefined,
     href: '/stuff',
     onClick: linkProps.onClick,
   })
   t.is(typeof linkProps.onClick, 'function')
-  t.true(linkProps.isCurrent)
-  t.false(linkProps.isPending)
+  t.deepEqual(linkState, { isCurrent: true, isPending: false })
 })
 
 test.serial('Link click navigates and invokes to.onClick', (t) => {
@@ -266,7 +278,7 @@ test.serial('Link preserves replace and current from object href when props are 
   }
 })
 
-test.serial('useLinkProps exposes per-link pending state', async (t) => {
+test.serial('useLinkProps and useLinkState expose per-link pending state', async (t) => {
   setup()
 
   const root = document.getElementById('root')
@@ -276,20 +288,17 @@ test.serial('useLinkProps exposes per-link pending state', async (t) => {
   })
 
   function Home() {
-    const slowLink = useLinkProps('/slow')
-    const otherLink = useLinkProps('/other')
+    // `data-pending` arrives via the spread; `data-current` reads the state hook.
+    const slowProps = useLinkProps('/slow')
+    const slowState = useLinkState('/slow')
+    const otherState = useLinkState('/other')
     return (
       <div>
-        <a
-          href={slowLink.href}
-          onClick={slowLink.onClick}
-          data-current={String(slowLink.isCurrent)}
-          data-pending={String(slowLink.isPending)}
-        >
+        <a {...slowProps} data-current={String(slowState.isCurrent)}>
           Slow
         </a>
-        <span data-current-other={String(otherLink.isCurrent)} />
-        <span data-pending-other={String(otherLink.isPending)} />
+        <span data-current-other={String(otherState.isCurrent)} />
+        <span data-pending-other={String(otherState.isPending)} />
       </div>
     )
   }
@@ -326,7 +335,7 @@ test.serial('useLinkProps exposes per-link pending state', async (t) => {
     window.document.querySelector('a')!.click()
   })
 
-  t.is(window.document.querySelector('a')?.getAttribute('data-pending'), 'true')
+  t.is(window.document.querySelector('a')?.getAttribute('data-pending'), '')
   t.is(window.document.querySelector('a')?.getAttribute('data-current'), 'false')
   t.is(window.document.querySelector('[data-current-other]')?.getAttribute('data-current-other'), 'false')
   t.is(window.document.querySelector('[data-pending-other]')?.getAttribute('data-pending-other'), 'false')
@@ -340,7 +349,7 @@ test.serial('useLinkProps exposes per-link pending state', async (t) => {
   t.is(window.document.body.innerHTML, '<div id="root"><div>Slow</div></div>')
 })
 
-test.serial('useLinkProps matches pending and current state for hash-prefixed hrefs in hash mode', async (t) => {
+test.serial('useLinkState matches pending and current state for hash-prefixed hrefs in hash mode', async (t) => {
   setup()
   // Hash-mode navigation goes through location.assign + a hashchange event;
   // the stubbed location doesn't implement either, so wire them up here.
@@ -357,8 +366,8 @@ test.serial('useLinkProps matches pending and current state for hash-prefixed hr
 
   function Home() {
     const navigate = useNavigate()
-    const slowLink = useLinkProps('#/slow')
-    const otherLink = useLinkProps('#/other')
+    const slowLink = useLinkState('#/slow')
+    const otherLink = useLinkState('#/other')
     return (
       <div>
         <button onClick={() => navigate('/slow')}>Go</button>
@@ -450,8 +459,8 @@ test.serial('Link clears pending href when async navigation commits', async (t) 
   ]
 
   function PendingProbe() {
-    const props = useLinkProps('/next')
-    return <span data-pending={String(props.isPending)} />
+    const { isPending } = useLinkState('/next')
+    return <span data-pending={String(isPending)} />
   }
 
   function App() {
@@ -493,8 +502,8 @@ test.serial('Link clears pending href after a route-level redirect commits', asy
   ]
 
   function PendingProbe() {
-    const props = useLinkProps('/old')
-    return <span data-pending={String(props.isPending)} />
+    const { isPending } = useLinkState('/old')
+    return <span data-pending={String(isPending)} />
   }
 
   let router

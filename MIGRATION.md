@@ -220,11 +220,12 @@ sets:
 }
 ```
 
-For active-aware logic that cannot be expressed in CSS, use `useLinkProps()`:
+For active-aware logic that cannot be expressed in CSS, use `useLinkState()`:
 
 ```tsx
 const linkProps = useLinkProps('/settings')
-return <a {...linkProps}>{linkProps.isCurrent ? 'Settings' : 'Go to settings'}</a>
+const { isCurrent } = useLinkState('/settings')
+return <a {...linkProps}>{isCurrent ? 'Settings' : 'Go to settings'}</a>
 ```
 
 User `onClick` handlers now compose with the router's internal click handling.

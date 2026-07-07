@@ -138,6 +138,12 @@ code {
   border-left-color: var(--text);
 }
 
+/* the link whose navigation is in flight — attribute set by <Link> */
+.nav-link[data-pending] {
+  background: var(--surface-muted);
+  border-left-color: var(--text-dim);
+}
+
 .nav-link small {
   display: block;
   margin-top: 1px;
@@ -442,7 +448,7 @@ code {
   border-left-color: var(--text);
 }
 
-.item-link.requested {
+.item-link[data-pending] {
   background: var(--surface-muted);
 }
 

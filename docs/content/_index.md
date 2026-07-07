@@ -307,22 +307,34 @@ const linkProps = useLinkProps(to)
 <a {...linkProps} />
 ```
 
-Returns `{ href, aria-current, onClick, isCurrent, isPending }` so you can build your own anchor and get full router behavior without using `<Link />`. `isCurrent` and `isPending` are non-enumerable, so `<a {...useLinkProps(to)} />` stays safe, but you can still read them for active and per-link loading UI.
+Returns `{ href, aria-current, data-pending, onClick }` so you can build your own anchor and get full router behavior without using `<Link />`. Everything returned is spreadable — current and pending state ride along as attributes, so both can be styled in plain CSS:
+
+```css
+a[aria-current='page'] {
+  font-weight: 600;
+}
+a[data-pending] {
+  opacity: 0.6;
+}
+```
 
 Takes a `string` URL or an object — same fields as `useNavigate`, plus:
 
 - `current` override automatic current-page detection.
 
-For programmatic active-aware UI, read `isCurrent` from the returned props:
+### `useLinkState`
+
+```js
+const { isCurrent, isPending } = useLinkState(to)
+```
+
+Per-target link state for logic that cannot be expressed in CSS. Takes the same target as `useLinkProps`, but works for any navigable UI, not just anchors — tab strips, sidebar items, breadcrumb spinners:
 
 ```tsx
 const linkProps = useLinkProps('/settings')
+const { isCurrent } = useLinkState('/settings')
 
-return (
-  <a {...linkProps} className={cn('nav-link', linkProps.isCurrent && 'active')}>
-    Settings
-  </a>
-)
+return <a {...linkProps}>{isCurrent ? 'Settings' : 'Go to settings'}</a>
 ```
 
 ### `useMakeHref`

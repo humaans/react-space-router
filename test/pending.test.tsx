@@ -215,9 +215,7 @@ test.serial('usePendingRoute exposes the transformed in-flight route and clears 
     const props = useLinkProps('/items/beacon')
     return (
       <div>
-        <a href={props.href} onClick={props.onClick} data-pending={String(props.isPending)}>
-          Beacon
-        </a>
+        <a {...props}>Beacon</a>
         <span data-pending-id={pendingRoute?.params.id ?? 'none'} />
         <span data-pending-url={pendingRoute?.url ?? 'none'} />
       </div>
@@ -265,7 +263,7 @@ test.serial('usePendingRoute exposes the transformed in-flight route and clears 
     '/items/beacon?via=transform',
   )
   // per-link pending still matches the pre-transform href links are written in
-  t.is(window.document.querySelector('a')?.getAttribute('data-pending'), 'true')
+  t.is(window.document.querySelector('a')?.getAttribute('data-pending'), '')
 
   await act(async () => {
     resolveSlow!()

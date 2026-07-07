@@ -69,24 +69,22 @@ export default function ModeD({ id = ITEMS[0].id }: { id?: string }) {
 
       <div className='item-demo'>
         <aside className='item-list' aria-label='Items'>
-          {ITEMS.map((item) => {
-            const isCurrent = item.id === currentId
-            const isRequested = item.id === pendingItemId
-
-            return (
-              <Link
-                key={item.id}
-                href={{
-                  url: `/mode-d/${item.id}`,
-                  current: isCurrent,
-                }}
-                className={`item-link${isRequested ? ' requested' : ''}`}
-              >
-                <strong>{item.name}</strong>
-                <small>{item.meta}</small>
-              </Link>
-            )
-          })}
+          {ITEMS.map((item) => (
+            // The requested item lights up through the `data-pending`
+            // attribute `<Link>` sets while its navigation is in flight —
+            // styled in CSS via `.item-link[data-pending]`, no JS derivation.
+            <Link
+              key={item.id}
+              href={{
+                url: `/mode-d/${item.id}`,
+                current: item.id === currentId,
+              }}
+              className='item-link'
+            >
+              <strong>{item.name}</strong>
+              <small>{item.meta}</small>
+            </Link>
+          ))}
         </aside>
 
         <section className={`item-detail${isFading ? ' is-fading' : ''}`} aria-live='polite'>

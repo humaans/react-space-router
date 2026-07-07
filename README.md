@@ -90,7 +90,8 @@ function IssueSection() {
 - `useNavigate()` returns a programmatic navigation function accepting a string URL or Space Router target object.
 - `usePending()` returns React transition pending state for route navigation.
 - `usePendingRoute()` returns the route an in-flight navigation is heading to (post-transform), or `null` when idle. Covers clicks, programmatic navigation, and browser back/forward.
-- `useLinkProps(to)` returns anchor props plus non-enumerable `isCurrent` and `isPending`.
+- `useLinkProps(to)` returns spreadable anchor props: `{ href, aria-current, data-pending, onClick }`. Style current links with `a[aria-current='page']` and in-flight links with `a[data-pending]` in CSS.
+- `useLinkState(to)` returns `{ isCurrent, isPending }` for programmatic per-target state — tabs, sidebar items, breadcrumb spinners.
 - `useMakeHref()` returns the underlying `router.href` helper.
 - `useInternalRouterInstance()` exposes the underlying Space Router instance for rare escape-hatch use.
 

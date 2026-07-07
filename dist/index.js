@@ -399,11 +399,13 @@ export function useMakeHref() {
     const { href } = useInternalRouterInstance();
     return href;
 }
-export function useLinkProps(to) {
+// Shared target resolution for `useLinkProps` / `useLinkState`: normalize
+// the target, build the href, and derive current/pending state against the
+// router's committed and in-flight routes.
+function useLinkTarget(to) {
     const target = typeof to === 'string' ? { url: to } : to;
     const { router, pending } = useRouterCtx();
     const currRoute = useRoute();
-    const navigate = useNavigate();
     const makeHref = useMakeHref();
     const href = target.url ? target.url : makeHref(target, currRoute ?? undefined);
     // Hash-mode hrefs are written with a leading `#` (e.g. `#/users`), but
@@ -411,26 +413,39 @@ export function useLinkProps(to) {
     const hrefUrl = href.replace(/^#/, '');
     const currentPathname = currRoute?.pathname ?? router.match(router.getUrl())?.pathname;
     const isCurrent = typeof target.current === 'undefined' ? currentPathname === hrefUrl.split('?')[0] : target.current;
+    const isPending = pending != null && (pending.matchedUrl === hrefUrl || pending.route.url === hrefUrl);
+    return { target, href, isCurrent, isPending };
+}
+/**
+ * Anchor props for a router-driven `<a>`: `{ href, aria-current, data-pending,
+ * onClick }`. Everything returned is spreadable. Style current links with
+ * `a[aria-current='page']` and pending links with `a[data-pending]` in CSS;
+ * for programmatic reads use `useLinkState(to)`.
+ */
+export function useLinkProps(to) {
+    const { target, href, isCurrent, isPending } = useLinkTarget(to);
+    const navigate = useNavigate();
     function onClick(event) {
         if (shouldNavigate(event)) {
             event.preventDefault();
             navigate(target);
         }
     }
-    const result = {
+    return {
         href,
         'aria-current': isCurrent ? 'page' : undefined,
+        'data-pending': isPending ? '' : undefined,
         onClick,
     };
-    Object.defineProperty(result, 'isPending', {
-        enumerable: false,
-        value: pending != null && (pending.matchedUrl === hrefUrl || pending.route.url === hrefUrl),
-    });
-    Object.defineProperty(result, 'isCurrent', {
-        enumerable: false,
-        value: isCurrent,
-    });
-    return result;
+}
+/**
+ * Per-target link state without the anchor props: `{ isCurrent, isPending }`.
+ * Accepts the same target as `useLinkProps`, but works for any navigable UI,
+ * not just anchors — tab strips, sidebar items, breadcrumb spinners.
+ */
+export function useLinkState(to) {
+    const { isCurrent, isPending } = useLinkTarget(to);
+    return { isCurrent, isPending };
 }
 export function Link({ href: to, replace, current, onClick, children, ...anchorProps }) {
     const linkTo = typeof to === 'string' ? { url: to } : { ...to };
@@ -444,7 +459,7 @@ export function Link({ href: to, replace, current, onClick, children, ...anchorP
             onClick(event);
         linkProps.onClick(event);
     }
-    return (_jsx("a", { "aria-current": linkProps['aria-current'], ...anchorProps, href: linkProps.href, 
+    return (_jsx("a", { "aria-current": linkProps['aria-current'], "data-pending": linkProps['data-pending'], ...anchorProps, href: linkProps.href, 
         // eslint-disable-next-line react/jsx-handler-names
         onClick: handleClick, children: children }));
 }

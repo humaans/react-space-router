@@ -130,11 +130,26 @@ export declare function useMakeHref(): (to: import("space-router").To, curr?: Ro
 export interface LinkPropsResult {
     href: string;
     'aria-current': 'page' | undefined;
+    'data-pending': '' | undefined;
     onClick: (e: MouseEvent<HTMLAnchorElement>) => void;
+}
+export interface LinkState {
     isCurrent: boolean;
     isPending: boolean;
 }
+/**
+ * Anchor props for a router-driven `<a>`: `{ href, aria-current, data-pending,
+ * onClick }`. Everything returned is spreadable. Style current links with
+ * `a[aria-current='page']` and pending links with `a[data-pending]` in CSS;
+ * for programmatic reads use `useLinkState(to)`.
+ */
 export declare function useLinkProps(to: LinkTo): LinkPropsResult;
+/**
+ * Per-target link state without the anchor props: `{ isCurrent, isPending }`.
+ * Accepts the same target as `useLinkProps`, but works for any navigable UI,
+ * not just anchors — tab strips, sidebar items, breadcrumb spinners.
+ */
+export declare function useLinkState(to: LinkTo): LinkState;
 export interface LinkOwnProps {
     href?: LinkTo;
     replace?: boolean;
