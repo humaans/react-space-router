@@ -86,8 +86,33 @@ export function prepare(key: string, ms: number): PreparedHandle {
   }
 }
 
+/** Fire-and-forget warm — the speculative twin of prepare(). Idempotent
+ *  (load() is cached), so it's safe to call on every hover. A real data layer
+ *  (e.g. figbird) would also honour a staleTime here. */
+export function prefetch(key: string, ms: number): void {
+  load(key, ms)
+}
+
 /** "Slow chunk" simulator for lazy resolvers — wraps a real dynamic import in
  *  an artificial delay so we can demonstrate code-load behavior on a fast LAN. */
 export function slowImport<T>(ms: number, factory: () => Promise<T>): () => Promise<T> {
   return () => new Promise((resolve) => setTimeout(resolve, ms)).then(factory)
+}
+
+// A demo query definition: turns args into a cache key + latency. This is the
+// `def` half of the router's `[def, args]` descriptors — the stand-in for
+// figbird's `defineQuery`.
+export type QueryDef<A = unknown> = (args: A) => { key: string; latency: number }
+
+// The `<Router data>` adapter: bridges route `queries` to this data layer.
+// figbird's kit exposes an object of exactly this shape.
+export const data = {
+  prepare(def: QueryDef, args: unknown) {
+    const { key, latency } = def(args)
+    return prepare(key, latency)
+  },
+  prefetch(def: QueryDef, args: unknown) {
+    const { key, latency } = def(args)
+    prefetch(key, latency)
+  },
 }

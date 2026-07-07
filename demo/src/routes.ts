@@ -1,4 +1,4 @@
-import { prepare, slowImport } from './data'
+import { prepare, slowImport, type QueryDef } from './data'
 
 // Latency budgets we'll reuse across routes. Tweak here to see the modes
 // react. Reload the page to clear cache and re-feel cold loads.
@@ -8,6 +8,11 @@ export const LATENCIES = {
   detail: 1100,
   slow: 3000,
 }
+
+// A named query for a Mode D item detail. Declared once; the router runs it
+// through the `<Router data>` adapter as prepare on navigation and as
+// prefetch on link hover.
+export const itemDetail: QueryDef<{ id: string }> = ({ id }) => ({ key: `item-${id}`, latency: LATENCIES.detail })
 
 // Slow code chunk delay — meant to feel like a cold lazy import on a real
 // network. Keeps the page held during chunk download regardless of mode.
@@ -57,7 +62,12 @@ export const routes = [
     // The router injects matching path params as props on the page
     // component. ModeD's signature declares `{ id?: string }`, so it
     // receives `id` for free — no `useRoute()` dance needed.
-    prepare: ({ params }) => [prepare(`item-${params.id}`, LATENCIES.detail)],
+    //
+    // `queries` declares the data need once; the `<Router data>` adapter runs
+    // it as prepare on navigation and as prefetch when an item link is
+    // hovered (see ModeD's <Link prefetch>). Compare Modes A–C, which call
+    // the lower-level `prepare` field directly.
+    queries: ({ params }) => [[itemDetail, { id: params.id }]],
     scrollGroup: 'mode-d',
   },
 ]

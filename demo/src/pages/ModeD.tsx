@@ -64,21 +64,25 @@ export default function ModeD({ id = ITEMS[0].id }: { id?: string }) {
       <div className='recipe'>
         Recipe: derive the requested item from <code>usePendingRoute()</code>. The detail read has no inner{' '}
         <code>&lt;Suspense&gt;</code>, so the router-level transition holds the old committed detail until the new one
-        can render.
+        can render. Each item link is <code>prefetch</code>-on-hover: hover one before clicking and its detail is
+        already warm, so the swap is instant with no fade.
       </div>
 
       <div className='item-demo'>
         <aside className='item-list' aria-label='Items'>
           {ITEMS.map((item) => (
-            // The requested item lights up through the `data-pending`
-            // attribute `<Link>` sets while its navigation is in flight —
-            // styled in CSS via `.item-link[data-pending]`, no JS derivation.
+            // `prefetch` warms this item's detail on hover, through the same
+            // `queries` declaration the route prepares on navigation. The
+            // requested item also lights up via the `data-pending` attribute
+            // <Link> sets while its navigation is in flight — styled in CSS
+            // as `.item-link[data-pending]`, no JS derivation.
             <Link
               key={item.id}
               href={{
                 url: `/mode-d/${item.id}`,
                 current: item.id === currentId,
               }}
+              prefetch
               className='item-link'
             >
               <strong>{item.name}</strong>

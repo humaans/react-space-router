@@ -18,6 +18,38 @@ export interface PreparedHandle {
     release(): void;
 }
 export type RoutePrepare = (ctx: RoutePrepareContext) => readonly PreparedHandle[] | PreparedHandle[] | void;
+/**
+ * Speculative cache warming, the fire-and-forget sibling of `prepare`. Called
+ * on link hover/visibility (see `<Link prefetch>`) and via `usePrefetch()`.
+ * May be called repeatedly at any frequency — the data layer owns freshness
+ * and lifecycle. The return value is ignored, so `(ctx) => [prefetch(a),
+ * prefetch(b)]` reads the same as its `prepare` twin.
+ */
+export type RoutePrefetch = (ctx: RoutePrepareContext) => unknown;
+/**
+ * A query to warm: a `[definition, args]` pair. Opaque to the router — it
+ * flows straight through the `<Router data>` adapter. `args` is optional for
+ * arg-less queries.
+ */
+export type QueryDescriptor = readonly [def: unknown, args?: unknown];
+/**
+ * Declares a route segment's data needs *once*, independent of lifecycle. The
+ * router runs each descriptor through the `<Router data>` adapter — `prepare`
+ * on navigation, `prefetch` on speculation — so a single declaration drives
+ * both. Requires a `data` adapter; a `queries` route without one throws.
+ */
+export type RouteQueries = (ctx: RoutePrepareContext) => readonly QueryDescriptor[];
+/**
+ * Bridges route `queries` to a data layer, co-designed with figbird's kit the
+ * same way `PreparedHandle` was: `prepare(def, args)` returns a pinnable handle
+ * (caller-managed lease), `prefetch(def, args)` warms speculatively and its
+ * return is ignored. figbird's `prepare`/`prefetch` satisfy this shape as-is —
+ * `<Router data={{ prepare, prefetch }} />`.
+ */
+export interface DataAdapter {
+    prepare(def: unknown, args: unknown): PreparedHandle;
+    prefetch(def: unknown, args: unknown): unknown;
+}
 export type ResolverModule = {
     default: ComponentType<any>;
 };
@@ -29,14 +61,19 @@ export interface RouteData {
     } | null;
     resolver?: RouteResolver;
     prepare?: RoutePrepare;
+    prefetch?: RoutePrefetch;
+    queries?: RouteQueries;
+    prefetchable?: boolean;
     props?: Record<string, unknown>;
     scrollGroup?: string;
     routes?: RouteData[];
     [extra: string]: unknown;
 }
 export type To = string | NavigateTarget;
+export type PrefetchMode = boolean | 'hover' | 'visible';
 type LinkTarget = NavigateTarget & {
     current?: boolean;
+    prefetch?: PrefetchMode;
 };
 export type LinkTo = string | LinkTarget;
 interface PendingNavigation {
@@ -50,6 +87,7 @@ interface RouterContextValue {
     isPending: boolean;
     pending: PendingNavigation | null;
     qs: Qs | undefined;
+    prefetchLinks: PrefetchMode | undefined;
 }
 export declare const RouterContext: import("react").Context<RouterContextValue | undefined>;
 export declare function useSpaceRouter(): SpaceRouter<RouteData>;
@@ -93,6 +131,21 @@ export interface RouterProps {
     sync?: boolean;
     transformRoute?: TransformRoute;
     /**
+     * Data adapter bridging route `queries` to a data layer. `prepare(def,
+     * args)` returns a pinnable `PreparedHandle`, `prefetch(def, args)` warms
+     * speculatively. figbird's kit satisfies this directly: `data={{ prepare,
+     * prefetch }}`. Should be referentially stable (a module-level object or
+     * the figbird instance). Required only if any route uses `queries`.
+     */
+    data?: DataAdapter;
+    /**
+     * Default prefetch trigger for every link: `true` / `'hover'` prefetches on
+     * hover, focus, and touchstart; `'visible'` when the link scrolls into
+     * view. Individual links override with their own `prefetch`, including
+     * `prefetch={false}` to opt out. Off by default.
+     */
+    prefetchLinks?: PrefetchMode;
+    /**
      * How long to hold the previous route on screen before `<DelayedSuspense>`
      * boundaries fall back to their fallback content. Default is `1000` ms.
      * No effect on plain `<Suspense>` boundaries — those always show their
@@ -101,7 +154,7 @@ export interface RouterProps {
     pendingDelayMs?: number;
     children?: ReactNode;
 }
-export declare function Router({ mode, qs, sync, transformRoute, pendingDelayMs, children, }: RouterProps): import("react").JSX.Element;
+export declare function Router({ mode, qs, sync, transformRoute, data, prefetchLinks, pendingDelayMs, children, }: RouterProps): import("react").JSX.Element;
 /**
  * A `<Suspense>` boundary whose fallback is *delayed* during an in-flight
  * router navigation: until the router has been pending for `pendingDelayMs`
@@ -127,11 +180,24 @@ export interface RoutesProps {
 }
 export declare function Routes({ routes, disableScrollToTop }: RoutesProps): import("react").JSX.Element | null;
 export declare function useMakeHref(): (to: import("space-router").To, curr?: Route<RouteData> | undefined) => string;
+/**
+ * Returns a function that warms a navigation target without navigating:
+ * matches the URL, applies `transformRoute`, preloads matched `resolver`
+ * chunks, and calls each matched segment's `prefetch(ctx)`. Fire-and-forget
+ * and safe to call repeatedly — the data layer owns freshness. `<Link
+ * prefetch>` uses this internally; call it directly for custom triggers
+ * (form submit, viewport logic, "the user will need this next").
+ */
+export declare function usePrefetch(): (to: LinkTo) => void;
 export interface LinkPropsResult {
     href: string;
     'aria-current': 'page' | undefined;
     'data-pending': '' | undefined;
     onClick: (e: MouseEvent<HTMLAnchorElement>) => void;
+    onMouseEnter?: () => void;
+    onFocus?: () => void;
+    onTouchStart?: () => void;
+    ref?: (el: HTMLAnchorElement | null) => void | (() => void);
 }
 export interface LinkState {
     isCurrent: boolean;
@@ -154,10 +220,11 @@ export interface LinkOwnProps {
     href?: LinkTo;
     replace?: boolean;
     current?: boolean;
+    prefetch?: PrefetchMode;
     children?: ReactNode;
 }
 export type LinkProps = LinkOwnProps & Omit<AnchorHTMLAttributes<HTMLAnchorElement>, keyof LinkOwnProps>;
-export declare function Link({ href: to, replace, current, onClick, children, ...anchorProps }: LinkProps): import("react").JSX.Element;
+export declare function Link({ href: to, replace, current, prefetch, onClick, onMouseEnter, onFocus, onTouchStart, children, ...anchorProps }: LinkProps): import("react").JSX.Element;
 export interface NavigateProps {
     to: To;
 }

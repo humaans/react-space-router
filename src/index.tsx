@@ -51,6 +51,42 @@ export interface PreparedHandle {
 
 export type RoutePrepare = (ctx: RoutePrepareContext) => readonly PreparedHandle[] | PreparedHandle[] | void
 
+/**
+ * Speculative cache warming, the fire-and-forget sibling of `prepare`. Called
+ * on link hover/visibility (see `<Link prefetch>`) and via `usePrefetch()`.
+ * May be called repeatedly at any frequency — the data layer owns freshness
+ * and lifecycle. The return value is ignored, so `(ctx) => [prefetch(a),
+ * prefetch(b)]` reads the same as its `prepare` twin.
+ */
+export type RoutePrefetch = (ctx: RoutePrepareContext) => unknown
+
+/**
+ * A query to warm: a `[definition, args]` pair. Opaque to the router — it
+ * flows straight through the `<Router data>` adapter. `args` is optional for
+ * arg-less queries.
+ */
+export type QueryDescriptor = readonly [def: unknown, args?: unknown]
+
+/**
+ * Declares a route segment's data needs *once*, independent of lifecycle. The
+ * router runs each descriptor through the `<Router data>` adapter — `prepare`
+ * on navigation, `prefetch` on speculation — so a single declaration drives
+ * both. Requires a `data` adapter; a `queries` route without one throws.
+ */
+export type RouteQueries = (ctx: RoutePrepareContext) => readonly QueryDescriptor[]
+
+/**
+ * Bridges route `queries` to a data layer, co-designed with figbird's kit the
+ * same way `PreparedHandle` was: `prepare(def, args)` returns a pinnable handle
+ * (caller-managed lease), `prefetch(def, args)` warms speculatively and its
+ * return is ignored. figbird's `prepare`/`prefetch` satisfy this shape as-is —
+ * `<Router data={{ prepare, prefetch }} />`.
+ */
+export interface DataAdapter {
+  prepare(def: unknown, args: unknown): PreparedHandle
+  prefetch(def: unknown, args: unknown): unknown
+}
+
 export type ResolverModule = { default: ComponentType<any> }
 
 export type RouteResolver = () => Promise<ResolverModule>
@@ -60,6 +96,12 @@ export interface RouteData {
   component?: ComponentType<any> | { default: ComponentType<any> } | null
   resolver?: RouteResolver
   prepare?: RoutePrepare
+  prefetch?: RoutePrefetch
+  queries?: RouteQueries
+  // Set `false` to exclude a segment from speculative prefetch (no chunk
+  // preload, no adapter `prefetch`) while still preparing it on real
+  // navigation. A route veto — beats an explicit `<Link prefetch>`.
+  prefetchable?: boolean
   props?: Record<string, unknown>
   scrollGroup?: string
   routes?: RouteData[]
@@ -103,9 +145,22 @@ function getResolverComponent(resolver: AnyResolver): ComponentType<any> {
 // Navigation target, as accepted by `navigate()` and `<Navigate>`.
 export type To = string | NavigateTarget
 
-// Link target: a navigation target plus the link-only `current` override
-// for `aria-current` handling. Accepted by `useLinkProps()` and `<Link>`.
-type LinkTarget = NavigateTarget & { current?: boolean }
+// Prefetch trigger for links: `true` is shorthand for `'hover'` (hover,
+// focus, and touchstart), `'visible'` prefetches when the link scrolls into
+// view. The trigger decides *when* to prefetch; the matched route's
+// `prefetch`/`resolver` fields decide *what* — a link to a route that
+// declares neither is a no-op.
+export type PrefetchMode = boolean | 'hover' | 'visible'
+
+function resolvePrefetchMode(value: PrefetchMode | undefined): 'hover' | 'visible' | null {
+  if (value === true) return 'hover'
+  if (value === 'hover' || value === 'visible') return value
+  return null
+}
+
+// Link target: a navigation target plus the link-only `current` and
+// `prefetch` overrides. Accepted by `useLinkProps()` and `<Link>`.
+type LinkTarget = NavigateTarget & { current?: boolean; prefetch?: PrefetchMode }
 export type LinkTo = string | LinkTarget
 
 // The in-flight navigation, set at commit and cleared when the transition
@@ -124,6 +179,7 @@ interface RouterContextValue {
   isPending: boolean
   pending: PendingNavigation | null
   qs: Qs | undefined
+  prefetchLinks: PrefetchMode | undefined
 }
 
 export const RouterContext = createContext<RouterContextValue | undefined>(undefined)
@@ -135,11 +191,13 @@ const RouteContext = createContext<Route<RouteData> | null | undefined>(undefine
 interface RouterInternals {
   transformRoute: (route: Route<RouteData>) => Route<RouteData>
   commit: (route: Route<RouteData>, matched?: Route<RouteData>) => void
+  data: DataAdapter | undefined
 }
 
 const RouterInternalsContext = createContext<RouterInternals>({
   transformRoute: (route) => route,
   commit: () => {},
+  data: undefined,
 })
 
 // Internal context for `<DelayedSuspense>`. Set by `<Router>` based on
@@ -257,6 +315,21 @@ export interface RouterProps {
   sync?: boolean
   transformRoute?: TransformRoute
   /**
+   * Data adapter bridging route `queries` to a data layer. `prepare(def,
+   * args)` returns a pinnable `PreparedHandle`, `prefetch(def, args)` warms
+   * speculatively. figbird's kit satisfies this directly: `data={{ prepare,
+   * prefetch }}`. Should be referentially stable (a module-level object or
+   * the figbird instance). Required only if any route uses `queries`.
+   */
+  data?: DataAdapter
+  /**
+   * Default prefetch trigger for every link: `true` / `'hover'` prefetches on
+   * hover, focus, and touchstart; `'visible'` when the link scrolls into
+   * view. Individual links override with their own `prefetch`, including
+   * `prefetch={false}` to opt out. Off by default.
+   */
+  prefetchLinks?: PrefetchMode
+  /**
    * How long to hold the previous route on screen before `<DelayedSuspense>`
    * boundaries fall back to their fallback content. Default is `1000` ms.
    * No effect on plain `<Suspense>` boundaries — those always show their
@@ -273,6 +346,8 @@ export function Router({
   qs,
   sync,
   transformRoute,
+  data,
+  prefetchLinks,
   pendingDelayMs = DEFAULT_PENDING_DELAY_MS,
   children,
 }: RouterProps) {
@@ -338,13 +413,14 @@ export function Router({
       isPending,
       pending,
       qs,
+      prefetchLinks,
     }),
-    [router, currRoute, isPending, pending, qs],
+    [router, currRoute, isPending, pending, qs, prefetchLinks],
   )
 
   const internals = useMemo<RouterInternals>(
-    () => ({ transformRoute: applyTransform, commit }),
-    [applyTransform, commit],
+    () => ({ transformRoute: applyTransform, commit, data }),
+    [applyTransform, commit, data],
   )
 
   useEffect(() => {
@@ -417,13 +493,21 @@ interface PreparedRoute {
   handles: PreparedHandle[]
 }
 
-function prepareRoute(route: Route<RouteData>): PreparedHandle[] {
-  const ctx: RoutePrepareContext = {
-    pathname: route.pathname,
-    url: route.url,
-    params: route.params,
-    query: route.query,
+function routePrepareContext(route: Route<RouteData>): RoutePrepareContext {
+  return { pathname: route.pathname, url: route.url, params: route.params, query: route.query }
+}
+
+function requireAdapter(data: DataAdapter | undefined): DataAdapter {
+  if (!data) {
+    throw new Error(
+      'A route declares `queries` but <Router> has no `data` adapter. Pass data={{ prepare, prefetch }} (e.g. from figbird).',
+    )
   }
+  return data
+}
+
+function prepareRoute(route: Route<RouteData>, data: DataAdapter | undefined): PreparedHandle[] {
+  const ctx = routePrepareContext(route)
   const handles: PreparedHandle[] = []
 
   for (const segment of route.data) {
@@ -434,9 +518,35 @@ function prepareRoute(route: Route<RouteData>): PreparedHandle[] {
         handles.push(...result)
       }
     }
+    if (segment.queries) {
+      const adapter = requireAdapter(data)
+      for (const [def, args] of segment.queries(ctx)) {
+        handles.push(adapter.prepare(def, args))
+      }
+    }
   }
 
   return handles
+}
+
+// Speculative twin of prepareRoute: same traversal, no lifecycle. `prefetch`
+// return values are ignored by contract, adapter `prefetch` warms `queries`,
+// and resolver chunk preloads are deduped by the resolver cache. A segment
+// with `prefetchable: false` is skipped entirely — the route's veto over any
+// speculation, however the trigger was set.
+function prefetchRoute(route: Route<RouteData>, data: DataAdapter | undefined) {
+  const ctx = routePrepareContext(route)
+  for (const segment of route.data) {
+    if (segment.prefetchable === false) continue
+    if (segment.resolver) preloadResolver(segment.resolver)
+    segment.prefetch?.(ctx)
+    if (segment.queries) {
+      const adapter = requireAdapter(data)
+      for (const [def, args] of segment.queries(ctx)) {
+        adapter.prefetch(def, args)
+      }
+    }
+  }
 }
 
 function releaseHandles(handles: PreparedHandle[]) {
@@ -451,7 +561,7 @@ function releaseHandles(handles: PreparedHandle[]) {
 
 export function Routes({ routes, disableScrollToTop }: RoutesProps) {
   const { router, route, qs } = useRouterCtx()
-  const { transformRoute, commit } = useContext(RouterInternalsContext)
+  const { transformRoute, commit, data } = useContext(RouterInternalsContext)
 
   // Pinned prepare handles for the currently committed navigation. Released
   // when a new navigation commits or when <Routes> unmounts.
@@ -489,7 +599,7 @@ export function Routes({ routes, disableScrollToTop }: RoutesProps) {
   // effect runs (e.g. renderToString), the handles are never released.
   const initialPrepared = useRef<PreparedRoute | null>(null)
   if (initialRoute && !committed.current && initialPrepared.current?.route.url !== initialRoute.route.url) {
-    initialPrepared.current = { ...initialRoute, handles: prepareRoute(initialRoute.route) }
+    initialPrepared.current = { ...initialRoute, handles: prepareRoute(initialRoute.route, data) }
   }
 
   const activeRoute = route ?? committed.current?.route ?? initialRoute?.route ?? null
@@ -506,12 +616,12 @@ export function Routes({ routes, disableScrollToTop }: RoutesProps) {
     const prepared =
       initialPrepared.current?.route.url === initialRoute.route.url
         ? initialPrepared.current
-        : { ...initialRoute, handles: prepareRoute(initialRoute.route) }
+        : { ...initialRoute, handles: prepareRoute(initialRoute.route, data) }
     initialPrepared.current = null
     committed.current = prepared
     // No URL sync here — the router's initial listen emit re-commits this
     // route through commit(), which owns the sync.
-  }, [initialRoute, route])
+  }, [initialRoute, route, data])
 
   useScrollToTop(activeRoute, disableScrollToTop)
 
@@ -522,10 +632,10 @@ export function Routes({ routes, disableScrollToTop }: RoutesProps) {
   const beginNavigation = useCallback(
     (transformed: Route<RouteData>, matched: Route<RouteData>) => {
       if (pending.current) releaseHandles(pending.current.handles)
-      pending.current = { route: transformed, matched, handles: prepareRoute(transformed) }
+      pending.current = { route: transformed, matched, handles: prepareRoute(transformed, data) }
       commit(transformed, matched)
     },
-    [commit],
+    [commit, data],
   )
 
   useEffect(() => {
@@ -665,11 +775,40 @@ export function useMakeHref() {
   return href
 }
 
+/**
+ * Returns a function that warms a navigation target without navigating:
+ * matches the URL, applies `transformRoute`, preloads matched `resolver`
+ * chunks, and calls each matched segment's `prefetch(ctx)`. Fire-and-forget
+ * and safe to call repeatedly — the data layer owns freshness. `<Link
+ * prefetch>` uses this internally; call it directly for custom triggers
+ * (form submit, viewport logic, "the user will need this next").
+ */
+export function usePrefetch(): (to: LinkTo) => void {
+  const { router } = useRouterCtx()
+  const route = useRoute()
+  const { transformRoute, data } = useContext(RouterInternalsContext)
+
+  return useCallback(
+    (to: LinkTo) => {
+      const target: LinkTarget = typeof to === 'string' ? { url: to } : to
+      const href = target.url ? target.url : router.href(target, route ?? undefined)
+      const matched = router.match(href.replace(/^#/, ''))
+      if (matched) prefetchRoute(transformRoute(matched), data)
+    },
+    [router, route, transformRoute, data],
+  )
+}
+
 export interface LinkPropsResult {
   href: string
   'aria-current': 'page' | undefined
   'data-pending': '' | undefined
   onClick: (e: MouseEvent<HTMLAnchorElement>) => void
+  // Present only when a prefetch trigger is active for this link.
+  onMouseEnter?: () => void
+  onFocus?: () => void
+  onTouchStart?: () => void
+  ref?: (el: HTMLAnchorElement | null) => void | (() => void)
 }
 
 export interface LinkState {
@@ -706,7 +845,27 @@ function useLinkTarget(to: LinkTo): LinkState & { target: LinkTarget; href: stri
  */
 export function useLinkProps(to: LinkTo): LinkPropsResult {
   const { target, href, isCurrent, isPending } = useLinkTarget(to)
+  const { prefetchLinks } = useRouterCtx()
   const navigate = useNavigate()
+  const prefetch = usePrefetch()
+
+  // Link-level `prefetch` overrides the Router-level `prefetchLinks` default.
+  const prefetchMode = resolvePrefetchMode(target.prefetch ?? prefetchLinks)
+
+  const observeVisible = useCallback(
+    (el: HTMLAnchorElement | null) => {
+      if (!el || typeof IntersectionObserver === 'undefined') return
+      const observer = new IntersectionObserver((entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          observer.disconnect()
+          prefetch(href)
+        }
+      })
+      observer.observe(el)
+      return () => observer.disconnect()
+    },
+    [prefetch, href],
+  )
 
   function onClick(event: MouseEvent<HTMLAnchorElement>) {
     if (shouldNavigate(event)) {
@@ -715,12 +874,23 @@ export function useLinkProps(to: LinkTo): LinkPropsResult {
     }
   }
 
-  return {
+  const result: LinkPropsResult = {
     href,
     'aria-current': isCurrent ? 'page' : undefined,
     'data-pending': isPending ? '' : undefined,
     onClick,
   }
+
+  if (prefetchMode === 'hover') {
+    const trigger = () => prefetch(href)
+    result.onMouseEnter = trigger
+    result.onFocus = trigger
+    result.onTouchStart = trigger
+  } else if (prefetchMode === 'visible') {
+    result.ref = observeVisible
+  }
+
+  return result
 }
 
 /**
@@ -737,15 +907,42 @@ export interface LinkOwnProps {
   href?: LinkTo
   replace?: boolean
   current?: boolean
+  prefetch?: PrefetchMode
   children?: ReactNode
 }
 
 export type LinkProps = LinkOwnProps & Omit<AnchorHTMLAttributes<HTMLAnchorElement>, keyof LinkOwnProps>
 
-export function Link({ href: to, replace, current, onClick, children, ...anchorProps }: LinkProps) {
+// The user handler runs first; the router's prefetch trigger follows. There
+// is no preventDefault-style opt-out here — prefetching is speculative and
+// harmless, unlike onClick's navigation.
+function composeTrigger<E>(
+  user: ((event: E) => void) | undefined,
+  trigger: (() => void) | undefined,
+): ((event: E) => void) | undefined {
+  if (!trigger) return user
+  return (event: E) => {
+    user?.(event)
+    trigger()
+  }
+}
+
+export function Link({
+  href: to,
+  replace,
+  current,
+  prefetch,
+  onClick,
+  onMouseEnter,
+  onFocus,
+  onTouchStart,
+  children,
+  ...anchorProps
+}: LinkProps) {
   const linkTo: LinkTarget = typeof to === 'string' ? { url: to } : { ...to }
   if (replace !== undefined) linkTo.replace = replace
   if (current !== undefined) linkTo.current = current
+  if (prefetch !== undefined) linkTo.prefetch = prefetch
   const linkProps = useLinkProps(linkTo)
 
   function handleClick(event: MouseEvent<HTMLAnchorElement>) {
@@ -758,9 +955,13 @@ export function Link({ href: to, replace, current, onClick, children, ...anchorP
       aria-current={linkProps['aria-current']}
       data-pending={linkProps['data-pending']}
       {...anchorProps}
+      ref={linkProps.ref}
       href={linkProps.href}
       // eslint-disable-next-line react/jsx-handler-names
       onClick={handleClick}
+      onMouseEnter={composeTrigger(onMouseEnter, linkProps.onMouseEnter)}
+      onFocus={composeTrigger(onFocus, linkProps.onFocus)}
+      onTouchStart={composeTrigger(onTouchStart, linkProps.onTouchStart)}
     >
       {children}
     </a>

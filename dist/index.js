@@ -24,11 +24,19 @@ function getResolverComponent(resolver) {
     }
     return component;
 }
+function resolvePrefetchMode(value) {
+    if (value === true)
+        return 'hover';
+    if (value === 'hover' || value === 'visible')
+        return value;
+    return null;
+}
 export const RouterContext = createContext(undefined);
 const RouteContext = createContext(undefined);
 const RouterInternalsContext = createContext({
     transformRoute: (route) => route,
     commit: () => { },
+    data: undefined,
 });
 // Internal context for `<DelayedSuspense>`. Set by `<Router>` based on
 // `usePending()` + a configurable threshold. `holding` is true only during
@@ -104,7 +112,7 @@ function makeRouter(routerOpts) {
     return { router, routerOpts };
 }
 const DEFAULT_PENDING_DELAY_MS = 1000;
-export function Router({ mode, qs, sync, transformRoute, pendingDelayMs = DEFAULT_PENDING_DELAY_MS, children, }) {
+export function Router({ mode, qs, sync, transformRoute, data, prefetchLinks, pendingDelayMs = DEFAULT_PENDING_DELAY_MS, children, }) {
     const [{ router, routerOpts }, setRouter] = useState(() => makeRouter({ mode, qs, sync }));
     const [currRoute, setCurrRoute] = useState(null);
     const [pending, setPending] = useState(null);
@@ -156,8 +164,9 @@ export function Router({ mode, qs, sync, transformRoute, pendingDelayMs = DEFAUL
         isPending,
         pending,
         qs,
-    }), [router, currRoute, isPending, pending, qs]);
-    const internals = useMemo(() => ({ transformRoute: applyTransform, commit }), [applyTransform, commit]);
+        prefetchLinks,
+    }), [router, currRoute, isPending, pending, qs, prefetchLinks]);
+    const internals = useMemo(() => ({ transformRoute: applyTransform, commit, data }), [applyTransform, commit, data]);
     useEffect(() => {
         if (routerOpts.mode !== mode || routerOpts.qs !== qs || routerOpts.sync !== sync) {
             setRouter(makeRouter({ mode, qs, sync }));
@@ -179,13 +188,17 @@ const NEVER_RESOLVES = new Promise(() => { });
 function DelayedSuspenseHold() {
     throw NEVER_RESOLVES;
 }
-function prepareRoute(route) {
-    const ctx = {
-        pathname: route.pathname,
-        url: route.url,
-        params: route.params,
-        query: route.query,
-    };
+function routePrepareContext(route) {
+    return { pathname: route.pathname, url: route.url, params: route.params, query: route.query };
+}
+function requireAdapter(data) {
+    if (!data) {
+        throw new Error('A route declares `queries` but <Router> has no `data` adapter. Pass data={{ prepare, prefetch }} (e.g. from figbird).');
+    }
+    return data;
+}
+function prepareRoute(route, data) {
+    const ctx = routePrepareContext(route);
     const handles = [];
     for (const segment of route.data) {
         if (segment.resolver)
@@ -196,8 +209,35 @@ function prepareRoute(route) {
                 handles.push(...result);
             }
         }
+        if (segment.queries) {
+            const adapter = requireAdapter(data);
+            for (const [def, args] of segment.queries(ctx)) {
+                handles.push(adapter.prepare(def, args));
+            }
+        }
     }
     return handles;
+}
+// Speculative twin of prepareRoute: same traversal, no lifecycle. `prefetch`
+// return values are ignored by contract, adapter `prefetch` warms `queries`,
+// and resolver chunk preloads are deduped by the resolver cache. A segment
+// with `prefetchable: false` is skipped entirely — the route's veto over any
+// speculation, however the trigger was set.
+function prefetchRoute(route, data) {
+    const ctx = routePrepareContext(route);
+    for (const segment of route.data) {
+        if (segment.prefetchable === false)
+            continue;
+        if (segment.resolver)
+            preloadResolver(segment.resolver);
+        segment.prefetch?.(ctx);
+        if (segment.queries) {
+            const adapter = requireAdapter(data);
+            for (const [def, args] of segment.queries(ctx)) {
+                adapter.prefetch(def, args);
+            }
+        }
+    }
 }
 function releaseHandles(handles) {
     for (const handle of handles) {
@@ -211,7 +251,7 @@ function releaseHandles(handles) {
 }
 export function Routes({ routes, disableScrollToTop }) {
     const { router, route, qs } = useRouterCtx();
-    const { transformRoute, commit } = useContext(RouterInternalsContext);
+    const { transformRoute, commit, data } = useContext(RouterInternalsContext);
     // Pinned prepare handles for the currently committed navigation. Released
     // when a new navigation commits or when <Routes> unmounts.
     const committed = useRef(null);
@@ -246,7 +286,7 @@ export function Routes({ routes, disableScrollToTop }) {
     // effect runs (e.g. renderToString), the handles are never released.
     const initialPrepared = useRef(null);
     if (initialRoute && !committed.current && initialPrepared.current?.route.url !== initialRoute.route.url) {
-        initialPrepared.current = { ...initialRoute, handles: prepareRoute(initialRoute.route) };
+        initialPrepared.current = { ...initialRoute, handles: prepareRoute(initialRoute.route, data) };
     }
     const activeRoute = route ?? committed.current?.route ?? initialRoute?.route ?? null;
     useEffect(() => {
@@ -260,12 +300,12 @@ export function Routes({ routes, disableScrollToTop }) {
         // re-prepared because the original handles were already released.
         const prepared = initialPrepared.current?.route.url === initialRoute.route.url
             ? initialPrepared.current
-            : { ...initialRoute, handles: prepareRoute(initialRoute.route) };
+            : { ...initialRoute, handles: prepareRoute(initialRoute.route, data) };
         initialPrepared.current = null;
         committed.current = prepared;
         // No URL sync here — the router's initial listen emit re-commits this
         // route through commit(), which owns the sync.
-    }, [initialRoute, route]);
+    }, [initialRoute, route, data]);
     useScrollToTop(activeRoute, disableScrollToTop);
     // Begin a fresh navigation: release the superseded pending prepare (if
     // any), prepare the new route, take ownership of the pending slot, and
@@ -274,9 +314,9 @@ export function Routes({ routes, disableScrollToTop }) {
     const beginNavigation = useCallback((transformed, matched) => {
         if (pending.current)
             releaseHandles(pending.current.handles);
-        pending.current = { route: transformed, matched, handles: prepareRoute(transformed) };
+        pending.current = { route: transformed, matched, handles: prepareRoute(transformed, data) };
         commit(transformed, matched);
-    }, [commit]);
+    }, [commit, data]);
     useEffect(() => {
         const transition = (next) => {
             // Transform fresh on every navigation — the transform's output can
@@ -399,6 +439,26 @@ export function useMakeHref() {
     const { href } = useSpaceRouter();
     return href;
 }
+/**
+ * Returns a function that warms a navigation target without navigating:
+ * matches the URL, applies `transformRoute`, preloads matched `resolver`
+ * chunks, and calls each matched segment's `prefetch(ctx)`. Fire-and-forget
+ * and safe to call repeatedly — the data layer owns freshness. `<Link
+ * prefetch>` uses this internally; call it directly for custom triggers
+ * (form submit, viewport logic, "the user will need this next").
+ */
+export function usePrefetch() {
+    const { router } = useRouterCtx();
+    const route = useRoute();
+    const { transformRoute, data } = useContext(RouterInternalsContext);
+    return useCallback((to) => {
+        const target = typeof to === 'string' ? { url: to } : to;
+        const href = target.url ? target.url : router.href(target, route ?? undefined);
+        const matched = router.match(href.replace(/^#/, ''));
+        if (matched)
+            prefetchRoute(transformRoute(matched), data);
+    }, [router, route, transformRoute, data]);
+}
 // Shared target resolution for `useLinkProps` / `useLinkState`: normalize
 // the target, build the href, and derive current/pending state against the
 // router's committed and in-flight routes.
@@ -424,19 +484,45 @@ function useLinkTarget(to) {
  */
 export function useLinkProps(to) {
     const { target, href, isCurrent, isPending } = useLinkTarget(to);
+    const { prefetchLinks } = useRouterCtx();
     const navigate = useNavigate();
+    const prefetch = usePrefetch();
+    // Link-level `prefetch` overrides the Router-level `prefetchLinks` default.
+    const prefetchMode = resolvePrefetchMode(target.prefetch ?? prefetchLinks);
+    const observeVisible = useCallback((el) => {
+        if (!el || typeof IntersectionObserver === 'undefined')
+            return;
+        const observer = new IntersectionObserver((entries) => {
+            if (entries.some((entry) => entry.isIntersecting)) {
+                observer.disconnect();
+                prefetch(href);
+            }
+        });
+        observer.observe(el);
+        return () => observer.disconnect();
+    }, [prefetch, href]);
     function onClick(event) {
         if (shouldNavigate(event)) {
             event.preventDefault();
             navigate(target);
         }
     }
-    return {
+    const result = {
         href,
         'aria-current': isCurrent ? 'page' : undefined,
         'data-pending': isPending ? '' : undefined,
         onClick,
     };
+    if (prefetchMode === 'hover') {
+        const trigger = () => prefetch(href);
+        result.onMouseEnter = trigger;
+        result.onFocus = trigger;
+        result.onTouchStart = trigger;
+    }
+    else if (prefetchMode === 'visible') {
+        result.ref = observeVisible;
+    }
+    return result;
 }
 /**
  * Per-target link state without the anchor props: `{ isCurrent, isPending }`.
@@ -447,21 +533,34 @@ export function useLinkState(to) {
     const { isCurrent, isPending } = useLinkTarget(to);
     return { isCurrent, isPending };
 }
-export function Link({ href: to, replace, current, onClick, children, ...anchorProps }) {
+// The user handler runs first; the router's prefetch trigger follows. There
+// is no preventDefault-style opt-out here — prefetching is speculative and
+// harmless, unlike onClick's navigation.
+function composeTrigger(user, trigger) {
+    if (!trigger)
+        return user;
+    return (event) => {
+        user?.(event);
+        trigger();
+    };
+}
+export function Link({ href: to, replace, current, prefetch, onClick, onMouseEnter, onFocus, onTouchStart, children, ...anchorProps }) {
     const linkTo = typeof to === 'string' ? { url: to } : { ...to };
     if (replace !== undefined)
         linkTo.replace = replace;
     if (current !== undefined)
         linkTo.current = current;
+    if (prefetch !== undefined)
+        linkTo.prefetch = prefetch;
     const linkProps = useLinkProps(linkTo);
     function handleClick(event) {
         if (onClick)
             onClick(event);
         linkProps.onClick(event);
     }
-    return (_jsx("a", { "aria-current": linkProps['aria-current'], "data-pending": linkProps['data-pending'], ...anchorProps, href: linkProps.href, 
+    return (_jsx("a", { "aria-current": linkProps['aria-current'], "data-pending": linkProps['data-pending'], ...anchorProps, ref: linkProps.ref, href: linkProps.href, 
         // eslint-disable-next-line react/jsx-handler-names
-        onClick: handleClick, children: children }));
+        onClick: handleClick, onMouseEnter: composeTrigger(onMouseEnter, linkProps.onMouseEnter), onFocus: composeTrigger(onFocus, linkProps.onFocus), onTouchStart: composeTrigger(onTouchStart, linkProps.onTouchStart), children: children }));
 }
 export function Navigate({ to }) {
     const router = useSpaceRouter();

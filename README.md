@@ -12,7 +12,8 @@ React Space Router is a set of hooks and components for keeping your app in sync
 - React hooks based
 - Nested routes
 - Code-split routes via `resolver` (`React.lazy` under the hood)
-- Per-route `prepare(ctx)` for fetch-as-you-render data loading
+- Per-route data loading via `queries` + a pluggable `data` adapter (or the low-level `prepare(ctx)`)
+- Link prefetching on hover or visibility via `<Link prefetch>` — one `queries` declaration warms both navigation and hover
 - Pending state via `usePending()` and `usePendingRoute()` (backed by `useTransition`)
 - Delayed route fallbacks via `<DelayedSuspense>`
 - Optional pre-commit `transformRoute` hook for URL rewrites
@@ -42,21 +43,22 @@ $ npm install react-space-router
 ```tsx
 import { Suspense } from 'react'
 import { Router, Routes, Link, DelayedSuspense } from 'react-space-router'
+import { prepare, prefetch } from './figbird'
 
 const routes = [
   { path: '/', component: Home },
   {
     path: '/issues/:id',
     resolver: () => import('./IssueDetail'),
-    prepare: ({ params }) => [
-      issueStore.prepare({ id: Number(params.id) }),
-    ],
+    // declared once — the data adapter runs it as prepare on navigation
+    // and as prefetch on link hover
+    queries: ({ params }) => [[issueDetail, { id: Number(params.id) }]],
   },
 ]
 
 export function App() {
   return (
-    <Router pendingDelayMs={1000}>
+    <Router pendingDelayMs={1000} data={{ prepare, prefetch }}>
       <Suspense fallback={null}>
         <Routes routes={routes} />
       </Suspense>
@@ -65,7 +67,11 @@ export function App() {
 }
 
 function Home() {
-  return <Link href='/issues/123'>Open issue</Link>
+  return (
+    <Link href='/issues/123' prefetch>
+      Open issue
+    </Link>
+  )
 }
 
 function IssueSection() {
@@ -79,9 +85,9 @@ function IssueSection() {
 
 ### Core components
 
-- `<Router>` owns route state internally and commits route changes inside React transitions. Props: `mode`, `qs`, `sync`, `transformRoute`, `pendingDelayMs`.
-- `<Routes>` matches the current URL, preloads matched `resolver()` chunks, runs matched `prepare(ctx)` functions, pins returned handles, renders nested route segments, injects each segment's own path params as props, and handles scroll-to-top.
-- `<Link>` renders an anchor with SPA navigation while preserving modified clicks, middle click, downloads, external URLs, and user `onClick` cancellation.
+- `<Router>` owns route state internally and commits route changes inside React transitions. Props: `mode`, `qs`, `sync`, `transformRoute`, `data`, `prefetchLinks`, `pendingDelayMs`.
+- `<Routes>` matches the current URL, preloads matched `resolver()` chunks, runs matched `queries`/`prepare(ctx)`, pins returned handles, renders nested route segments, injects each segment's own path params as props, and handles scroll-to-top.
+- `<Link>` renders an anchor with SPA navigation while preserving modified clicks, middle click, downloads, external URLs, and user `onClick` cancellation. `prefetch` (`true`/`'hover'`/`'visible'`) warms the target route's chunk and data speculatively; `<Router prefetchLinks>` sets the default for all links.
 - `<Navigate>` performs a navigation on mount.
 - `<DelayedSuspense>` behaves like `Suspense`, except during an in-flight router transition it holds the previous route until `pendingDelayMs` has elapsed, then renders its fallback.
 
@@ -93,6 +99,7 @@ function IssueSection() {
 - `usePendingRoute()` returns the route an in-flight navigation is heading to (post-transform), or `null` when idle. Covers clicks, programmatic navigation, and browser back/forward.
 - `useLinkProps(to)` returns spreadable anchor props: `{ href, aria-current, data-pending, onClick }`. Style current links with `a[aria-current='page']` and in-flight links with `a[data-pending]` in CSS.
 - `useLinkState(to)` returns `{ isCurrent, isPending }` for programmatic per-target state — tabs, sidebar items, breadcrumb spinners.
+- `usePrefetch()` returns a function that warms any navigation target — preloads matched `resolver` chunks and runs matched route `prefetch(ctx)` — for custom triggers beyond link hover.
 - `useMakeHref()` returns the underlying `router.href` helper.
 - `useSpaceRouter()` exposes the underlying Space Router instance for rare escape-hatch use.
 
@@ -103,15 +110,22 @@ function IssueSection() {
 
 ### Route data loading
 
-`prepare(ctx)` receives `{ pathname, url, params, query }` and may return `PreparedHandle[]`:
+Declare a route's data once with `queries` and wire a `data` adapter to `<Router>`:
 
 ```ts
+interface DataAdapter {
+  prepare(def: unknown, args: unknown): PreparedHandle // caller-managed lease
+  prefetch(def: unknown, args: unknown): unknown // fire-and-forget
+}
+
 interface PreparedHandle {
   promise: Promise<unknown>
   release(): void
 }
 ```
 
-The router calls all matched `prepare()` functions during navigation, keeps the returned handles pinned while the route is committed, and calls `release()` when the next route commits or `<Routes>` unmounts.
+On navigation, each query runs through `data.prepare(def, args)` and the returned handles stay pinned until the route changes. On prefetch, the same query runs through `data.prefetch(def, args)` and the return value is ignored. figbird's kit satisfies this shape directly — `data={{ prepare, prefetch }}`.
+
+Links opt into speculative warming with `<Link prefetch>`. Use route-level `prepare(ctx)` / `prefetch(ctx)` directly only when a route needs custom behavior.
 
 See the [API Docs](https://humaans.github.io/react-space-router/) and [Migration Guide](./MIGRATION.md) for more details.

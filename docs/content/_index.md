@@ -14,7 +14,8 @@ React Space Router is a set of hooks and components for keeping your app in sync
 - React hooks based
 - Nested routes
 - Code-split routes via `resolver` (`React.lazy` under the hood)
-- Per-route `prepare(ctx)` for fetch-as-you-render data loading
+- Per-route data loading via `queries` + a pluggable `data` adapter (or the low-level `prepare(ctx)`)
+- Link prefetching on hover or visibility via `<Link prefetch>` — one `queries` declaration warms both navigation and hover
 - Pending state via `usePending()` and `usePendingRoute()` (backed by `useTransition`)
 - Delayed route fallbacks via `<DelayedSuspense>`
 - Optional pre-commit `transformRoute` hook for URL rewrites
@@ -142,6 +143,31 @@ One caveat: a cold `resolver` chunk always holds the previous page briefly — a
 
 The [demo](https://github.com/humaans/react-space-router/tree/master/demo) shows these modes side by side over simulated latencies — run it with `npm run demo`.
 
+## Prefetching
+
+Prefetching warms the route the user is likely to visit next. The usual setup is: declare data once on the route with `queries`, give `<Router>` a data adapter, then opt links into prefetching.
+
+```js
+import { prepare, prefetch } from './figbird'
+
+const routes = [
+  {
+    path: '/issues/:id',
+    resolver: () => import('./pages/IssueDetail'),
+    queries: ({ params }) => [[issueDetail, { id: +params.id }]],
+  },
+]
+
+<Router data={{ prepare, prefetch }}>...</Router>
+<Link href={`/issues/${id}`} prefetch />
+```
+
+On navigation, each query runs through `data.prepare(def, args)` and the returned handles stay pinned until the route changes. On prefetch, the same query runs through `data.prefetch(def, args)` and the return value is ignored. Resolver chunks are warmed too.
+
+`<Link prefetch>` means hover/focus/touch. Use `prefetch='visible'` for viewport-based prefetching, `<Router prefetchLinks>` to make prefetching the default for all links, and `prefetch={false}` to opt one link out. A route can set `prefetchable: false` to block speculative warming while still preparing normally on real navigation.
+
+For unusual cases, use route-level `prepare(ctx)` / `prefetch(ctx)` directly, or call `usePrefetch()` from your own trigger.
+
 ## API
 
 ### `<Router />`
@@ -154,6 +180,8 @@ Props:
 - `qs` a custom query string parser of shape `{ parse, stringify }`.
 - `sync` if `true`, the underlying space-router fires synchronous transitions (useful in tests).
 - `transformRoute(route)` an optional pure, synchronous function that runs between match and commit. Return a modified `Route` to change what gets committed; if its `url` differs from the matched URL, the router silently replaces the URL (mode-aware, so it works in hash mode too) so the address bar matches. Use this for things like persisted-query restoration. Must not be async.
+- `data` a data adapter of shape `{ prepare(def, args), prefetch(def, args) }` that bridges route `queries` to a data layer (see [Prefetching](#prefetching)). `prepare` returns a `PreparedHandle`; `prefetch` warms speculatively. figbird's kit satisfies this directly. Should be referentially stable; required only if a route uses `queries`.
+- `prefetchLinks` default prefetch trigger for every link: `true`/`'hover'` or `'visible'`. Individual links override with their own `prefetch` prop, including `prefetch={false}` to opt out. Off by default.
 - `pendingDelayMs` how long `<DelayedSuspense>` holds the previous route before rendering its fallback during an in-flight navigation. Default: `1000`.
 
 ### `<Routes />`
@@ -168,11 +196,14 @@ When a navigation happens, every matched segment's `resolver()` is preloaded and
 
 Props:
 
-- `routes` an array of route definitions, where each route is an object of shape `{ path, component, resolver, prepare, props, scrollGroup, routes, ...metadata }`:
+- `routes` an array of route definitions, where each route is an object of shape `{ path, component, resolver, queries, prepare, props, scrollGroup, routes, ...metadata }`:
   - `path` URL pattern, may include `:named` segments.
   - `component` a React component to render. Accepts an ESM-default module shape (`{ default: Component }`) too.
   - `resolver` `() => import('./Screen')` — a dynamic import. The router preloads this at navigation time and renders via `React.lazy`. Cold imports suspend at the destination's Suspense boundary.
-  - `prepare(ctx)` a function called at navigation time with `{ pathname, url, params, query }`. Returns an array of `PreparedHandle` objects (e.g. from a data layer's `prepare()` call). The router pins them for the lifetime of the committed navigation and releases them when the next navigation commits.
+  - `queries(ctx)` declares the route's data needs once as `[def, args]` pairs, run through the `<Router data>` adapter — as `prepare` on navigation, as `prefetch` on speculation (see [Prefetching](#prefetching)). Requires a `data` adapter.
+  - `prepare(ctx)` the low-level alternative to `queries` for prepare. Called at navigation time with `{ pathname, url, params, query }`; returns `PreparedHandle` objects pinned for the lifetime of the committed navigation and released when the next navigation commits.
+  - `prefetch(ctx)` the low-level alternative to `queries` for prefetch — called when a prefetching link warms this route. May fire at any frequency; the return value is ignored.
+  - `prefetchable` set `false` to exclude a route from speculative prefetch (no chunk preload, no `prefetch`) while still preparing on real navigation. A route-level veto that beats an explicit `<Link prefetch>`.
   - `props` props to pass to the segment's component.
   - `scrollGroup` a string that groups routes; navigations within a group don't scroll to top.
   - `routes` nested route definitions.
@@ -245,6 +276,7 @@ Props:
   - `merge` merge partial `to` object into the current route.
 - `replace` replace the current entry in the navigation stack instead of pushing.
 - `current` set to true/false to override automatic current-page detection.
+- `prefetch` warm the target route speculatively: `true`/`'hover'` on hover, focus, and touch, `'visible'` when the link scrolls into view. Overrides the Router-level `prefetchLinks` default in either direction.
 - `onClick` user click handler. Runs before the router's internal click handling; call `event.preventDefault()` to stop SPA navigation.
 
 The rest of the props are spread onto the `<a>` element.
@@ -381,6 +413,7 @@ a[data-pending] {
 Takes a `string` URL or an object — same fields as `useNavigate`, plus:
 
 - `current` override automatic current-page detection.
+- `prefetch` warm the target route speculatively (see [Prefetching](#prefetching)). When set, the returned props also carry the trigger — hover/focus/touch handlers, or a `ref` for `'visible'` — so the spread keeps working unchanged.
 
 ### `useLinkState`
 
@@ -396,6 +429,29 @@ const { isCurrent } = useLinkState('/settings')
 
 return <a {...linkProps}>{isCurrent ? 'Settings' : 'Go to settings'}</a>
 ```
+
+### `usePrefetch`
+
+```js
+const prefetch = usePrefetch()
+prefetch('/issues/42')
+```
+
+Returns a function that warms a navigation target without navigating: matches the URL, applies `transformRoute`, preloads matched `resolver` chunks, and calls each matched segment's `prefetch(ctx)`. Fire-and-forget and safe to call repeatedly — the data layer owns freshness. Unmatched URLs are a no-op.
+
+`<Link prefetch>` uses this internally; call it directly for custom triggers — a form submit that predicts the next screen, viewport logic the router doesn't own:
+
+```js
+const prefetch = usePrefetch()
+
+async function onSubmit(values) {
+  prefetch(`/orders/${values.orderId}`) // warm the confirmation screen
+  await submit(values)
+  navigate(`/orders/${values.orderId}`)
+}
+```
+
+Takes a `string` URL or an object — same fields as `useNavigate`.
 
 ### `useMakeHref`
 
@@ -425,4 +481,3 @@ Check whether a click event should result in a router navigation or be left to t
 - `download` attribute
 - cross-origin or non-http(s) URLs
 - same-page `#hash` links — the browser scrolls to the anchor natively
-
