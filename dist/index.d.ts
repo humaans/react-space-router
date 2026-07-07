@@ -197,7 +197,7 @@ export interface LinkPropsResult {
     onMouseEnter?: () => void;
     onFocus?: () => void;
     onTouchStart?: () => void;
-    ref?: (el: HTMLAnchorElement | null) => void | (() => void);
+    ref?: (el: HTMLAnchorElement | null) => void;
 }
 export interface LinkState {
     isCurrent: boolean;

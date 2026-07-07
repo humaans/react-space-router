@@ -213,6 +213,64 @@ test.serial('Link prefetch=visible prefetches when the link scrolls into view', 
   }
 })
 
+test.serial('Link prefetch=visible disconnects the observer when the ref is cleared', async (t) => {
+  setup()
+
+  const instances: FakeIntersectionObserver[] = []
+
+  class FakeIntersectionObserver {
+    observed: Element[] = []
+    disconnected = false
+    constructor() {
+      instances.push(this)
+    }
+    observe(el: Element) {
+      this.observed.push(el)
+    }
+    disconnect() {
+      this.disconnected = true
+    }
+  }
+  g.IntersectionObserver = FakeIntersectionObserver
+
+  try {
+    const root = document.getElementById('root')
+    const routes = [
+      {
+        path: '/',
+        component: () => (
+          <Link href='/below-the-fold' prefetch='visible'>
+            Later
+          </Link>
+        ),
+      },
+      { path: '/below-the-fold', component: () => null, prefetch: () => {} },
+    ]
+
+    let rootHandle: ReactDOM.Root
+    await act(async () => {
+      rootHandle = ReactDOM.createRoot(root)
+      rootHandle.render(
+        <Router sync>
+          <Routes routes={routes} />
+        </Router>,
+      )
+    })
+
+    t.is(instances.length, 1)
+    t.is(instances[0].observed[0], window.document.querySelector('a'))
+    t.false(instances[0].disconnected)
+
+    await act(async () => {
+      rootHandle.unmount()
+    })
+
+    t.true(instances[0].disconnected)
+  } finally {
+    delete g.IntersectionObserver
+  }
+})
+
 test.serial('usePrefetch warms a target programmatically and no-ops on unmatched URLs', async (t) => {
   setup()
 

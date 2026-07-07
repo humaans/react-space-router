@@ -489,17 +489,22 @@ export function useLinkProps(to) {
     const prefetch = usePrefetch();
     // Link-level `prefetch` overrides the Router-level `prefetchLinks` default.
     const prefetchMode = resolvePrefetchMode(target.prefetch ?? prefetchLinks);
+    const visibleObserver = useRef(null);
     const observeVisible = useCallback((el) => {
+        visibleObserver.current?.disconnect();
+        visibleObserver.current = null;
         if (!el || typeof IntersectionObserver === 'undefined')
             return;
         const observer = new IntersectionObserver((entries) => {
             if (entries.some((entry) => entry.isIntersecting)) {
                 observer.disconnect();
+                if (visibleObserver.current === observer)
+                    visibleObserver.current = null;
                 prefetch(href);
             }
         });
         observer.observe(el);
-        return () => observer.disconnect();
+        visibleObserver.current = observer;
     }, [prefetch, href]);
     function onClick(event) {
         if (shouldNavigate(event)) {

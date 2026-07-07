@@ -808,7 +808,7 @@ export interface LinkPropsResult {
   onMouseEnter?: () => void
   onFocus?: () => void
   onTouchStart?: () => void
-  ref?: (el: HTMLAnchorElement | null) => void | (() => void)
+  ref?: (el: HTMLAnchorElement | null) => void
 }
 
 export interface LinkState {
@@ -851,18 +851,24 @@ export function useLinkProps(to: LinkTo): LinkPropsResult {
 
   // Link-level `prefetch` overrides the Router-level `prefetchLinks` default.
   const prefetchMode = resolvePrefetchMode(target.prefetch ?? prefetchLinks)
+  const visibleObserver = useRef<IntersectionObserver | null>(null)
 
   const observeVisible = useCallback(
     (el: HTMLAnchorElement | null) => {
+      visibleObserver.current?.disconnect()
+      visibleObserver.current = null
+
       if (!el || typeof IntersectionObserver === 'undefined') return
+
       const observer = new IntersectionObserver((entries) => {
         if (entries.some((entry) => entry.isIntersecting)) {
           observer.disconnect()
+          if (visibleObserver.current === observer) visibleObserver.current = null
           prefetch(href)
         }
       })
       observer.observe(el)
-      return () => observer.disconnect()
+      visibleObserver.current = observer
     },
     [prefetch, href],
   )
