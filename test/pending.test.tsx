@@ -7,7 +7,7 @@ import {
   Router,
   Routes,
   DelayedSuspense,
-  useInternalRouterInstance,
+  useSpaceRouter,
   useLinkProps,
   usePending,
   usePendingRoute,
@@ -43,7 +43,7 @@ test.serial('usePending flips while a transition is in flight', async (t) => {
   const pendingSamples: boolean[] = []
   let router
   function Capture() {
-    const r = useInternalRouterInstance()
+    const r = useSpaceRouter()
     const pending = usePending()
     pendingSamples.push(pending)
     useEffect(() => {
@@ -162,7 +162,7 @@ test.serial('DelayedSuspense holds fallback during route transition delay', asyn
   let router
 
   function Capture() {
-    const r = useInternalRouterInstance()
+    const r = useSpaceRouter()
     useEffect(() => {
       router = r
     }, [r])

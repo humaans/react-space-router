@@ -155,7 +155,7 @@ function useRouterCtx(): RouterContextValue {
   return ctx
 }
 
-export function useInternalRouterInstance(): SpaceRouter<RouteData> {
+export function useSpaceRouter(): SpaceRouter<RouteData> {
   return useRouterCtx().router
 }
 
@@ -661,7 +661,7 @@ function useScrollToTop(route: Route<RouteData> | null, disabled?: boolean) {
 // ---------------------------------------------------------------------------
 
 export function useMakeHref() {
-  const { href } = useInternalRouterInstance()
+  const { href } = useSpaceRouter()
   return href
 }
 
@@ -772,7 +772,7 @@ export interface NavigateProps {
 }
 
 export function Navigate({ to }: NavigateProps) {
-  const router = useInternalRouterInstance()
+  const router = useSpaceRouter()
   const navigate = useNavigate()
   const route = useRoute()
   const href = router.href(to, route ?? undefined)

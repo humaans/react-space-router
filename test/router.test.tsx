@@ -10,7 +10,7 @@ import {
   Routes,
   Link,
   Navigate,
-  useInternalRouterInstance,
+  useSpaceRouter,
   useRoute,
   qs,
   type Route,
@@ -38,7 +38,7 @@ test.serial('usage', async function (t) {
   }
 
   function InitialNav() {
-    const _router = useInternalRouterInstance()
+    const _router = useSpaceRouter()
 
     useEffect(() => {
       router = _router
@@ -203,13 +203,13 @@ test('qs', async (t) => {
   t.deepEqual(qs.parse('a=1'), { a: '1' })
 })
 
-test.serial('useInternalRouterInstance throws outside Router', (t) => {
+test.serial('useSpaceRouter throws outside Router', (t) => {
   setup()
 
   const root = document.getElementById('root')
 
   function NoRouter() {
-    useInternalRouterInstance()
+    useSpaceRouter()
     return null
   }
 
@@ -291,7 +291,7 @@ test.serial('transformRoute rewrites the route before commit and syncs the URL',
 
   let router
   function Capture() {
-    const r = useInternalRouterInstance()
+    const r = useSpaceRouter()
     useEffect(() => {
       router = r
     }, [r])
@@ -441,7 +441,7 @@ test.serial('transformRoute leaves browser history untouched in memory mode', as
   let router
 
   function Capture() {
-    const r = useInternalRouterInstance()
+    const r = useSpaceRouter()
     useEffect(() => {
       router = r
     }, [r])
@@ -512,7 +512,7 @@ test.serial('Routes passes children through when a middle segment has no compone
   let router
 
   function Capture() {
-    const r = useInternalRouterInstance()
+    const r = useSpaceRouter()
     useEffect(() => {
       router = r
     }, [r])
@@ -554,7 +554,7 @@ test.serial('Routes injects path params as component props', (t) => {
   let router
 
   function Capture() {
-    const r = useInternalRouterInstance()
+    const r = useSpaceRouter()
     useEffect(() => {
       router = r
     }, [r])
@@ -607,7 +607,7 @@ test.serial('Routes parses query hash splat optional params and wildcard routes'
   let router
 
   function Capture() {
-    const r = useInternalRouterInstance()
+    const r = useSpaceRouter()
     useEffect(() => {
       router = r
     }, [r])
@@ -665,7 +665,7 @@ test.serial('Routes rematches the current URL when the route map changes in memo
   let setRoutes
 
   function Capture() {
-    const r = useInternalRouterInstance()
+    const r = useSpaceRouter()
     useEffect(() => {
       router = r
     }, [r])
@@ -708,7 +708,7 @@ test.serial('Router recreates router when mode prop changes', (t) => {
   const seenRouters = new Set()
 
   function Capture() {
-    const r = useInternalRouterInstance()
+    const r = useSpaceRouter()
     seenRouters.add(r)
     return null
   }

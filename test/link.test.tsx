@@ -8,7 +8,7 @@ import {
   Routes,
   Link,
   Navigate,
-  useInternalRouterInstance,
+  useSpaceRouter,
   useLinkProps,
   useLinkState,
   useNavigate,
@@ -509,7 +509,7 @@ test.serial('Link clears pending href after a route-level redirect commits', asy
   let router
 
   function Capture() {
-    const r = useInternalRouterInstance()
+    const r = useSpaceRouter()
     useEffect(() => {
       router = r
     }, [r])

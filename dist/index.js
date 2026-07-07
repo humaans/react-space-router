@@ -41,7 +41,7 @@ function useRouterCtx() {
     }
     return ctx;
 }
-export function useInternalRouterInstance() {
+export function useSpaceRouter() {
     return useRouterCtx().router;
 }
 export function useRoute() {
@@ -396,7 +396,7 @@ function useScrollToTop(route, disabled) {
 // Link / Navigate
 // ---------------------------------------------------------------------------
 export function useMakeHref() {
-    const { href } = useInternalRouterInstance();
+    const { href } = useSpaceRouter();
     return href;
 }
 // Shared target resolution for `useLinkProps` / `useLinkState`: normalize
@@ -464,7 +464,7 @@ export function Link({ href: to, replace, current, onClick, children, ...anchorP
         onClick: handleClick, children: children }));
 }
 export function Navigate({ to }) {
-    const router = useInternalRouterInstance();
+    const router = useSpaceRouter();
     const navigate = useNavigate();
     const route = useRoute();
     const href = router.href(to, route ?? undefined);

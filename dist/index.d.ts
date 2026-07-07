@@ -52,7 +52,7 @@ interface RouterContextValue {
     qs: Qs | undefined;
 }
 export declare const RouterContext: import("react").Context<RouterContextValue | undefined>;
-export declare function useInternalRouterInstance(): SpaceRouter<RouteData>;
+export declare function useSpaceRouter(): SpaceRouter<RouteData>;
 export declare function useRoute(): Route<RouteData> | null;
 /**
  * `true` while the router is between navigation start and commit. Backed by

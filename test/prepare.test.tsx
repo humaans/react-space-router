@@ -8,7 +8,7 @@ import {
   Router,
   RouterContext,
   Routes,
-  useInternalRouterInstance,
+  useSpaceRouter,
   useRoute,
   type PreparedHandle,
   type Route,
@@ -146,7 +146,7 @@ test.serial('initial route prepare stays leak-free under StrictMode double rende
   let router
 
   function Capture() {
-    const r = useInternalRouterInstance()
+    const r = useSpaceRouter()
     useEffect(() => {
       router = r
     }, [r])
@@ -240,7 +240,7 @@ test.serial('Routes resolves ESM-default components and skips null components', 
   let router
 
   function Capture() {
-    const r = useInternalRouterInstance()
+    const r = useSpaceRouter()
     useEffect(() => {
       router = r
     }, [r])
@@ -292,7 +292,7 @@ test.serial('Routes resolves lazy resolver components', async (t) => {
   let router
 
   function Capture() {
-    const r = useInternalRouterInstance()
+    const r = useSpaceRouter()
     useEffect(() => {
       router = r
     }, [r])
@@ -365,7 +365,7 @@ test.serial('Routes observes rejected resolver preload promises', async (t) => {
   let router
 
   function Capture() {
-    const r = useInternalRouterInstance()
+    const r = useSpaceRouter()
     useEffect(() => {
       router = r
     }, [r])
@@ -432,7 +432,7 @@ test.serial('Routes pins prepare handles for the committed nav and releases on t
   let router
 
   function Capture() {
-    const r = useInternalRouterInstance()
+    const r = useSpaceRouter()
     useEffect(() => {
       router = r
     }, [r])
@@ -530,7 +530,7 @@ test.serial('Routes keeps current prepare handles pinned until a suspended navig
   let router
 
   function Capture() {
-    const r = useInternalRouterInstance()
+    const r = useSpaceRouter()
     useEffect(() => {
       router = r
     }, [r])
@@ -631,7 +631,7 @@ test.serial('Routes releases superseded pending handles and ignores release erro
   let router
 
   function Capture() {
-    const r = useInternalRouterInstance()
+    const r = useSpaceRouter()
     useEffect(() => {
       router = r
     }, [r])
@@ -710,7 +710,7 @@ test.serial('Routes releases pending handles when navigation returns to the comm
   let router
 
   function Capture() {
-    const r = useInternalRouterInstance()
+    const r = useSpaceRouter()
     useEffect(() => {
       router = r
     }, [r])
@@ -773,7 +773,7 @@ test.serial('initial route prepare stays leak-free under StrictMode in async mod
   let router
 
   function Capture() {
-    const r = useInternalRouterInstance()
+    const r = useSpaceRouter()
     useEffect(() => {
       router = r
     }, [r])
