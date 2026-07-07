@@ -47,7 +47,7 @@
     "release:docs": "hugo -s docs && gh-pages -d docs/public"
   },
   "dependencies": {
-    "space-router": "^1.2.0"
+    "space-router": "^1.3.0"
   },
   "devDependencies": {
     "@swc-node/register": "^1.11.1",

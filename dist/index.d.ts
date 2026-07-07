@@ -81,8 +81,8 @@ export declare function useNavigate(): (to: To) => void;
  * Optional pre-commit transform. Runs synchronously between match and commit.
  * Return a modified route to change what gets committed (e.g. to merge a
  * persisted query). If the returned route's `url` differs from the matched
- * route's, the browser URL is synced via `history.replaceState` so the address
- * bar matches what the app is rendering.
+ * route's, the URL is synced via the router's mode-aware `replaceUrl` so the
+ * address bar matches what the app is rendering in every mode.
  *
  * Must be pure and synchronous.
  */

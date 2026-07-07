@@ -378,6 +378,120 @@ test.serial('transformRoute applies before initial route prepare', async (t) => 
   t.is(preparedUrl, '/people?status=active')
 })
 
+test.serial('transformRoute syncs the URL behind the # in hash mode', async (t) => {
+  setup()
+  // The app lives at /app?embed=1; the route url lives in the fragment.
+  g.location.pathname = '/app'
+  g.location.search = '?embed=1'
+  g.location.hash = '#/people'
+
+  const replaceStateCalls: string[] = []
+  g.history.replaceState = (_state: unknown, _title: string, url: string) => {
+    replaceStateCalls.push(url)
+  }
+
+  const root = document.getElementById('root')
+
+  const routes = [
+    {
+      path: '/people',
+      component: () => {
+        const r = useRoute()
+        return <div>status={String(r?.query?.status ?? 'none')}</div>
+      },
+    },
+  ]
+
+  function transformRoute(route: Route): Route | void {
+    if (route.pathname === '/people' && !(route as any).query?.status) {
+      const query = { ...(route as any).query, status: 'active' }
+      const search = '?status=active'
+      return { ...route, query, search, url: '/people' + search } as Route
+    }
+  }
+
+  function App() {
+    return (
+      <Router sync mode='hash' transformRoute={transformRoute}>
+        <Routes routes={routes} />
+      </Router>
+    )
+  }
+
+  await act(async () => {
+    const r = ReactDOM.createRoot(root)
+    r.render(<App />)
+  })
+
+  t.regex(window.document.body.innerHTML, /status=active/)
+  // The sync wrote a bare fragment url — the page's pathname and search are
+  // left for the browser to preserve, and the route url stays behind the #.
+  t.deepEqual(replaceStateCalls, ['#/people?status=active'])
+})
+
+test.serial('transformRoute leaves browser history untouched in memory mode', async (t) => {
+  setup()
+
+  const replaceStateCalls: string[] = []
+  g.history.replaceState = (_state: unknown, _title: string, url: string) => {
+    replaceStateCalls.push(url)
+  }
+
+  const root = document.getElementById('root')
+  let router
+
+  function Capture() {
+    const r = useInternalRouterInstance()
+    useEffect(() => {
+      router = r
+    }, [r])
+    return null
+  }
+
+  const routes = [
+    { path: '/', component: () => <div>Home</div> },
+    {
+      path: '/people',
+      component: () => {
+        const r = useRoute()
+        return <div>status={String(r?.query?.status ?? 'none')}</div>
+      },
+    },
+  ]
+
+  function transformRoute(route: Route): Route | void {
+    if (route.pathname === '/people' && !(route as any).query?.status) {
+      const query = { ...(route as any).query, status: 'active' }
+      const search = '?status=active'
+      return { ...route, query, search, url: '/people' + search } as Route
+    }
+  }
+
+  function App() {
+    return (
+      <Router sync mode='memory' transformRoute={transformRoute}>
+        <Capture />
+        <Routes routes={routes} />
+      </Router>
+    )
+  }
+
+  await act(async () => {
+    const r = ReactDOM.createRoot(root)
+    r.render(<App />)
+  })
+
+  await act(async () => {
+    router.navigate('/people')
+  })
+
+  t.regex(window.document.body.innerHTML, /status=active/)
+  // The sync stayed inside the router's memory stack...
+  t.is(router.getUrl(), '/people?status=active')
+  // ...and never touched real browser history.
+  t.deepEqual(replaceStateCalls, [])
+})
+
 test.serial('Routes passes children through when a middle segment has no component', (t) => {
   setup()
 

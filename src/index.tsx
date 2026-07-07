@@ -134,13 +134,11 @@ const RouteContext = createContext<Route<RouteData> | null | undefined>(undefine
 // renderToString tests) without a <Router> driving commits.
 interface RouterInternals {
   transformRoute: (route: Route<RouteData>) => Route<RouteData>
-  syncRouteUrl: (matched: Route<RouteData>, transformed: Route<RouteData>) => void
   commit: (route: Route<RouteData>, matched?: Route<RouteData>) => void
 }
 
 const RouterInternalsContext = createContext<RouterInternals>({
   transformRoute: (route) => route,
-  syncRouteUrl: () => {},
   commit: () => {},
 })
 
@@ -246,8 +244,8 @@ function makeRouter(routerOpts: RouterOpts): InternalRouter {
  * Optional pre-commit transform. Runs synchronously between match and commit.
  * Return a modified route to change what gets committed (e.g. to merge a
  * persisted query). If the returned route's `url` differs from the matched
- * route's, the browser URL is synced via `history.replaceState` so the address
- * bar matches what the app is rendering.
+ * route's, the URL is synced via the router's mode-aware `replaceUrl` so the
+ * address bar matches what the app is rendering in every mode.
  *
  * Must be pure and synchronous.
  */
@@ -309,18 +307,6 @@ export function Router({
     return transform ? (transform(next) ?? next) : next
   }, [])
 
-  const syncRouteUrl = useCallback((matched: Route<RouteData>, transformed: Route<RouteData>) => {
-    if (
-      transformed !== matched &&
-      transformed.url &&
-      transformed.url !== matched.url &&
-      typeof window !== 'undefined' &&
-      window.history
-    ) {
-      window.history.replaceState({}, '', transformed.url)
-    }
-  }, [])
-
   const commit = useCallback(
     (next: Route<RouteData>, matched: Route<RouteData> = next) => {
       // The urgent set makes the pending navigation visible immediately;
@@ -334,12 +320,14 @@ export function Router({
         setPending(null)
       })
 
-      // Sync the address bar if the transform rewrote the URL. We use
-      // history.replaceState directly so we don't re-trigger the router's
+      // Sync the address bar if the transform rewrote the URL. replaceUrl
+      // is mode-aware and silent, so it can't re-trigger the router's
       // listener loop.
-      syncRouteUrl(matched, next)
+      if (next !== matched && next.url && next.url !== matched.url) {
+        router.replaceUrl(next.url)
+      }
     },
-    [syncRouteUrl],
+    [router],
   )
 
   const ctx = useMemo<RouterContextValue>(
@@ -355,8 +343,8 @@ export function Router({
   )
 
   const internals = useMemo<RouterInternals>(
-    () => ({ transformRoute: applyTransform, syncRouteUrl, commit }),
-    [applyTransform, syncRouteUrl, commit],
+    () => ({ transformRoute: applyTransform, commit }),
+    [applyTransform, commit],
   )
 
   useEffect(() => {
@@ -463,7 +451,7 @@ function releaseHandles(handles: PreparedHandle[]) {
 
 export function Routes({ routes, disableScrollToTop }: RoutesProps) {
   const { router, route, qs } = useRouterCtx()
-  const { transformRoute, syncRouteUrl, commit } = useContext(RouterInternalsContext)
+  const { transformRoute, commit } = useContext(RouterInternalsContext)
 
   // Pinned prepare handles for the currently committed navigation. Released
   // when a new navigation commits or when <Routes> unmounts.
@@ -521,8 +509,9 @@ export function Routes({ routes, disableScrollToTop }: RoutesProps) {
         : { ...initialRoute, handles: prepareRoute(initialRoute.route) }
     initialPrepared.current = null
     committed.current = prepared
-    syncRouteUrl(prepared.matched, prepared.route)
-  }, [initialRoute, route, syncRouteUrl])
+    // No URL sync here — the router's initial listen emit re-commits this
+    // route through commit(), which owns the sync.
+  }, [initialRoute, route])
 
   useScrollToTop(activeRoute, disableScrollToTop)
 

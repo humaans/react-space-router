@@ -28,7 +28,6 @@ export const RouterContext = createContext(undefined);
 const RouteContext = createContext(undefined);
 const RouterInternalsContext = createContext({
     transformRoute: (route) => route,
-    syncRouteUrl: () => { },
     commit: () => { },
 });
 // Internal context for `<DelayedSuspense>`. Set by `<Router>` based on
@@ -132,15 +131,6 @@ export function Router({ mode, qs, sync, transformRoute, pendingDelayMs = DEFAUL
         const transform = transformRef.current;
         return transform ? (transform(next) ?? next) : next;
     }, []);
-    const syncRouteUrl = useCallback((matched, transformed) => {
-        if (transformed !== matched &&
-            transformed.url &&
-            transformed.url !== matched.url &&
-            typeof window !== 'undefined' &&
-            window.history) {
-            window.history.replaceState({}, '', transformed.url);
-        }
-    }, []);
     const commit = useCallback((next, matched = next) => {
         // The urgent set makes the pending navigation visible immediately;
         // the clear is deferred inside the transition so it only lands once
@@ -152,11 +142,13 @@ export function Router({ mode, qs, sync, transformRoute, pendingDelayMs = DEFAUL
             setCurrRoute(next);
             setPending(null);
         });
-        // Sync the address bar if the transform rewrote the URL. We use
-        // history.replaceState directly so we don't re-trigger the router's
+        // Sync the address bar if the transform rewrote the URL. replaceUrl
+        // is mode-aware and silent, so it can't re-trigger the router's
         // listener loop.
-        syncRouteUrl(matched, next);
-    }, [syncRouteUrl]);
+        if (next !== matched && next.url && next.url !== matched.url) {
+            router.replaceUrl(next.url);
+        }
+    }, [router]);
     const ctx = useMemo(() => ({
         router,
         route: currRoute,
@@ -165,7 +157,7 @@ export function Router({ mode, qs, sync, transformRoute, pendingDelayMs = DEFAUL
         pending,
         qs,
     }), [router, currRoute, isPending, pending, qs]);
-    const internals = useMemo(() => ({ transformRoute: applyTransform, syncRouteUrl, commit }), [applyTransform, syncRouteUrl, commit]);
+    const internals = useMemo(() => ({ transformRoute: applyTransform, commit }), [applyTransform, commit]);
     useEffect(() => {
         if (routerOpts.mode !== mode || routerOpts.qs !== qs || routerOpts.sync !== sync) {
             setRouter(makeRouter({ mode, qs, sync }));
@@ -219,7 +211,7 @@ function releaseHandles(handles) {
 }
 export function Routes({ routes, disableScrollToTop }) {
     const { router, route, qs } = useRouterCtx();
-    const { transformRoute, syncRouteUrl, commit } = useContext(RouterInternalsContext);
+    const { transformRoute, commit } = useContext(RouterInternalsContext);
     // Pinned prepare handles for the currently committed navigation. Released
     // when a new navigation commits or when <Routes> unmounts.
     const committed = useRef(null);
@@ -271,8 +263,9 @@ export function Routes({ routes, disableScrollToTop }) {
             : { ...initialRoute, handles: prepareRoute(initialRoute.route) };
         initialPrepared.current = null;
         committed.current = prepared;
-        syncRouteUrl(prepared.matched, prepared.route);
-    }, [initialRoute, route, syncRouteUrl]);
+        // No URL sync here — the router's initial listen emit re-commits this
+        // route through commit(), which owns the sync.
+    }, [initialRoute, route]);
     useScrollToTop(activeRoute, disableScrollToTop);
     // Begin a fresh navigation: release the superseded pending prepare (if
     // any), prepare the new route, take ownership of the pending slot, and
