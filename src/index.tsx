@@ -11,7 +11,6 @@ import {
   useTransition,
   type AnchorHTMLAttributes,
   type ComponentType,
-  type CSSProperties,
   type MouseEvent,
   type ReactNode,
 } from 'react'
@@ -101,11 +100,13 @@ function getResolverComponent(resolver: AnyResolver): ComponentType<any> {
 // Router context
 // ---------------------------------------------------------------------------
 
-export type To =
-  | string
-  | (NavigateTarget & {
-      current?: boolean
-    })
+// Navigation target, as accepted by `navigate()` and `<Navigate>`.
+export type To = string | NavigateTarget
+
+// Link target: a navigation target plus the link-only `current` override
+// for `aria-current` handling. Accepted by `useLinkProps()` and `<Link>`.
+type LinkTarget = NavigateTarget & { current?: boolean }
+export type LinkTo = string | LinkTarget
 
 // The in-flight navigation, set at commit and cleared when the transition
 // settles. `route` is post-transform (what `usePendingRoute()` returns);
@@ -518,6 +519,19 @@ export function Routes({ routes, disableScrollToTop }: RoutesProps) {
 
   useScrollToTop(activeRoute, disableScrollToTop)
 
+  // Begin a fresh navigation: release the superseded pending prepare (if
+  // any), prepare the new route, take ownership of the pending slot, and
+  // commit. Both navigation entry points — router transitions and route
+  // map changes — funnel through here.
+  const beginNavigation = useCallback(
+    (transformed: Route<RouteData>, matched: Route<RouteData>) => {
+      if (pending.current) releaseHandles(pending.current.handles)
+      pending.current = { route: transformed, matched, handles: prepareRoute(transformed) }
+      commit(transformed, matched)
+    },
+    [commit],
+  )
+
   useEffect(() => {
     const transition = (next: Route<RouteData>) => {
       // Transform fresh on every navigation — the transform's output can
@@ -540,13 +554,10 @@ export function Routes({ routes, disableScrollToTop }: RoutesProps) {
         return
       }
 
-      if (pending.current) releaseHandles(pending.current.handles)
-
-      pending.current = { route: transformed, matched: next, handles: prepareRoute(transformed) }
-      commit(pending.current.route, pending.current.matched)
+      beginNavigation(transformed, next)
     }
     return router.listen(routes, transition)
-  }, [router, routes, transformRoute, commit])
+  }, [router, routes, transformRoute, commit, beginNavigation])
 
   useEffect(() => {
     if (previousRoutes.current === routes) return
@@ -558,11 +569,11 @@ export function Routes({ routes, disableScrollToTop }: RoutesProps) {
     const matched = matcher.match(currentUrl)
     if (!matched) return
 
-    if (pending.current) releaseHandles(pending.current.handles)
-    const transformed = transformRoute(matched)
-    pending.current = { route: transformed, matched, handles: prepareRoute(transformed) }
-    commit(pending.current.route, pending.current.matched)
-  }, [routes, router, matcher, transformRoute, commit, route?.url])
+    // Deliberately none of the transition fast paths here: the URL may be
+    // unchanged, but the route definitions behind it are new, so the route
+    // must be re-prepared and re-committed from the new map.
+    beginNavigation(transformRoute(matched), matched)
+  }, [routes, router, matcher, transformRoute, beginNavigation, route?.url])
 
   useEffect(() => {
     const prepared = pending.current
@@ -666,8 +677,8 @@ export interface LinkPropsResult {
   isPending: boolean
 }
 
-export function useLinkProps(to: To): LinkPropsResult {
-  const target: NavigateTarget & { current?: boolean } = typeof to === 'string' ? { url: to } : to
+export function useLinkProps(to: LinkTo): LinkPropsResult {
+  const target: LinkTarget = typeof to === 'string' ? { url: to } : to
 
   const { router, pending } = useRouterCtx()
   const currRoute = useRoute()
@@ -707,19 +718,16 @@ export function useLinkProps(to: To): LinkPropsResult {
 }
 
 export interface LinkOwnProps {
-  href?: To
+  href?: LinkTo
   replace?: boolean
   current?: boolean
-  className?: string
-  style?: CSSProperties
   children?: ReactNode
 }
 
 export type LinkProps = LinkOwnProps & Omit<AnchorHTMLAttributes<HTMLAnchorElement>, keyof LinkOwnProps>
 
-export function Link({ href: to, replace, current, className, style, onClick, children, ...anchorProps }: LinkProps) {
-  const linkTo: NavigateTarget & { current?: boolean } =
-    typeof to === 'string' ? { url: to } : { ...(to as NavigateTarget & { current?: boolean }) }
+export function Link({ href: to, replace, current, onClick, children, ...anchorProps }: LinkProps) {
+  const linkTo: LinkTarget = typeof to === 'string' ? { url: to } : { ...to }
   if (replace !== undefined) linkTo.replace = replace
   if (current !== undefined) linkTo.current = current
   const linkProps = useLinkProps(linkTo)
@@ -733,8 +741,6 @@ export function Link({ href: to, replace, current, className, style, onClick, ch
     <a
       aria-current={linkProps['aria-current']}
       {...anchorProps}
-      className={className}
-      style={style}
       href={linkProps.href}
       // eslint-disable-next-line react/jsx-handler-names
       onClick={handleClick}

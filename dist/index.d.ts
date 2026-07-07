@@ -1,4 +1,4 @@
-import { type AnchorHTMLAttributes, type ComponentType, type CSSProperties, type MouseEvent, type ReactNode } from 'react';
+import { type AnchorHTMLAttributes, type ComponentType, type MouseEvent, type ReactNode } from 'react';
 import { type Mode, type NavigateTarget, type Qs, type Route, type RouteDefinition, type Router as SpaceRouter } from 'space-router';
 export { qs } from 'space-router';
 export type { Route } from 'space-router';
@@ -34,9 +34,11 @@ export interface RouteData {
     routes?: RouteData[];
     [extra: string]: unknown;
 }
-export type To = string | (NavigateTarget & {
+export type To = string | NavigateTarget;
+type LinkTarget = NavigateTarget & {
     current?: boolean;
-});
+};
+export type LinkTo = string | LinkTarget;
 interface PendingNavigation {
     route: Route<RouteData>;
     matchedUrl: string;
@@ -132,17 +134,15 @@ export interface LinkPropsResult {
     isCurrent: boolean;
     isPending: boolean;
 }
-export declare function useLinkProps(to: To): LinkPropsResult;
+export declare function useLinkProps(to: LinkTo): LinkPropsResult;
 export interface LinkOwnProps {
-    href?: To;
+    href?: LinkTo;
     replace?: boolean;
     current?: boolean;
-    className?: string;
-    style?: CSSProperties;
     children?: ReactNode;
 }
 export type LinkProps = LinkOwnProps & Omit<AnchorHTMLAttributes<HTMLAnchorElement>, keyof LinkOwnProps>;
-export declare function Link({ href: to, replace, current, className, style, onClick, children, ...anchorProps }: LinkProps): import("react").JSX.Element;
+export declare function Link({ href: to, replace, current, onClick, children, ...anchorProps }: LinkProps): import("react").JSX.Element;
 export interface NavigateProps {
     to: To;
 }

@@ -268,6 +268,16 @@ export function Routes({ routes, disableScrollToTop }) {
         syncRouteUrl(prepared.matched, prepared.route);
     }, [initialRoute, route, syncRouteUrl]);
     useScrollToTop(activeRoute, disableScrollToTop);
+    // Begin a fresh navigation: release the superseded pending prepare (if
+    // any), prepare the new route, take ownership of the pending slot, and
+    // commit. Both navigation entry points — router transitions and route
+    // map changes — funnel through here.
+    const beginNavigation = useCallback((transformed, matched) => {
+        if (pending.current)
+            releaseHandles(pending.current.handles);
+        pending.current = { route: transformed, matched, handles: prepareRoute(transformed) };
+        commit(transformed, matched);
+    }, [commit]);
     useEffect(() => {
         const transition = (next) => {
             // Transform fresh on every navigation — the transform's output can
@@ -287,13 +297,10 @@ export function Routes({ routes, disableScrollToTop }) {
                 commit(pending.current.route, pending.current.matched);
                 return;
             }
-            if (pending.current)
-                releaseHandles(pending.current.handles);
-            pending.current = { route: transformed, matched: next, handles: prepareRoute(transformed) };
-            commit(pending.current.route, pending.current.matched);
+            beginNavigation(transformed, next);
         };
         return router.listen(routes, transition);
-    }, [router, routes, transformRoute, commit]);
+    }, [router, routes, transformRoute, commit, beginNavigation]);
     useEffect(() => {
         if (previousRoutes.current === routes)
             return;
@@ -304,12 +311,11 @@ export function Routes({ routes, disableScrollToTop }) {
         const matched = matcher.match(currentUrl);
         if (!matched)
             return;
-        if (pending.current)
-            releaseHandles(pending.current.handles);
-        const transformed = transformRoute(matched);
-        pending.current = { route: transformed, matched, handles: prepareRoute(transformed) };
-        commit(pending.current.route, pending.current.matched);
-    }, [routes, router, matcher, transformRoute, commit, route?.url]);
+        // Deliberately none of the transition fast paths here: the URL may be
+        // unchanged, but the route definitions behind it are new, so the route
+        // must be re-prepared and re-committed from the new map.
+        beginNavigation(transformRoute(matched), matched);
+    }, [routes, router, matcher, transformRoute, beginNavigation, route?.url]);
     useEffect(() => {
         const prepared = pending.current;
         if (!route || !prepared || prepared.route.url !== route.url)
@@ -427,7 +433,7 @@ export function useLinkProps(to) {
     });
     return result;
 }
-export function Link({ href: to, replace, current, className, style, onClick, children, ...anchorProps }) {
+export function Link({ href: to, replace, current, onClick, children, ...anchorProps }) {
     const linkTo = typeof to === 'string' ? { url: to } : { ...to };
     if (replace !== undefined)
         linkTo.replace = replace;
@@ -439,7 +445,7 @@ export function Link({ href: to, replace, current, className, style, onClick, ch
             onClick(event);
         linkProps.onClick(event);
     }
-    return (_jsx("a", { "aria-current": linkProps['aria-current'], ...anchorProps, className: className, style: style, href: linkProps.href, 
+    return (_jsx("a", { "aria-current": linkProps['aria-current'], ...anchorProps, href: linkProps.href, 
         // eslint-disable-next-line react/jsx-handler-names
         onClick: handleClick, children: children }));
 }
