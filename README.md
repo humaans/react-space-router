@@ -8,20 +8,6 @@
 
 React Space Router is a set of hooks and components for keeping your app in sync with the URL and performing page navigations. Suspense-native and built around React's transition machinery. A library built by and used at [Humaans](https://humaans.io/).
 
-- Suspense-native — routes suspend while their code and data load, and navigations run as transitions, so the previous page stays up instead of flashing fallbacks
-- React hooks based
-- Nested routes
-- Code-split routes via `resolver` (`React.lazy` under the hood)
-- Per-route data loading via `queries` + a pluggable `data` adapter (or the low-level `prepare(ctx)`)
-- Link prefetching on hover or visibility via `<Link prefetch>` — one `queries` declaration warms both navigation and hover
-- Pending state via `usePending()` and `usePendingRoute()` (backed by `useTransition`)
-- Delayed route fallbacks via `<DelayedSuspense>`
-- Optional pre-commit `transformRoute` hook for URL rewrites
-- Path params injected as component props
-- Built in query string parser
-- Scrolls to top after navigation, with `scrollGroup` support
-- Preserves cmd/ctrl/alt/shift click and mouse middle click
-
 ## Why
 
 "Perfection is achieved when there is nothing left to take away." React Space Router is built upon Space Router, a framework agnostic tiny core that handles URL listening, route matching and navigation. React Space Router wraps that core into an idiomatic set of React components and hooks. The hope is you'll find React Space Router refreshingly simple compared to the existing alternatives, while still offering enough extensibility for modern Suspense-driven UIs.
@@ -38,94 +24,8 @@ If you need SSR, use a framework/router designed around request-time rendering. 
 $ npm install react-space-router
 ```
 
-## API
+## Docs
 
-```tsx
-import { Suspense } from 'react'
-import { Router, Routes, Link, DelayedSuspense } from 'react-space-router'
-import { prepare, prefetch } from './figbird'
+See the [API Docs](https://humaans.github.io/react-space-router/) for examples, component and hook references, loading UI guidance, prefetching, and route data loading details.
 
-const routes = [
-  { path: '/', component: Home },
-  {
-    path: '/issues/:id',
-    resolver: () => import('./IssueDetail'),
-    // declared once — the data adapter runs it as prepare on navigation
-    // and as prefetch on link hover
-    queries: ({ params }) => [[issueDetail, { id: Number(params.id) }]],
-  },
-]
-
-export function App() {
-  return (
-    <Router pendingDelayMs={1000} data={{ prepare, prefetch }}>
-      <Suspense fallback={null}>
-        <Routes routes={routes} />
-      </Suspense>
-    </Router>
-  )
-}
-
-function Home() {
-  return (
-    <Link href='/issues/123' prefetch>
-      Open issue
-    </Link>
-  )
-}
-
-function IssueSection() {
-  return (
-    <DelayedSuspense fallback={<Skeleton />}>
-      <IssueContent />
-    </DelayedSuspense>
-  )
-}
-```
-
-### Core components
-
-- `<Router>` owns route state internally and commits route changes inside React transitions. Props: `mode`, `qs`, `sync`, `transformRoute`, `data`, `prefetchLinks`, `pendingDelayMs`.
-- `<Routes>` matches the current URL, preloads matched `resolver()` chunks, runs matched `queries`/`prepare(ctx)`, pins returned handles, renders nested route segments, injects each segment's own path params as props, and handles scroll-to-top.
-- `<Link>` renders an anchor with SPA navigation while preserving modified clicks, middle click, downloads, external URLs, and user `onClick` cancellation. `prefetch` (`true`/`'hover'`/`'visible'`) warms the target route's chunk and data speculatively; `<Router prefetchLinks>` sets the default for all links.
-- `<Navigate>` performs a navigation on mount.
-- `<DelayedSuspense>` behaves like `Suspense`, except during an in-flight router transition it holds the previous route until `pendingDelayMs` has elapsed, then renders its fallback.
-
-### Hooks
-
-- `useRoute()` returns the current route: `{ url, pathname, params, query, search, hash, pattern, data }`.
-- `useNavigate()` returns a programmatic navigation function accepting a string URL or Space Router target object.
-- `usePending()` returns React transition pending state for route navigation.
-- `usePendingRoute()` returns the route an in-flight navigation is heading to (post-transform), or `null` when idle. Covers clicks, programmatic navigation, and browser back/forward.
-- `useLinkProps(to)` returns spreadable anchor props: `{ href, aria-current, data-pending, onClick }`. Style current links with `a[aria-current='page']` and in-flight links with `a[data-pending]` in CSS.
-- `useLinkState(to)` returns `{ isCurrent, isPending }` for programmatic per-target state — tabs, sidebar items, breadcrumb spinners.
-- `usePrefetch()` returns a function that warms any navigation target — preloads matched `resolver` chunks and runs matched route `prefetch(ctx)` — for custom triggers beyond link hover.
-- `useMakeHref()` returns the underlying `router.href` helper.
-- `useSpaceRouter()` exposes the underlying Space Router instance for rare escape-hatch use.
-
-### Utilities
-
-- `shouldNavigate(event)` returns whether a click should be handled by the router or left to the browser.
-- `qs` re-exports Space Router's default query string parser.
-
-### Route data loading
-
-Declare a route's data once with `queries` and wire a `data` adapter to `<Router>`:
-
-```ts
-interface DataAdapter {
-  prepare(def: unknown, args: unknown): PreparedHandle // caller-managed lease
-  prefetch(def: unknown, args: unknown): unknown // fire-and-forget
-}
-
-interface PreparedHandle {
-  promise: Promise<unknown>
-  release(): void
-}
-```
-
-On navigation, each query runs through `data.prepare(def, args)` and the returned handles stay pinned until the route changes. On prefetch, the same query runs through `data.prefetch(def, args)` and the return value is ignored. figbird's kit satisfies this shape directly — `data={{ prepare, prefetch }}`.
-
-Links opt into speculative warming with `<Link prefetch>`. Use route-level `prepare(ctx)` / `prefetch(ctx)` directly only when a route needs custom behavior.
-
-See the [API Docs](https://humaans.github.io/react-space-router/) and [Migration Guide](./MIGRATION.md) for more details.
+See the [Migration Guide](./MIGRATION.md) for upgrade notes.

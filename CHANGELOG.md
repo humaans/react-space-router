@@ -1,4 +1,4 @@
-## 0.7.0
+## 1.0.0
 
 The router is now built around React's transition machinery: navigations run inside `useTransition`, Suspense keeps the previous route on screen while the destination loads, and the destination's code and data are kicked off as soon as navigation begins. See the [docs](https://humaans.github.io/react-space-router/) for usage guides and [MIGRATION.md](./MIGRATION.md) for a step-by-step migration from 0.6.x.
 
