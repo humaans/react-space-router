@@ -10,19 +10,12 @@ toc: true
 
 React Space Router is a set of hooks and components for keeping your app in sync with the URL and performing page navigations. Suspense-native and built around React's transition machinery. A library built by and used at [Humaans](https://humaans.io/).
 
-- Suspense-native — routes suspend while their code and data load, and navigations run as transitions, so the previous page stays up instead of flashing fallbacks
-- React hooks based
-- Nested routes
-- Code-split routes via `resolver` (`React.lazy` under the hood)
-- Per-route data loading via `queries` + a pluggable `data` adapter (or the low-level `prepare(ctx)`)
-- Link prefetching on hover or visibility via `<Link prefetch>` — one `queries` declaration warms both navigation and hover
-- Pending state via `usePending()` and `usePendingRoute()` (backed by `useTransition`)
-- Delayed route fallbacks via `<DelayedSuspense>`
-- Optional pre-commit `transformRoute` hook for URL rewrites
-- Path params injected as component props
-- Built in query string parser
-- Scrolls to top after navigation, with `scrollGroup` support
-- Preserves cmd/ctrl/alt/shift click and mouse middle click
+- Suspense-native navigation that keeps the previous route visible while the next one loads.
+- Nested, code-split routes with path params passed straight to route components.
+- Route-level data loading and prefetching through a small, data-layer-agnostic adapter.
+- Link prefetching on hover, focus, touch, or visibility.
+- Pending route state for global indicators, sidebars, tabs, and breadcrumbs.
+- Delayed loading fallbacks for fast-feeling browser-style transitions.
 
 ## Why
 
