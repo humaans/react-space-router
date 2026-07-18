@@ -4,18 +4,11 @@ import test from 'ava'
 import { act, Component, StrictMode, Suspense, useEffect, type ReactNode } from 'react'
 import ReactDOM from 'react-dom/client'
 import { renderToString } from 'react-dom/server'
-import {
-  Router,
-  RouterContext,
-  Routes,
-  useSpaceRouter,
-  useRoute,
-  type PreparedHandle,
-  type Route,
-} from '../src/index.tsx'
+import { Router, Routes, useSpaceRouter, useRoute, type PreparedHandle } from '../src/index.tsx'
 import { g, setup } from './helpers.ts'
 
-test.serial('Routes prepares the initial route during the first render', (t) => {
+test.serial('Router prepares the initial route during the first render', (t) => {
+  setup()
   let prepareCalls = 0
 
   const routes = [
@@ -28,40 +21,10 @@ test.serial('Routes prepares the initial route during the first render', (t) => 
     },
   ]
 
-  const matched = {
-    pattern: '/',
-    url: '/',
-    pathname: '/',
-    params: {},
-    query: {},
-    search: '',
-    hash: '',
-    data: routes,
-  } as Route
-
-  const router = {
-    getUrl: () => '/',
-    match: () => matched,
-    listen: () => () => {},
-    href: () => '/',
-    navigate: () => {},
-  }
-
   const html = renderToString(
-    <RouterContext.Provider
-      value={
-        {
-          router,
-          route: null,
-          navigate: () => {},
-          isPending: false,
-          pending: null,
-          qs: undefined,
-        } as any
-      }
-    >
-      <Routes routes={routes} />
-    </RouterContext.Provider>,
+    <Router routes={routes} sync>
+      <Routes />
+    </Router>,
   )
 
   t.is(html, '<div>Home</div>')
@@ -108,9 +71,9 @@ test.serial('direct load renders routes whose components read prepared data', as
 
   function App() {
     return (
-      <Router sync>
+      <Router sync routes={routes}>
         <Suspense fallback={null}>
-          <Routes routes={routes} />
+          <Routes />
         </Suspense>
       </Router>
     )
@@ -155,9 +118,9 @@ test.serial('initial route prepare stays leak-free under StrictMode double rende
 
   function App() {
     return (
-      <Router sync>
+      <Router sync routes={routes}>
         <Capture />
-        <Routes routes={routes} />
+        <Routes />
       </Router>
     )
   }
@@ -189,7 +152,7 @@ test.serial('initial route prepare stays leak-free under StrictMode double rende
   t.true(prepareCalls >= 1)
 })
 
-test.serial('Routes seeds the initial route synchronously for route components', async (t) => {
+test.serial('Router seeds the initial route synchronously for route components', async (t) => {
   setup()
 
   const root = document.getElementById('root')
@@ -201,8 +164,8 @@ test.serial('Routes seeds the initial route synchronously for route components',
 
   function App() {
     return (
-      <Router>
-        <Routes routes={[{ path: '/', component: Home }]} />
+      <Router routes={[{ path: '/', component: Home }]}>
+        <Routes />
       </Router>
     )
   }
@@ -249,9 +212,9 @@ test.serial('Routes resolves ESM-default components and skips null components', 
 
   function App() {
     return (
-      <Router sync>
+      <Router sync routes={routes}>
         <Capture />
-        <Routes routes={routes} />
+        <Routes />
       </Router>
     )
   }
@@ -301,10 +264,10 @@ test.serial('Routes resolves lazy resolver components', async (t) => {
 
   function App() {
     return (
-      <Router sync>
+      <Router sync routes={routes}>
         <Capture />
         <Suspense fallback={<div>Loading</div>}>
-          <Routes routes={routes} />
+          <Routes />
         </Suspense>
       </Router>
     )
@@ -335,7 +298,7 @@ test.serial('Routes resolves lazy resolver components', async (t) => {
   t.is(resolverCalls, 1, 'resolver result is cached by function reference')
 })
 
-test.serial('Routes observes rejected resolver preload promises', async (t) => {
+test.serial('Router observes rejected resolver preload promises', async (t) => {
   setup()
 
   const root = document.getElementById('root')
@@ -374,11 +337,11 @@ test.serial('Routes observes rejected resolver preload promises', async (t) => {
 
   function App() {
     return (
-      <Router sync>
+      <Router sync routes={routes}>
         <Capture />
         <ErrorBoundary>
           <Suspense fallback={<div>Loading</div>}>
-            <Routes routes={routes} />
+            <Routes />
           </Suspense>
         </ErrorBoundary>
       </Router>
@@ -403,7 +366,7 @@ test.serial('Routes observes rejected resolver preload promises', async (t) => {
   }
 })
 
-test.serial('Routes pins prepare handles for the committed nav and releases on the next', async (t) => {
+test.serial('Router pins prepare handles for the committed nav and releases on the next', async (t) => {
   setup()
 
   const root = document.getElementById('root')
@@ -441,9 +404,9 @@ test.serial('Routes pins prepare handles for the committed nav and releases on t
 
   function App() {
     return (
-      <Router sync mode='memory'>
+      <Router sync mode='memory' routes={routes}>
         <Capture />
-        <Routes routes={routes} />
+        <Routes />
       </Router>
     )
   }
@@ -492,7 +455,7 @@ test.serial('Routes pins prepare handles for the committed nav and releases on t
   )
 })
 
-test.serial('Routes keeps current prepare handles pinned until a suspended navigation commits', async (t) => {
+test.serial('Router keeps current prepare handles pinned until a suspended navigation commits', async (t) => {
   setup()
 
   const root = document.getElementById('root')
@@ -539,9 +502,9 @@ test.serial('Routes keeps current prepare handles pinned until a suspended navig
 
   function App() {
     return (
-      <Router sync>
+      <Router sync routes={routes}>
         <Capture />
-        <Routes routes={routes} />
+        <Routes />
       </Router>
     )
   }
@@ -569,7 +532,7 @@ test.serial('Routes keeps current prepare handles pinned until a suspended navig
   t.false(released.includes('slow'), 'slow handle remains pinned after /slow commits')
 })
 
-test.serial('Routes releases superseded pending handles and ignores release errors', async (t) => {
+test.serial('Router releases superseded pending handles and ignores release errors', async (t) => {
   setup()
 
   const root = document.getElementById('root')
@@ -640,9 +603,9 @@ test.serial('Routes releases superseded pending handles and ignores release erro
 
   function App() {
     return (
-      <Router sync>
+      <Router sync routes={routes}>
         <Capture />
-        <Routes routes={routes} />
+        <Routes />
       </Router>
     )
   }
@@ -672,7 +635,7 @@ test.serial('Routes releases superseded pending handles and ignores release erro
   t.false(released.includes('b'))
 })
 
-test.serial('Routes releases pending handles when navigation returns to the committed route', async (t) => {
+test.serial('Router releases pending handles when navigation returns to the committed route', async (t) => {
   setup()
 
   const root = document.getElementById('root')
@@ -719,9 +682,9 @@ test.serial('Routes releases pending handles when navigation returns to the comm
 
   function App() {
     return (
-      <Router sync>
+      <Router sync routes={routes}>
         <Capture />
-        <Routes routes={routes} />
+        <Routes />
       </Router>
     )
   }
@@ -782,9 +745,9 @@ test.serial('initial route prepare stays leak-free under StrictMode in async mod
 
   function App() {
     return (
-      <Router>
+      <Router routes={routes}>
         <Capture />
-        <Routes routes={routes} />
+        <Routes />
       </Router>
     )
   }

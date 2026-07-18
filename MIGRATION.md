@@ -1,6 +1,6 @@
 # Migration Guide
 
-## 0.6.x → 0.7.0
+## 0.6.x → 1.0.0
 
 The Router lifecycle is reframed: the router now owns route state internally
 (via `useState` + `useTransition`) and applies it inside a React transition. The
@@ -14,7 +14,8 @@ router or did async work in `onNavigating`.
 
 | Before | After |
 | --- | --- |
-| `<Router useRoute={...} onNavigating={...} onNavigated={...}>` | `<Router transformRoute={...}>` |
+| `<Router useRoute={...} onNavigating={...} onNavigated={...}>` | `<Router routes={routes} transformRoute={...}>` |
+| `<Router><Routes routes={routes} /></Router>` | `<Router routes={routes}><Routes /></Router>` |
 | External Redux/atom-backed route state | Internal `useState` only |
 | Manual `navigating: true/false` flag | `usePending()` |
 | `route.data[i].component` only | `route.data[i].component` **or** `resolver: () => import(...)` |
@@ -184,7 +185,7 @@ function transformRoute(route) {
   return { ...route, query: merged, search, url: route.pathname + search }
 }
 
-<Router transformRoute={transformRoute}>...</Router>
+<Router routes={routes} transformRoute={transformRoute}>...</Router>
 ```
 
 `transformRoute` must be pure and synchronous. Returning `undefined` (or `void`)
@@ -250,9 +251,9 @@ If you had app-level state to suppress skeletons for the first few milliseconds
 of a navigation, delete it and use the built-in boundary:
 
 ```tsx
-<Router pendingDelayMs={1000}>
+<Router routes={routes} pendingDelayMs={1000}>
   <Suspense fallback={null}>
-    <Routes routes={routes} />
+    <Routes />
   </Suspense>
 </Router>
 ```
@@ -268,11 +269,29 @@ During an in-flight navigation, `<DelayedSuspense>` behaves like a regular
 that threshold, its fallback re-suspends so the already-committed route stays on
 screen.
 
+### Moving the route table to `<Router>`
+
+The route table now belongs to `<Router>`, while `<Routes />` marks where the matched component tree renders:
+
+```tsx
+// Before
+<Router>
+  <Routes routes={routes} />
+</Router>
+
+// After
+<Router routes={routes}>
+  <Routes />
+</Router>
+```
+
+This gives matching, target resolution, preparation, and navigation state one owner. `<Routes />` remains useful for placing the matched page inside an application shell or Suspense boundary.
+
 ### What's *not* changing
 
 - Route definition shape (`{ path, component, routes, ... }`) is unchanged. New
   fields (`resolver`, `prepare`, `scrollGroup`) are additive.
-- `<Routes routes={...}>`, `<Link>`, `<Navigate>`, `useLinkProps`, `useMakeHref`,
+- `<Routes>`, `<Link>`, `<Navigate>`, `useLinkProps`, `useMakeHref`,
   `useNavigate`, `qs` — unchanged.
 - ESM-default components (`{ default: Component }`) still resolve via plain
   `component:` — you don't have to switch to `resolver:` unless you want the
@@ -282,7 +301,7 @@ screen.
 
 ### What's still not included
 
-These are still outside 0.7.0:
+These are still outside 1.0.0:
 
 - `<DelayedSuspense>` per-instance `delayMs` override (today only the
   Router-level `pendingDelayMs` is configurable).

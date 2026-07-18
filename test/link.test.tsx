@@ -41,8 +41,8 @@ test.serial('useLinkProps()', async function (t) {
 
   function App() {
     return (
-      <Router sync>
-        <Routes routes={routes} />
+      <Router sync routes={routes}>
+        <Routes />
       </Router>
     )
   }
@@ -85,8 +85,8 @@ test.serial('Link click navigates and invokes to.onClick', (t) => {
 
   function App() {
     return (
-      <Router sync>
-        <Routes routes={routes} />
+      <Router sync routes={routes}>
+        <Routes />
       </Router>
     )
   }
@@ -149,8 +149,8 @@ test.serial('Link composes user onClick before internal navigation', (t) => {
 
   function App() {
     return (
-      <Router sync>
-        <Routes routes={routes} />
+      <Router sync routes={routes}>
+        <Routes />
       </Router>
     )
   }
@@ -190,8 +190,8 @@ test.serial('Link honours current override and regular className/style props', (
 
   function App() {
     return (
-      <Router sync>
-        <Routes routes={routes} />
+      <Router sync routes={routes}>
+        <Routes />
       </Router>
     )
   }
@@ -249,8 +249,8 @@ test.serial('Link preserves replace and current from object href when props are 
 
   function App() {
     return (
-      <Router sync>
-        <Routes routes={routes} />
+      <Router sync routes={routes}>
+        <Routes />
       </Router>
     )
   }
@@ -320,8 +320,8 @@ test.serial('useLinkProps and useLinkState expose per-link pending state', async
 
   function App() {
     return (
-      <Router sync>
-        <Routes routes={routes} />
+      <Router sync routes={routes}>
+        <Routes />
       </Router>
     )
   }
@@ -395,8 +395,8 @@ test.serial('useLinkState matches pending and current state for hash-prefixed hr
   await act(async () => {
     const r = ReactDOM.createRoot(root)
     r.render(
-      <Router sync mode='hash'>
-        <Routes routes={routes} />
+      <Router sync mode='hash' routes={routes}>
+        <Routes />
       </Router>,
     )
   })
@@ -427,9 +427,9 @@ test.serial('Link rendered alongside Routes in async mode does not crash', async
 
   function App() {
     return (
-      <Router>
+      <Router routes={routes}>
         <Link href='/somewhere'>Nav</Link>
-        <Routes routes={routes} />
+        <Routes />
       </Router>
     )
   }
@@ -465,9 +465,9 @@ test.serial('Link clears pending href when async navigation commits', async (t) 
 
   function App() {
     return (
-      <Router>
+      <Router routes={routes}>
         <PendingProbe />
-        <Routes routes={routes} />
+        <Routes />
       </Router>
     )
   }
@@ -518,10 +518,10 @@ test.serial('Link clears pending href after a route-level redirect commits', asy
 
   function App() {
     return (
-      <Router sync mode='memory'>
+      <Router sync mode='memory' routes={routes}>
         <Capture />
         <PendingProbe />
-        <Routes routes={routes} />
+        <Routes />
       </Router>
     )
   }
@@ -562,8 +562,8 @@ test.serial('Link with target=_blank lets the browser open in a new tab', (t) =>
 
   function App() {
     return (
-      <Router sync>
-        <Routes routes={routes} />
+      <Router sync routes={routes}>
+        <Routes />
       </Router>
     )
   }
@@ -599,8 +599,8 @@ test.serial('Link with modifier key lets the browser handle it', (t) => {
 
   function App() {
     return (
-      <Router sync>
-        <Routes routes={routes} />
+      <Router sync routes={routes}>
+        <Routes />
       </Router>
     )
   }
@@ -635,8 +635,8 @@ test.serial('Link with cross-origin URL lets the browser handle it', (t) => {
 
   function App() {
     return (
-      <Router sync>
-        <Routes routes={routes} />
+      <Router sync routes={routes}>
+        <Routes />
       </Router>
     )
   }
@@ -675,8 +675,8 @@ test.serial('Link with download attribute lets the browser handle it', (t) => {
 
   function App() {
     return (
-      <Router sync>
-        <Routes routes={routes} />
+      <Router sync routes={routes}>
+        <Routes />
       </Router>
     )
   }
@@ -716,8 +716,8 @@ test.serial('Link with same-page hash lets the browser handle it', async (t) => 
 
   function App() {
     return (
-      <Router sync>
-        <Routes routes={routes} />
+      <Router sync routes={routes}>
+        <Routes />
       </Router>
     )
   }

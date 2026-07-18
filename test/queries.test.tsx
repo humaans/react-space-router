@@ -60,9 +60,9 @@ test.serial(
 
     await act(async () => {
       ReactDOM.createRoot(root).render(
-        <Router sync data={adapter}>
+        <Router sync data={adapter} routes={routes}>
           <CaptureRouter />
-          <Routes routes={routes} />
+          <Routes />
         </Router>,
       )
     })
@@ -97,9 +97,9 @@ test.serial('queries handles are pinned on navigation and released on the next',
 
   await act(async () => {
     ReactDOM.createRoot(root).render(
-      <Router sync data={adapter}>
+      <Router sync data={adapter} routes={routes}>
         <CaptureRouter />
-        <Routes routes={routes} />
+        <Routes />
       </Router>,
     )
   })
@@ -150,9 +150,9 @@ test.serial('prefetchable:false vetoes speculation but still prepares on navigat
 
   await act(async () => {
     ReactDOM.createRoot(root).render(
-      <Router sync data={adapter}>
+      <Router sync data={adapter} routes={routes}>
         <CaptureRouter />
-        <Routes routes={routes} />
+        <Routes />
       </Router>,
     )
   })
@@ -183,8 +183,8 @@ test.serial('a queries route without a data adapter throws loudly', (t) => {
   const err = t.throws(() => {
     act(() => {
       ReactDOM.createRoot(root).render(
-        <Router sync>
-          <Routes routes={routes} />
+        <Router sync routes={routes}>
+          <Routes />
         </Router>,
       )
     })

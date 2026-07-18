@@ -54,9 +54,9 @@ test.serial('usePending flips while a transition is in flight', async (t) => {
 
   function App() {
     return (
-      <Router sync>
+      <Router sync routes={routes}>
         <Capture />
-        <Routes routes={routes} />
+        <Routes />
       </Router>
     )
   }
@@ -105,7 +105,7 @@ test.serial('DelayedSuspense renders fallback normally outside delayed navigatio
 
   function App() {
     return (
-      <Router sync>
+      <Router routes={[]} sync>
         <DelayedSuspense fallback={<span>Fallback</span>}>
           <Child />
         </DelayedSuspense>
@@ -171,10 +171,10 @@ test.serial('DelayedSuspense holds fallback during route transition delay', asyn
 
   function App() {
     return (
-      <Router sync pendingDelayMs={10_000}>
+      <Router sync pendingDelayMs={10_000} routes={routes}>
         <Capture />
         <Suspense fallback={<div>Outer fallback</div>}>
-          <Routes routes={routes} />
+          <Routes />
         </Suspense>
       </Router>
     )
@@ -238,9 +238,9 @@ test.serial('usePendingRoute exposes the transformed in-flight route and clears 
 
   function App() {
     return (
-      <Router sync transformRoute={(route) => ({ ...route, url: `${route.url}?via=transform` })}>
+      <Router sync transformRoute={(route) => ({ ...route, url: `${route.url}?via=transform` })} routes={routes}>
         <Probe />
-        <Routes routes={routes} />
+        <Routes />
       </Router>
     )
   }
@@ -306,9 +306,9 @@ test.serial('usePendingRoute registers history-driven navigations', async (t) =>
 
   function App() {
     return (
-      <Router sync>
+      <Router sync routes={routes}>
         <Probe />
-        <Routes routes={routes} />
+        <Routes />
       </Router>
     )
   }
@@ -351,8 +351,8 @@ test.serial('popstate emits are deferred to a macrotask in async mode', async (t
 
   function App() {
     return (
-      <Router>
-        <Routes routes={routes} />
+      <Router routes={routes}>
+        <Routes />
       </Router>
     )
   }
@@ -438,9 +438,9 @@ test.serial('async-mode popstate after a cold load holds the previous route and 
 
   function App() {
     return (
-      <Router>
+      <Router routes={routes}>
         <Suspense fallback={null}>
-          <Routes routes={routes} />
+          <Routes />
         </Suspense>
       </Router>
     )

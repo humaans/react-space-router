@@ -46,9 +46,9 @@ const routes = [
 
 function App() {
   return (
-    <Router>
+    <Router routes={routes}>
       <Suspense fallback={null}>
-        <Routes routes={routes} />
+        <Routes />
       </Suspense>
     </Router>
   )
@@ -151,7 +151,7 @@ const routes = [
   },
 ]
 
-<Router data={{ prepare, prefetch }}>...</Router>
+<Router routes={routes} data={{ prepare, prefetch }}>...</Router>
 <Link href={`/issues/${id}`} prefetch />
 ```
 
@@ -169,6 +169,18 @@ Wraps the application and provides router context and state. Route state lives i
 
 Props:
 
+- `routes` an array of route definitions, where each route is an object of shape `{ path, component, resolver, queries, prepare, props, scrollGroup, routes, ...metadata }`:
+  - `path` URL pattern, which may include `:named` segments.
+  - `component` a React component to render. Accepts an ESM-default module shape (`{ default: Component }`) too.
+  - `resolver` `() => import('./Screen')` — a dynamic import. The router preloads this at navigation time and renders via `React.lazy`. Cold imports suspend at the destination's Suspense boundary.
+  - `queries(ctx)` declares the route's data needs once as `[def, args]` pairs, run through the `<Router data>` adapter — as `prepare` on navigation, as `prefetch` on speculation (see [Prefetching](#prefetching)). Requires a `data` adapter.
+  - `prepare(ctx)` the low-level alternative to `queries` for prepare. Called at navigation time with `{ pathname, url, params, query }`; returns `PreparedHandle` objects pinned for the lifetime of the committed navigation and released when the next navigation commits.
+  - `prefetch(ctx)` the low-level alternative to `queries` for prefetch — called when a prefetching link warms this route. May fire at any frequency; the return value is ignored.
+  - `prefetchable` set `false` to exclude a route from speculative prefetch (no chunk preload, no `prefetch`) while still preparing on real navigation. A route-level veto that beats an explicit `<Link prefetch>`.
+  - `props` props to pass to the segment's component.
+  - `scrollGroup` a string that groups routes; navigations within a group don't scroll to top.
+  - `routes` nested route definitions.
+  - `...metadata` any other keys you want — they're available on `route.data[i]`.
 - `mode` one of `history`, `hash`, `memory` — default is `history`.
 - `qs` a custom query string parser of shape `{ parse, stringify }`.
 - `sync` if `true`, the underlying space-router fires synchronous transitions (useful in tests).
@@ -188,7 +200,7 @@ function transformQuery(query, { to, sourceRoute, targetRoute }) {
   return { ...query, scope: policy.defaultScope }
 }
 
-<Router transformQuery={transformQuery}>...</Router>
+<Router routes={routes} transformQuery={transformQuery}>...</Router>
 ```
 
 The transform runs while an app-created destination URL is being built. Its context contains:
@@ -206,27 +218,15 @@ Initial/direct URLs and browser back/forward traversal bypass `transformQuery`, 
 ### `<Routes />`
 
 ```js
-<Routes routes={[{ path: '/', component: Home }]} />
+<Routes />
 ```
 
-Renders the components that match the current route based on the route config. Nested ancestor segments wrap their descendants automatically — parents render `{children}` to position the matched child. Segments without a `component` or `resolver` are transparent wrappers for their descendants.
+Renders the components matched from the enclosing `<Router routes={routes}>` at this location. Nested ancestor segments wrap their descendants automatically — parents render `{children}` to position the matched child. Segments without a `component` or `resolver` are transparent wrappers for their descendants.
 
 When a navigation happens, every matched segment's `resolver()` is preloaded and every matched segment's `prepare()` is called, so chunk download and data loading can overlap. The router does not await the returned prepare promises before committing; the destination's nearest `<Suspense>` boundary handles any still-cold reads. This includes cold direct loads: the initial route's `resolver()` and `prepare()` are kicked off during the first render, before its components read from the data cache.
 
 Props:
 
-- `routes` an array of route definitions, where each route is an object of shape `{ path, component, resolver, queries, prepare, props, scrollGroup, routes, ...metadata }`:
-  - `path` URL pattern, may include `:named` segments.
-  - `component` a React component to render. Accepts an ESM-default module shape (`{ default: Component }`) too.
-  - `resolver` `() => import('./Screen')` — a dynamic import. The router preloads this at navigation time and renders via `React.lazy`. Cold imports suspend at the destination's Suspense boundary.
-  - `queries(ctx)` declares the route's data needs once as `[def, args]` pairs, run through the `<Router data>` adapter — as `prepare` on navigation, as `prefetch` on speculation (see [Prefetching](#prefetching)). Requires a `data` adapter.
-  - `prepare(ctx)` the low-level alternative to `queries` for prepare. Called at navigation time with `{ pathname, url, params, query }`; returns `PreparedHandle` objects pinned for the lifetime of the committed navigation and released when the next navigation commits.
-  - `prefetch(ctx)` the low-level alternative to `queries` for prefetch — called when a prefetching link warms this route. May fire at any frequency; the return value is ignored.
-  - `prefetchable` set `false` to exclude a route from speculative prefetch (no chunk preload, no `prefetch`) while still preparing on real navigation. A route-level veto that beats an explicit `<Link prefetch>`.
-  - `props` props to pass to the segment's component.
-  - `scrollGroup` a string that groups routes; navigations within a group don't scroll to top.
-  - `routes` nested route definitions.
-  - `...metadata` any other keys you want — they're available on `route.data[i]`.
 - `disableScrollToTop` disables the scroll-to-top behavior after each navigation.
 
 #### Path params as component props
@@ -254,7 +254,7 @@ If you also need cross-cutting access from a parent layout, reach for `useRoute(
 
 ### `PreparedHandle`
 
-The shape returned by `prepare()` functions. The router collects these from every matched segment, pins them while the route is committed, and calls `release()` when the next navigation commits or `<Routes>` unmounts.
+The shape returned by `prepare()` functions. The router collects these from every matched segment, pins them while the route is committed, and calls `release()` when the next navigation commits or `<Router>` unmounts.
 
 ```ts
 interface PreparedHandle {
@@ -337,7 +337,7 @@ Get the underlying Space Router instance. See [space-router docs](https://kidkar
 const route = useRoute()
 ```
 
-Subscribe to the current route. Route is `null` before a route has been committed outside `<Routes>`, otherwise an object of shape `{ url, pathname, params, query, search, hash, pattern, data }`:
+Subscribe to the current route, or `null` when the current URL does not match the router's route table. A matched initial route is available synchronously throughout `<Router>`, including components rendered outside `<Routes>`. The route has the shape `{ url, pathname, params, query, search, hash, pattern, data }`:
 
 - `url` full relative URL string including query string and hash if any.
 - `pathname` the pathname portion.
@@ -347,8 +347,6 @@ Subscribe to the current route. Route is `null` before a route has been committe
 - `hash` hash fragment.
 - `pattern` the matched route pattern from the route config.
 - `data` array of nested matched route objects (with components and any custom metadata).
-
-Route components rendered by `<Routes>` receive the initial route synchronously. Components outside `<Routes>` can still see `null` before the route table has mounted.
 
 ### `usePreviousRoute`
 

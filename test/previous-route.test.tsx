@@ -28,14 +28,15 @@ test.serial('usePreviousRoute is available on the destination first render and c
 
   await act(async () => {
     ReactDOM.createRoot(root).render(
-      <Router sync>
+      <Router
+        sync
+        routes={[
+          { path: '/a', component: () => <Page label='A' /> },
+          { path: '/b', component: () => <Page label='B' /> },
+        ]}
+      >
         <CaptureRouter />
-        <Routes
-          routes={[
-            { path: '/a', component: () => <Page label='A' /> },
-            { path: '/b', component: () => <Page label='B' /> },
-          ]}
-        />
+        <Routes />
       </Router>,
     )
   })
@@ -81,15 +82,16 @@ test.serial('usePreviousRoute ignores batched destinations that never commit', a
 
   await act(async () => {
     ReactDOM.createRoot(root).render(
-      <Router sync>
+      <Router
+        sync
+        routes={[
+          { path: '/home', component: Page },
+          { path: '/a', component: Page },
+          { path: '/b', component: Page },
+        ]}
+      >
         <CaptureRouter />
-        <Routes
-          routes={[
-            { path: '/home', component: Page },
-            { path: '/a', component: Page },
-            { path: '/b', component: Page },
-          ]}
-        />
+        <Routes />
       </Router>,
     )
   })
@@ -133,16 +135,17 @@ test.serial('a suspended destination superseded before commit never becomes prev
 
   await act(async () => {
     ReactDOM.createRoot(root).render(
-      <Router sync>
+      <Router
+        sync
+        routes={[
+          { path: '/home', component: () => <div>Home</div> },
+          { path: '/slow', component: Slow },
+          { path: '/final', component: () => <div>Final</div> },
+        ]}
+      >
         <CaptureRouter />
         <Suspense fallback={<div>Fallback</div>}>
-          <Routes
-            routes={[
-              { path: '/home', component: () => <div>Home</div> },
-              { path: '/slow', component: Slow },
-              { path: '/final', component: () => <div>Final</div> },
-            ]}
-          />
+          <Routes />
         </Suspense>
       </Router>,
     )
@@ -183,14 +186,15 @@ test.serial('unmatched navigation leaves previous route unchanged and traversal 
 
   await act(async () => {
     ReactDOM.createRoot(root).render(
-      <Router sync>
+      <Router
+        sync
+        routes={[
+          { path: '/a', component: () => null },
+          { path: '/b', component: () => null },
+        ]}
+      >
         <AppState />
-        <Routes
-          routes={[
-            { path: '/a', component: () => null },
-            { path: '/b', component: () => null },
-          ]}
-        />
+        <Routes />
       </Router>,
     )
   })
@@ -237,14 +241,16 @@ test.serial('usePreviousRoute returns post-transform committed routes', async (t
 
   await act(async () => {
     ReactDOM.createRoot(root).render(
-      <Router sync transformRoute={transformRoute}>
+      <Router
+        sync
+        transformRoute={transformRoute}
+        routes={[
+          { path: '/a', component: () => null },
+          { path: '/b', component: () => null },
+        ]}
+      >
         <AppState />
-        <Routes
-          routes={[
-            { path: '/a', component: () => null },
-            { path: '/b', component: () => null },
-          ]}
-        />
+        <Routes />
       </Router>,
     )
   })

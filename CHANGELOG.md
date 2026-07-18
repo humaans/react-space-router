@@ -4,6 +4,7 @@ The router is now built around React's transition machinery: navigations run ins
 
 ### Breaking
 
+- Route definitions move from `<Routes routes={routes}>` to `<Router routes={routes}>`; `<Routes />` now marks where the matched route tree renders.
 - Route state lives inside `<Router>`; the prop-based lifecycle hooks (`useRoute`, `onNavigating`, `onNavigated`) are removed. Read the current route with `useRoute()`, run post-navigation logic in regular effects, and replace `onNavigating`-based preloading with per-route `resolver` and `prepare`.
 - Function-form `<Link>` props (`className`, `style`, `extraProps`) are removed. Style current and pending links in plain CSS via the `aria-current="page"` and `data-pending` attributes, or use `useLinkState(to)` when the state needs to affect rendered output.
 - `useInternalRouterInstance` is renamed to `useSpaceRouter`. Same escape hatch, same return value — the underlying space-router instance.

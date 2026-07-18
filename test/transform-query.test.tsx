@@ -90,8 +90,8 @@ test.serial('transformQuery gives href and prefetch APIs one resolved destinatio
 
   await act(async () => {
     ReactDOM.createRoot(root).render(
-      <Router sync transformQuery={sourceAwareTransform(calls)}>
-        <Routes routes={routes} />
+      <Router sync transformQuery={sourceAwareTransform(calls)} routes={routes}>
+        <Routes />
       </Router>,
     )
   })
@@ -146,14 +146,16 @@ test.serial('useNavigate and public navigate serialize the same transformed quer
   try {
     await act(async () => {
       ReactDOM.createRoot(root).render(
-        <Router sync transformQuery={sourceAwareTransform()}>
+        <Router
+          sync
+          transformQuery={sourceAwareTransform()}
+          routes={[
+            { path: '/source/:id', component: () => null, queryPolicy: 'source' },
+            { path: '/target', component: () => null, queryPolicy: 'target' },
+          ]}
+        >
           <Capture />
-          <Routes
-            routes={[
-              { path: '/source/:id', component: () => null, queryPolicy: 'source' },
-              { path: '/target', component: () => null, queryPolicy: 'target' },
-            ]}
-          />
+          <Routes />
         </Router>,
       )
     })
@@ -207,13 +209,12 @@ test.serial(
               if (query.transformed) transformReapplications++
               return sourceAwareTransform()(query, context)
             }}
+            routes={[
+              { path: '/source/:id', component: Source, queryPolicy: 'source' },
+              { path: '/target', component: () => null, queryPolicy: 'target' },
+            ]}
           >
-            <Routes
-              routes={[
-                { path: '/source/:id', component: Source, queryPolicy: 'source' },
-                { path: '/target', component: () => null, queryPolicy: 'target' },
-              ]}
-            />
+            <Routes />
           </Router>,
         )
       })
@@ -252,13 +253,15 @@ test.serial('Navigate uses the same query-transform destination pipeline', async
   try {
     await act(async () => {
       ReactDOM.createRoot(root).render(
-        <Router sync transformQuery={sourceAwareTransform()}>
-          <Routes
-            routes={[
-              { path: '/source/:id', component: Source, queryPolicy: 'source' },
-              { path: '/target', component: () => null, queryPolicy: 'target' },
-            ]}
-          />
+        <Router
+          sync
+          transformQuery={sourceAwareTransform()}
+          routes={[
+            { path: '/source/:id', component: Source, queryPolicy: 'source' },
+            { path: '/target', component: () => null, queryPolicy: 'target' },
+          ]}
+        >
+          <Routes />
         </Router>,
       )
     })
@@ -293,13 +296,12 @@ test.serial('direct loads and browser traversal bypass transformQuery', async (t
           transformCalls++
           return { ...query, injected: 'yes' }
         }}
+        routes={[
+          { path: '/source', component: Page },
+          { path: '/target', component: Page },
+        ]}
       >
-        <Routes
-          routes={[
-            { path: '/source', component: Page },
-            { path: '/target', component: Page },
-          ]}
-        />
+        <Routes />
       </Router>,
     )
   })
@@ -343,14 +345,13 @@ test.serial('stable callbacks use the latest source route and unmatched targets 
             sources.push(sourceRoute?.pathname ?? null)
             return { ...query, source: sourceRoute?.params.id ?? 'none' }
           }}
+          routes={[
+            { path: '/source/:id', component: () => null },
+            { path: '/target', component: () => null },
+          ]}
         >
           <Capture />
-          <Routes
-            routes={[
-              { path: '/source/:id', component: () => null },
-              { path: '/target', component: () => null },
-            ]}
-          />
+          <Routes />
         </Router>,
       )
     })
@@ -425,14 +426,13 @@ test.serial('transformQuery preserves codec, hash, replace, empty values, and de
           if (typeof to !== 'string' && to.query === null) return null
           return { ...query, remove: undefined, empty: '' }
         }}
+        routes={[
+          { path: '/source', component: () => null },
+          { path: '/target', component: () => null },
+        ]}
       >
         <Capture />
-        <Routes
-          routes={[
-            { path: '/source', component: () => null },
-            { path: '/target', component: () => null },
-          ]}
-        />
+        <Routes />
       </Router>,
     )
   })
@@ -475,15 +475,14 @@ test.serial('transformQuery preserves hash-prefixed route hrefs in hash mode', a
           transformCalls++
           return { ...query, transformed: 'yes' }
         }}
+        routes={[
+          { path: '/source', component: () => null },
+          { path: '/target', component: () => null },
+          { path: '*', component: () => null },
+        ]}
       >
         <Capture />
-        <Routes
-          routes={[
-            { path: '/source', component: () => null },
-            { path: '/target', component: () => null },
-            { path: '*', component: () => null },
-          ]}
-        />
+        <Routes />
       </Router>,
     )
   })
@@ -537,17 +536,16 @@ test.serial('transformQuery and prefetch bypass non-route hrefs even with a wild
           transformCalls++
           return { ...query, transformed: 'yes' }
         }}
+        routes={[
+          { path: '/source', component: Source },
+          {
+            path: '*',
+            component: () => null,
+            prefetch: () => wildcardPrefetches++,
+          },
+        ]}
       >
-        <Routes
-          routes={[
-            { path: '/source', component: Source },
-            {
-              path: '*',
-              component: () => null,
-              prefetch: () => wildcardPrefetches++,
-            },
-          ]}
-        />
+        <Routes />
       </Router>,
     )
   })
@@ -595,13 +593,14 @@ test.serial('without transformQuery URL strings remain byte-for-byte unchanged',
 
   await act(async () => {
     ReactDOM.createRoot(root).render(
-      <Router sync>
-        <Routes
-          routes={[
-            { path: '/source', component: Source },
-            { path: '/target', component: () => null },
-          ]}
-        />
+      <Router
+        sync
+        routes={[
+          { path: '/source', component: Source },
+          { path: '/target', component: () => null },
+        ]}
+      >
+        <Routes />
       </Router>,
     )
   })

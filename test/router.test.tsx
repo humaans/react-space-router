@@ -29,6 +29,7 @@ test.serial('usage', async function (t) {
   ]
 
   let router
+  let routeOutsideRoutes: Route | null = null
 
   function Home() {
     return (
@@ -40,6 +41,7 @@ test.serial('usage', async function (t) {
 
   function InitialNav() {
     const _router = useSpaceRouter()
+    routeOutsideRoutes = useRoute()
 
     useEffect(() => {
       router = _router
@@ -50,9 +52,9 @@ test.serial('usage', async function (t) {
 
   function App() {
     return (
-      <Router sync>
+      <Router sync routes={routes}>
         <InitialNav />
-        <Routes routes={routes} />
+        <Routes />
       </Router>
     )
   }
@@ -63,6 +65,7 @@ test.serial('usage', async function (t) {
   })
 
   t.is(window.document.body.innerHTML, '<div id="root"><div><a href="/stuff">Stuff</a>Hello</div></div>')
+  t.is(routeOutsideRoutes?.url, '/')
 
   act(() => {
     router.navigate('/stuff')
@@ -86,9 +89,9 @@ test.serial('Router and Link render without browser globals', (t) => {
 
   try {
     const html = renderToString(
-      <Router>
+      <Router routes={[{ path: '/', component: () => <div>Home</div> }]}>
         <Link href='/x'>X</Link>
-        <Routes routes={[{ path: '/', component: () => <div>Home</div> }]} />
+        <Routes />
       </Router>,
     )
 
@@ -101,24 +104,24 @@ test.serial('Router and Link render without browser globals', (t) => {
   }
 })
 
-test.serial('Routes renders against a bare RouterContext without a Router', async (t) => {
+test.serial('Routes renders the current route supplied by RouterContext', async (t) => {
   setup()
 
   const root = document.getElementById('root')
-  const prepared: string[] = []
+  const makeRoute = (label: string) =>
+    ({
+      pattern: '/',
+      url: '/',
+      pathname: '/',
+      params: {},
+      query: {},
+      search: '',
+      hash: '',
+      data: [{ path: '/', component: () => <div>{label}</div> }],
+    }) as Route
 
-  const makeRoutes = (label: string) => [
-    {
-      path: '/',
-      prepare: () => {
-        prepared.push(label)
-      },
-      component: () => <div>{label}</div>,
-    },
-  ]
-
-  const routesA = makeRoutes('A')
-  const routesB = makeRoutes('B')
+  const routeA = makeRoute('A')
+  const routeB = makeRoute('B')
 
   const router = {
     getUrl: () => '/',
@@ -128,19 +131,19 @@ test.serial('Routes renders against a bare RouterContext without a Router', asyn
     navigate: () => {},
   }
 
-  const ctx = {
-    router,
-    route: null,
-    navigate: () => {},
-    isPending: false,
-    pending: null,
-    qs: undefined,
-  } as any
-
-  function App({ routes }: { routes: typeof routesA }) {
+  function App({ route }: { route: Route }) {
+    const ctx = {
+      router,
+      route,
+      previousRoute: null,
+      navigate: () => {},
+      isPending: false,
+      pending: null,
+      qs: undefined,
+    } as any
     return (
       <RouterContext.Provider value={ctx}>
-        <Routes routes={routes} />
+        <Routes />
       </RouterContext.Provider>
     )
   }
@@ -148,19 +151,16 @@ test.serial('Routes renders against a bare RouterContext without a Router', asyn
   let r
   await act(async () => {
     r = ReactDOM.createRoot(root)
-    r.render(<App routes={routesA} />)
+    r.render(<App route={routeA} />)
   })
 
   t.is(window.document.body.innerHTML, '<div id="root"><div>A</div></div>')
-  t.deepEqual(prepared, ['A'])
 
-  // Without a <Router> driving commits, swapping the route map still
-  // re-prepares via the default no-op internals instead of crashing.
   await act(async () => {
-    r.render(<App routes={routesB} />)
+    r.render(<App route={routeB} />)
   })
 
-  t.deepEqual(prepared, ['A', 'B'])
+  t.is(window.document.body.innerHTML, '<div id="root"><div>B</div></div>')
 })
 
 test.serial('Navigate follows to prop changes while mounted', async (t) => {
@@ -178,9 +178,9 @@ test.serial('Navigate follows to prop changes while mounted', async (t) => {
     const [target, _setTarget] = useState('/a')
     setTarget = _setTarget
     return (
-      <Router sync>
+      <Router sync routes={routes}>
         <Navigate to={{ url: target }} />
-        <Routes routes={routes} />
+        <Routes />
       </Router>
     )
   }
@@ -310,9 +310,9 @@ test.serial('transformRoute rewrites the route before commit and syncs the URL',
 
   function App() {
     return (
-      <Router sync transformRoute={transformRoute}>
+      <Router sync transformRoute={transformRoute} routes={routes}>
         <Capture />
-        <Routes routes={routes} />
+        <Routes />
       </Router>
     )
   }
@@ -357,15 +357,16 @@ test.serial('navigation coalesces only consecutive identical outstanding request
     await act(async () => {
       const r = ReactDOM.createRoot(root)
       r.render(
-        <Router sync>
+        <Router
+          sync
+          routes={[
+            { path: '/', component: () => <div>Home</div> },
+            { path: '/a', component: () => <div>A</div> },
+            { path: '/b', component: () => <div>B</div> },
+          ]}
+        >
           <Capture />
-          <Routes
-            routes={[
-              { path: '/', component: () => <div>Home</div> },
-              { path: '/a', component: () => <div>A</div> },
-              { path: '/b', component: () => <div>B</div> },
-            ]}
-          />
+          <Routes />
         </Router>,
       )
     })
@@ -450,8 +451,8 @@ test.serial('transformRoute applies before initial route prepare', async (t) => 
 
   function App() {
     return (
-      <Router sync transformRoute={transformRoute}>
-        <Routes routes={routes} />
+      <Router sync transformRoute={transformRoute} routes={routes}>
+        <Routes />
       </Router>
     )
   }
@@ -500,8 +501,8 @@ test.serial('transformRoute syncs the URL behind the # in hash mode', async (t) 
 
   function App() {
     return (
-      <Router sync mode='hash' transformRoute={transformRoute}>
-        <Routes routes={routes} />
+      <Router sync mode='hash' transformRoute={transformRoute} routes={routes}>
+        <Routes />
       </Router>
     )
   }
@@ -557,9 +558,9 @@ test.serial('transformRoute leaves browser history untouched in memory mode', as
 
   function App() {
     return (
-      <Router sync mode='memory' transformRoute={transformRoute}>
+      <Router sync mode='memory' transformRoute={transformRoute} routes={routes}>
         <Capture />
-        <Routes routes={routes} />
+        <Routes />
       </Router>
     )
   }
@@ -609,9 +610,9 @@ test.serial('Routes passes children through when a middle segment has no compone
 
   function App() {
     return (
-      <Router sync>
+      <Router sync routes={routes}>
         <Capture />
-        <Routes routes={routes} />
+        <Routes />
       </Router>
     )
   }
@@ -651,9 +652,9 @@ test.serial('Routes injects path params as component props', (t) => {
 
   function App() {
     return (
-      <Router sync>
+      <Router sync routes={routes}>
         <Capture />
-        <Routes routes={routes} />
+        <Routes />
       </Router>
     )
   }
@@ -704,9 +705,9 @@ test.serial('Routes parses query hash splat optional params and wildcard routes'
 
   function App() {
     return (
-      <Router sync mode='memory'>
+      <Router sync mode='memory' routes={routes}>
         <Capture />
-        <Routes routes={routes} />
+        <Routes />
       </Router>
     )
   }
@@ -745,7 +746,7 @@ test.serial('Routes parses query hash splat optional params and wildcard routes'
   t.regex(window.document.body.innerHTML, /path=\/anything-else/)
 })
 
-test.serial('Routes rematches the current URL when the route map changes in memory mode', async (t) => {
+test.serial('Router rematches the current URL when the route map changes in memory mode', async (t) => {
   setup()
 
   const root = document.getElementById('root')
@@ -764,9 +765,9 @@ test.serial('Routes rematches the current URL when the route map changes in memo
     const [routes, _setRoutes] = useState<RouteDefinition[]>([{ path: '/swap', component: () => <div>A</div> }])
     setRoutes = _setRoutes
     return (
-      <Router sync mode='memory'>
+      <Router sync mode='memory' routes={routes}>
         <Capture />
-        <Routes routes={routes} />
+        <Routes />
       </Router>
     )
   }
@@ -794,6 +795,7 @@ test.serial('Router recreates router when mode prop changes', (t) => {
 
   const root = document.getElementById('root')
   const seenRouters = new Set()
+  const routes = []
 
   function Capture() {
     const r = useSpaceRouter()
@@ -807,7 +809,7 @@ test.serial('Router recreates router when mode prop changes', (t) => {
     const [mode, _setMode] = useState('history')
     setMode = _setMode
     return (
-      <Router sync mode={mode}>
+      <Router routes={routes} sync mode={mode}>
         <Capture />
       </Router>
     )

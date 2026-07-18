@@ -39,8 +39,8 @@ test.serial('Link prefetch preloads the resolver chunk and runs route prefetch o
 
   await act(async () => {
     ReactDOM.createRoot(root).render(
-      <Router sync>
-        <Routes routes={routes} />
+      <Router sync routes={routes}>
+        <Routes />
       </Router>,
     )
   })
@@ -92,8 +92,8 @@ test.serial('Router prefetchLinks turns prefetch on for all links, prefetch={fal
 
   await act(async () => {
     ReactDOM.createRoot(root).render(
-      <Router sync prefetchLinks>
-        <Routes routes={routes} />
+      <Router sync prefetchLinks routes={routes}>
+        <Routes />
       </Router>,
     )
   })
@@ -132,8 +132,8 @@ test.serial('prefetch receives the transformed route, matching what a navigation
 
   await act(async () => {
     ReactDOM.createRoot(root).render(
-      <Router sync transformRoute={(route) => ({ ...route, query: { ...route.query, restored: '1' } })}>
-        <Routes routes={routes} />
+      <Router sync transformRoute={(route) => ({ ...route, query: { ...route.query, restored: '1' } })} routes={routes}>
+        <Routes />
       </Router>,
     )
   })
@@ -187,8 +187,8 @@ test.serial('Link prefetch=visible prefetches when the link scrolls into view', 
 
     await act(async () => {
       ReactDOM.createRoot(root).render(
-        <Router sync>
-          <Routes routes={routes} />
+        <Router sync routes={routes}>
+          <Routes />
         </Router>,
       )
     })
@@ -251,8 +251,8 @@ test.serial('Link prefetch=visible disconnects the observer when the ref is clea
     await act(async () => {
       rootHandle = ReactDOM.createRoot(root)
       rootHandle.render(
-        <Router sync>
-          <Routes routes={routes} />
+        <Router sync routes={routes}>
+          <Routes />
         </Router>,
       )
     })
@@ -303,8 +303,8 @@ test.serial('usePrefetch warms a target programmatically and no-ops on unmatched
 
   await act(async () => {
     ReactDOM.createRoot(root).render(
-      <Router sync>
-        <Routes routes={routes} />
+      <Router sync routes={routes}>
+        <Routes />
       </Router>,
     )
   })
