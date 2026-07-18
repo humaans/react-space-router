@@ -468,10 +468,10 @@ function useTargetRouter({ router, mode, currentRoute, transformQuery, matcher }
   const publicRouter = useMemo<SpaceRouter<RouteData>>(
     () => ({
       ...router,
-      navigate(to, curr) {
+      navigate(to, curr?: Route<RouteData>) {
         navigate(to, curr)
       },
-      href(to, curr) {
+      href(to, curr?: Route<RouteData>) {
         return resolveTarget(to, curr).href
       },
     }),
