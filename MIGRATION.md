@@ -185,6 +185,13 @@ function transformRoute(route) {
 `transformRoute` must be pure and synchronous. Returning `undefined` (or `void`)
 means "commit unchanged".
 
+For query policy that should apply only to destinations created by the app —
+and must agree across navigation, link hrefs, and prefetch while leaving direct
+loads and back/forward URLs untouched — use `<Router transformQuery>` instead.
+It receives `(query, { to, sourceRoute, targetRoute })` and returns the query to
+serialize. Keep `transformRoute` for changes to the route being prepared and
+committed; the two hooks are deliberately independent.
+
 ### Removing the `useRoute` injection prop
 
 If you previously did:

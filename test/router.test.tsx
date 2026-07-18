@@ -10,6 +10,7 @@ import {
   Routes,
   Link,
   Navigate,
+  useNavigate,
   useSpaceRouter,
   useRoute,
   qs,
@@ -178,7 +179,7 @@ test.serial('Navigate follows to prop changes while mounted', async (t) => {
     setTarget = _setTarget
     return (
       <Router sync>
-        <Navigate to={target} />
+        <Navigate to={{ url: target }} />
         <Routes routes={routes} />
       </Router>
     )
@@ -328,6 +329,93 @@ test.serial('transformRoute rewrites the route before commit and syncs the URL',
   t.regex(window.document.body.innerHTML, /status=active/)
   t.is(preparedStatus, 'active')
   t.is(preparedUrl, '/people?status=active')
+})
+
+test.serial('navigation coalesces only consecutive identical outstanding requests from one route', async (t) => {
+  setup()
+
+  const root = document.getElementById('root')
+  const pushed: string[] = []
+  const originalPushState = history.pushState
+  let navigate
+  let router
+  const navigateReferences: unknown[] = []
+
+  history.pushState = (state: unknown, title: string, url: string) => {
+    pushed.push(url)
+    originalPushState.call(history, state, title, url)
+  }
+
+  function Capture() {
+    navigate = useNavigate()
+    router = useSpaceRouter()
+    navigateReferences.push(navigate)
+    return null
+  }
+
+  try {
+    await act(async () => {
+      const r = ReactDOM.createRoot(root)
+      r.render(
+        <Router sync>
+          <Capture />
+          <Routes
+            routes={[
+              { path: '/', component: () => <div>Home</div> },
+              { path: '/a', component: () => <div>A</div> },
+              { path: '/b', component: () => <div>B</div> },
+            ]}
+          />
+        </Router>,
+      )
+    })
+    const initialNavigate = navigate
+
+    await act(async () => {
+      navigate('/a')
+      navigate('/a')
+      navigate('/a')
+    })
+    t.deepEqual(pushed, ['/a'])
+    t.is(window.document.body.textContent, 'A')
+
+    // A committed same-URL navigation is intentional and remains allowed.
+    await act(async () => {
+      navigate('/a')
+    })
+    t.deepEqual(pushed, ['/a', '/a'])
+
+    // A callback captured on the initial route remains stable, but merge is
+    // resolved from the latest committed route rather than that old closure.
+    await act(async () => {
+      initialNavigate({ query: { scope: 'team' }, merge: true })
+    })
+    t.deepEqual(pushed, ['/a', '/a', '/a?scope=team'])
+
+    // An intervening target makes A -> B -> A two distinct requests, even
+    // before either one has committed. The public router follows the same
+    // guarded path as useNavigate, Link, and Navigate.
+    await act(async () => {
+      router.navigate('/b')
+      router.navigate('/a')
+    })
+    t.deepEqual(pushed, ['/a', '/a', '/a?scope=team', '/b', '/a'])
+    t.is(window.document.body.textContent, 'A')
+
+    // Unmatched targets cannot commit, so their short-lived guard is cleared
+    // and the same request can be retried.
+    await act(async () => {
+      navigate('/missing')
+    })
+    await act(async () => {
+      navigate('/missing')
+    })
+    t.deepEqual(pushed, ['/a', '/a', '/a?scope=team', '/b', '/a', '/missing', '/missing'])
+
+    t.true(navigateReferences.every((reference) => reference === navigateReferences[0]))
+  } finally {
+    history.pushState = originalPushState
+  }
 })
 
 test.serial('transformRoute applies before initial route prepare', async (t) => {

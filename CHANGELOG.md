@@ -17,6 +17,8 @@ The router is now built around React's transition machinery: navigations run ins
 - Link prefetching: `<Link prefetch>` (`true`/`'hover'`/`'visible'`) warms a route's chunk and data on hover or visibility, `<Router prefetchLinks>` sets the default for all links, route `prefetchable: false` vetoes speculation for expensive routes, and `usePrefetch()` exposes the primitive for custom triggers.
 - `<DelayedSuspense>` and `pendingDelayMs` for browser-style loading: hold the previous page briefly, then degrade to a skeleton.
 - `transformRoute(route)` pre-commit hook for URL rewrites (e.g. persisted-query restoration), with automatic address-bar sync.
+- `transformQuery(query, { to, sourceRoute, targetRoute })` for app-owned destination-query policy across navigation, href, link, `<Navigate>`, and prefetch APIs. Direct loads, browser traversal, external/protocol URLs, and same-page fragments remain untouched.
+- Consecutive identical outstanding navigation requests from the same source route are coalesced, preventing duplicate history writes while preserving A → B → A and intentional same-URL navigation after a commit.
 - Matched path params are injected as props onto the route segment that declares them.
 - `scrollGroup` for keeping scroll position across related routes.
 

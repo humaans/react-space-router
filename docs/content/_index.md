@@ -173,9 +173,35 @@ Props:
 - `qs` a custom query string parser of shape `{ parse, stringify }`.
 - `sync` if `true`, the underlying space-router fires synchronous transitions (useful in tests).
 - `transformRoute(route)` an optional pure, synchronous function that runs between match and commit. Return a modified `Route` to change what gets committed; if its `url` differs from the matched URL, the router silently replaces the URL (mode-aware, so it works in hash mode too) so the address bar matches. Use this for things like persisted-query restoration. Must not be async.
+- `transformQuery(query, { to, sourceRoute, targetRoute })` an optional pure, synchronous mapping for the query of app-created destinations. It returns the query serialized by the configured `qs` codec, or `null` to remove the query. See [Query transform](#query-transform).
 - `data` a data adapter of shape `{ prepare(def, args), prefetch(def, args) }` that bridges route `queries` to a data layer (see [Prefetching](#prefetching)). `prepare` returns a `PreparedHandle`; `prefetch` warms speculatively. figbird's kit satisfies this directly. Should be referentially stable; required only if a route uses `queries`.
 - `prefetchLinks` default prefetch trigger for every link: `true`/`'hover'` or `'visible'`. Individual links override with their own `prefetch` prop, including `prefetch={false}` to opt out. Off by default.
 - `pendingDelayMs` how long `<DelayedSuspense>` holds the previous route before rendering its fallback during an in-flight navigation. Default: `1000`.
+
+#### Query transform
+
+```tsx
+function transformQuery(query, { to, sourceRoute, targetRoute }) {
+  const policy = targetRoute.data.at(-1)?.queryPolicy
+  if (!policy) return query
+
+  return { ...query, scope: policy.defaultScope }
+}
+
+<Router transformQuery={transformQuery}>...</Router>
+```
+
+The transform runs while an app-created destination URL is being built. Its context contains:
+
+- `to` — the original string or target object supplied by the app.
+- `sourceRoute` — the latest route at that call site, or `null` before the first commit.
+- `targetRoute` — the route matched from the original destination before the query transform, including its route `data`.
+
+The returned object is serialized with the Router's `qs` codec. Return `{}` or `null` for no query; properties whose values are `undefined` follow the codec's deletion behavior. Pathname, params, hash, and `replace` remain unchanged.
+
+One target-building pipeline is shared by `useNavigate`, `useSpaceRouter().navigate`, `useSpaceRouter().href`, `useMakeHref`, `useLinkProps`, `<Link>`, `<Navigate>`, `usePrefetch`, and link prefetch. URL strings and `{ url }` targets are matched and processed too. A link's rendered `href`, click, and prefetch therefore use the same resolved URL.
+
+Initial/direct URLs and browser back/forward traversal bypass `transformQuery`, preserving the exact historical URL. Browser-owned targets — external/protocol URLs and same-page fragments such as `#section` — bypass it too, even when the route table contains a wildcard. In hash mode, `#/path` is an app route and is transformed; `#section` is not. The function may run during rendering and whenever callers request an href, so it must be pure, synchronous, and safe to repeat.
 
 ### `<Routes />`
 
@@ -385,6 +411,8 @@ Get the `navigate` function for performing programmatic navigations. Accepts a `
 - `merge` merge partial `to` into the current route.
 - `replace` replace the current history entry instead of pushing.
 
+The returned function is stable and resolves merged targets against the latest committed route. Consecutive identical outstanding requests from the same source route are coalesced; an intervening destination remains allowed, and the same URL can be navigated again after a commit.
+
 ### `useLinkProps`
 
 ```js
@@ -430,7 +458,7 @@ const prefetch = usePrefetch()
 prefetch('/issues/42')
 ```
 
-Returns a function that warms a navigation target without navigating: matches the URL, applies `transformRoute`, preloads matched `resolver` chunks, and calls each matched segment's `prefetch(ctx)`. Fire-and-forget and safe to call repeatedly — the data layer owns freshness. Unmatched URLs are a no-op.
+Returns a function that warms a navigation target without navigating: applies `transformQuery`, matches the resulting URL, applies `transformRoute`, preloads matched `resolver` chunks, and calls each matched segment's `prefetch(ctx)`. Fire-and-forget and safe to call repeatedly — the data layer owns freshness. Unmatched URLs are a no-op.
 
 `<Link prefetch>` uses this internally; call it directly for custom triggers — a form submit that predicts the next screen, viewport logic the router doesn't own:
 
@@ -457,7 +485,7 @@ Create a relative URL string to use in `<a href>`.
 
 - `to` object of shape `{ pathname, params, query, hash }`. The `params` interpolate into named pathname segments; `query` is stringified via `qs.stringify`.
 
-If `to` is a string, `makeHref` returns it as-is. Same for `{ url }` — this matches `navigate`'s signature so the two are interchangeable.
+Without `transformQuery`, a string or `{ url }` is returned as-is. With the transform, those forms go through the same matched destination-query pipeline as object targets and navigation, so generated hrefs remain interchangeable with `navigate`.
 
 ### `shouldNavigate`
 
