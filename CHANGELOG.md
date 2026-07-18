@@ -11,6 +11,7 @@ The router is now built around React's transition machinery: navigations run ins
 ### New
 
 - Suspense-aware navigation: the previous route stays on screen and interactive while the destination suspends. Pending state comes for free — `usePending()` for "is a navigation happening", `usePendingRoute()` for "where to", and a per-link `data-pending` attribute (plus `useLinkState(to)`) for "was it this link" — for clicks, programmatic navigation, and browser back/forward alike.
+- `usePreviousRoute()` for the route preceding the current successful commit. It is available on a destination's first render and ignores pending, suspended, superseded, and unmatched destinations.
 - Code-split routes via `resolver: () => import('./Page')`, preloaded at navigation time and rendered through `React.lazy`.
 - Fetch-as-you-render data loading via route `prepare(ctx)` — fetches start when navigation begins (including cold direct loads), in parallel with chunk download, and the returned `PreparedHandle`s stay pinned while the route is committed.
 - Declarative data loading via route `queries` + a `<Router data>` adapter: declare a route's data once and the adapter runs it as `prepare` on navigation and `prefetch` on hover. The adapter is a minimal `{ prepare, prefetch }` contract co-designed with (and satisfied directly by) figbird's kit — the router stays data-layer-agnostic. The low-level `prepare`/`prefetch` fields remain for divergent routes or adapter-less data layers.

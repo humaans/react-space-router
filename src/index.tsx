@@ -204,6 +204,7 @@ interface RouterContextValue {
 
 export const RouterContext = createContext<RouterContextValue | undefined>(undefined)
 const RouteContext = createContext<Route<RouteData> | null | undefined>(undefined)
+const PreviousRouteContext = createContext<Route<RouteData> | null | undefined>(undefined)
 
 // Plumbing between <Router> and <Routes>, kept out of the public RouterContext.
 // The defaults let <Routes> render against a bare RouterContext (e.g. in
@@ -273,6 +274,20 @@ export function useRoute(): Route<RouteData> | null {
     throw new Error('Application must be wrapped in <Router />')
   }
   return ctx.route
+}
+
+/**
+ * The route immediately preceding the current successfully committed route,
+ * or `null` on the initial route. Pending, suspended, superseded, and
+ * unmatched destinations do not advance it. Same-URL commits do: route
+ * identity, rather than URL equality, defines a new commit.
+ */
+export function usePreviousRoute(): Route<RouteData> | null {
+  const route = useContext(PreviousRouteContext)
+  if (route === undefined) {
+    throw new Error('Application must be wrapped in <Router />')
+  }
+  return route
 }
 
 /**
@@ -576,6 +591,28 @@ export interface RouterProps {
 
 const DEFAULT_PENDING_DELAY_MS = 1000
 
+// Derive history from renders that actually commit, not from navigation state
+// updates. React may batch A -> B -> A or discard a suspended B render; only a
+// layout effect confirms that a route became current. During the first render
+// of a newly committed destination, `committedRoute.current` still points to
+// the route its components came from, so they receive the right value without
+// waiting for another render.
+function usePreviousCommittedRoute(currentRoute: Route<RouteData> | null): Route<RouteData> | null {
+  const committedRoute = useRef<Route<RouteData> | null>(null)
+  const previousRoute = useRef<Route<RouteData> | null>(null)
+
+  const previous =
+    currentRoute && currentRoute !== committedRoute.current ? committedRoute.current : previousRoute.current
+
+  useLayoutEffect(() => {
+    if (!currentRoute || currentRoute === committedRoute.current) return
+    previousRoute.current = committedRoute.current
+    committedRoute.current = currentRoute
+  }, [currentRoute])
+
+  return previous
+}
+
 export function Router({
   mode,
   qs,
@@ -592,6 +629,7 @@ export function Router({
   const [currRoute, setCurrRoute] = useState<Route<RouteData> | null>(null)
   const [pending, setPending] = useState<PendingNavigation | null>(null)
   const [isPending, startRouterTransition] = useTransition()
+  const previousRoute = usePreviousCommittedRoute(currRoute)
 
   // `holding` is true during the pre-commit window where `<DelayedSuspense>`
   // boundaries should re-throw their fallback (so the previous route stays
@@ -680,11 +718,13 @@ export function Router({
 
   return (
     <RouterContext.Provider value={ctx}>
-      <RouterTargetsContext.Provider value={targetRouter.targets}>
-        <RouterInternalsContext.Provider value={internals}>
-          <DelayedSuspenseContext.Provider value={holding}>{children}</DelayedSuspenseContext.Provider>
-        </RouterInternalsContext.Provider>
-      </RouterTargetsContext.Provider>
+      <PreviousRouteContext.Provider value={previousRoute}>
+        <RouterTargetsContext.Provider value={targetRouter.targets}>
+          <RouterInternalsContext.Provider value={internals}>
+            <DelayedSuspenseContext.Provider value={holding}>{children}</DelayedSuspenseContext.Provider>
+          </RouterInternalsContext.Provider>
+        </RouterTargetsContext.Provider>
+      </PreviousRouteContext.Provider>
     </RouterContext.Provider>
   )
 }

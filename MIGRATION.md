@@ -102,7 +102,8 @@ const onNavigated = (route) => trackPageView(route, prev)
 
 // After
 const route = useRoute()
-useEffect(() => trackPageView(route), [route])
+const previousRoute = usePreviousRoute()
+useEffect(() => trackPageView(route, previousRoute), [route, previousRoute])
 ```
 
 **Previous route tracking:**
@@ -114,9 +115,13 @@ const onNavigated = (route) => store.set(routerAtom, (s) => ({
 }))
 
 // After
-const route = useRoute()
-const prev = usePrevious(route) // your standard usePrevious hook
+const previousRoute = usePreviousRoute()
 ```
+
+Unlike a component-local `usePrevious(route)`, the router hook is populated on
+a newly mounted destination's first render. It advances only after a route
+successfully commits, so suspended, superseded, and unmatched destinations are
+not exposed as previous routes.
 
 **Param reduction across `route.data`:**
 

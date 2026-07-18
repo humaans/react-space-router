@@ -14,7 +14,7 @@ React Space Router is a set of hooks and components for keeping your app in sync
 - Nested, code-split routes with path params passed straight to route components.
 - Route-level data loading and prefetching through a small, data-layer-agnostic adapter.
 - Link prefetching on hover, focus, touch, or visibility.
-- Pending route state for global indicators, sidebars, tabs, and breadcrumbs.
+- Previous and pending route state for back links, global indicators, sidebars, tabs, and breadcrumbs.
 - Delayed loading fallbacks for fast-feeling browser-style transitions.
 
 ## Why
@@ -349,6 +349,18 @@ Subscribe to the current route. Route is `null` before a route has been committe
 - `data` array of nested matched route objects (with components and any custom metadata).
 
 Route components rendered by `<Routes>` receive the initial route synchronously. Components outside `<Routes>` can still see `null` before the route table has mounted.
+
+### `usePreviousRoute`
+
+```js
+const previousRoute = usePreviousRoute()
+```
+
+The route immediately preceding the current successfully committed route, or `null` on the initial route. It is available to a destination component on its first render, making it suitable for contextual back links and post-navigation effects.
+
+If route A is current while B is pending, `usePreviousRoute()` continues to describe the route before A. Once B commits, it returns A. Suspended destinations that never commit, superseded navigations, and unmatched URLs do not advance it. Browser back/forward traversal does, and an intentional same-URL commit returns the prior route object even though both objects have the same URL.
+
+Both the current and previous routes are post-`transformRoute`.
 
 ### `usePending`
 
