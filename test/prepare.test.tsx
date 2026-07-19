@@ -33,6 +33,81 @@ test.serial('Router prepares the initial route during the first render', (t) => 
   t.is(prepareCalls, 1)
 })
 
+test.serial('Router releases acquired handles when later route preparation fails', (t) => {
+  setup()
+  g.location.href = '/broken'
+  g.location.pathname = '/broken'
+  let releaseCalls = 0
+
+  const routes = [
+    {
+      prepare: () => [
+        {
+          promise: Promise.resolve(),
+          release: () => releaseCalls++,
+        },
+      ],
+      routes: [
+        {
+          path: '/broken',
+          queries: () => [['missing-adapter']],
+          component: () => null,
+        },
+      ],
+    },
+  ]
+
+  const error = t.throws(() =>
+    renderToString(
+      <Router routes={routes} sync>
+        <Routes />
+      </Router>,
+    ),
+  )
+
+  t.regex(error.message, /no `data` adapter/)
+  t.is(releaseCalls, 1)
+})
+
+test.serial('Router releases committed handles when navigation becomes unmatched', async (t) => {
+  setup()
+  const root = document.getElementById('root')
+  let releaseCalls = 0
+  let router
+
+  function Capture() {
+    router = useSpaceRouter()
+    return null
+  }
+
+  await act(async () => {
+    ReactDOM.createRoot(root).render(
+      <Router
+        sync
+        routes={[
+          {
+            path: '/',
+            prepare: () => [{ release: () => releaseCalls++ }],
+            component: () => <div>Home</div>,
+          },
+        ]}
+      >
+        <Capture />
+        <Routes />
+      </Router>,
+    )
+  })
+
+  t.is(releaseCalls, 0)
+
+  await act(async () => {
+    router.navigate('/missing')
+  })
+
+  t.is(releaseCalls, 1)
+  t.is(window.document.body.innerHTML, '<div id="root"></div>')
+})
+
 test.serial('direct load renders routes whose components read prepared data', async (t) => {
   setup()
   g.location.href = '/profile'

@@ -1,7 +1,7 @@
 // Prefetching: <Link prefetch> triggers, the Router-level prefetchLinks
 // default, transform consistency, and the usePrefetch() primitive.
 import test from 'ava'
-import { act } from 'react'
+import { act, createRef } from 'react'
 import ReactDOM from 'react-dom/client'
 import { Router, Routes, Link, useNavigate, usePrefetch, type RoutePrepareContext } from '../src/index.tsx'
 import { g, setup } from './helpers.ts'
@@ -231,12 +231,13 @@ test.serial('Link prefetch=visible prefetches when the link scrolls into view', 
   try {
     const root = document.getElementById('root')
     const prefetched: string[] = []
+    const anchorRef = createRef<HTMLAnchorElement>()
 
     const routes = [
       {
         path: '/',
         component: () => (
-          <Link href='/below-the-fold' prefetch='visible'>
+          <Link ref={anchorRef} href='/below-the-fold' prefetch='visible'>
             Later
           </Link>
         ),
@@ -254,6 +255,7 @@ test.serial('Link prefetch=visible prefetches when the link scrolls into view', 
 
     t.is(instances.length, 1)
     t.is(instances[0].observed[0], window.document.querySelector('a'))
+    t.is(anchorRef.current, window.document.querySelector('a'))
     t.deepEqual(prefetched, [])
 
     act(() => {

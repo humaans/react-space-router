@@ -4,18 +4,7 @@ import test from 'ava'
 import { act, useEffect, useState } from 'react'
 import ReactDOM from 'react-dom/client'
 import { renderToString } from 'react-dom/server'
-import {
-  Router,
-  RouterContext,
-  Routes,
-  Link,
-  Navigate,
-  useNavigate,
-  useSpaceRouter,
-  useRoute,
-  qs,
-  type Route,
-} from '../src/index.tsx'
+import { Router, Routes, Link, Navigate, useNavigate, useSpaceRouter, useRoute, qs, type Route } from '../src/index.tsx'
 import { g, setup } from './helpers.ts'
 
 test.serial('usage', async function (t) {
@@ -104,64 +93,6 @@ test.serial('Router and Link render without browser globals', (t) => {
   }
 })
 
-test.serial('Routes renders the current route supplied by RouterContext', async (t) => {
-  setup()
-
-  const root = document.getElementById('root')
-  const makeRoute = (label: string) =>
-    ({
-      pattern: '/',
-      url: '/',
-      pathname: '/',
-      params: {},
-      query: {},
-      search: '',
-      hash: '',
-      data: [{ path: '/', component: () => <div>{label}</div> }],
-    }) as Route
-
-  const routeA = makeRoute('A')
-  const routeB = makeRoute('B')
-
-  const router = {
-    getUrl: () => '/',
-    match: () => undefined,
-    listen: () => () => {},
-    href: () => '/',
-    navigate: () => {},
-  }
-
-  function App({ route }: { route: Route }) {
-    const ctx = {
-      router,
-      route,
-      previousRoute: null,
-      navigate: () => {},
-      isPending: false,
-      pending: null,
-    } as any
-    return (
-      <RouterContext.Provider value={ctx}>
-        <Routes />
-      </RouterContext.Provider>
-    )
-  }
-
-  let r
-  await act(async () => {
-    r = ReactDOM.createRoot(root)
-    r.render(<App route={routeA} />)
-  })
-
-  t.is(window.document.body.innerHTML, '<div id="root"><div>A</div></div>')
-
-  await act(async () => {
-    r.render(<App route={routeB} />)
-  })
-
-  t.is(window.document.body.innerHTML, '<div id="root"><div>B</div></div>')
-})
-
 test.serial('Navigate follows to prop changes while mounted', async (t) => {
   setup()
 
@@ -213,14 +144,6 @@ test.serial('useSpaceRouter throws outside Router', (t) => {
     return null
   }
 
-  function App() {
-    return (
-      <RouterContext.Provider value={undefined}>
-        <NoRouter />
-      </RouterContext.Provider>
-    )
-  }
-
   const originalConsoleError = console.error
   console.error = () => {}
 
@@ -229,7 +152,7 @@ test.serial('useSpaceRouter throws outside Router', (t) => {
       () => {
         act(() => {
           const r = ReactDOM.createRoot(root)
-          r.render(<App />)
+          r.render(<NoRouter />)
         })
       },
       { message: /Application must be wrapped in <Router \/>/ },
@@ -787,6 +710,83 @@ test.serial('Router rematches the current URL when the route map changes in memo
   })
 
   t.is(window.document.body.innerHTML, '<div id="root"><div>B</div></div>')
+
+  await act(async () => {
+    setRoutes([])
+  })
+
+  t.is(window.document.body.innerHTML, '<div id="root"></div>')
+
+  await act(async () => {
+    setRoutes([{ path: '/swap', component: () => <div>C</div> }])
+  })
+
+  t.is(window.document.body.innerHTML, '<div id="root"><div>C</div></div>')
+})
+
+test.serial('Router prepares a route-map update once in history mode', async (t) => {
+  setup()
+  g.location.href = '/swap'
+  g.location.pathname = '/swap'
+
+  const root = document.getElementById('root')
+  const prepared: string[] = []
+  const released: string[] = []
+  let setRoutes
+
+  const makeRoutes = (label: string) => [
+    {
+      path: '/swap',
+      component: () => <div>{label}</div>,
+      prepare: () => {
+        prepared.push(label)
+        return [
+          {
+            promise: Promise.resolve(),
+            release: () => released.push(label),
+          },
+        ]
+      },
+    },
+  ]
+
+  function App() {
+    const [routes, _setRoutes] = useState(makeRoutes('A'))
+    setRoutes = _setRoutes
+    return (
+      <Router sync routes={routes}>
+        <Routes />
+      </Router>
+    )
+  }
+
+  await act(async () => {
+    ReactDOM.createRoot(root).render(<App />)
+  })
+
+  await act(async () => {
+    setRoutes(makeRoutes('B'))
+  })
+
+  t.deepEqual(prepared, ['A', 'B'])
+  t.deepEqual(released, ['A'])
+  t.is(window.document.body.innerHTML, '<div id="root"><div>B</div></div>')
+
+  await act(async () => {
+    setRoutes([])
+  })
+
+  t.deepEqual(prepared, ['A', 'B'])
+  t.deepEqual(released, ['A', 'B'])
+  t.is(window.document.body.innerHTML, '<div id="root"></div>')
+
+  await act(async () => {
+    setRoutes(makeRoutes('C'))
+  })
+
+  t.deepEqual(prepared, ['A', 'B', 'C'])
+  t.deepEqual(released, ['A', 'B'])
+  t.is(window.document.body.innerHTML, '<div id="root"><div>C</div></div>')
 })
 
 test.serial('Router recreates router when mode prop changes', (t) => {

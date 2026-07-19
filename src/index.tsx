@@ -1,5 +1,6 @@
 import {
   createContext,
+  forwardRef,
   lazy as reactLazy,
   Suspense,
   useCallback,
@@ -47,7 +48,6 @@ export interface RoutePrepareContext {
  * the navigation; superseded navigations release their handles immediately.
  */
 export interface PreparedHandle {
-  promise: Promise<unknown>
   release(): void
 }
 
@@ -193,14 +193,14 @@ interface RouterContextValue {
   router: SpaceRouter<RouteData>
   route: Route<RouteData> | null
   previousRoute: Route<RouteData> | null
-  navigate: (to: To, currentRoute?: Route<RouteData>) => void
+  navigate: (to: To, currentRoute?: Route<RouteData> | null) => void
   isPending: boolean
   pending: PendingNavigation | null
   prefetchLinks: PrefetchMode | undefined
   prefetchHoverDelayMs: number
 }
 
-export const RouterContext = createContext<RouterContextValue | undefined>(undefined)
+const RouterContext = createContext<RouterContextValue | undefined>(undefined)
 
 interface ResolvedTarget {
   /** Final browser-facing href after app-level target transforms. */
@@ -295,7 +295,7 @@ export function useNavigate() {
   useLayoutEffect(() => {
     routeRef.current = route
   }, [route])
-  return useCallback((to: To) => navigate(to, routeRef.current ?? undefined), [navigate])
+  return useCallback((to: To) => navigate(to, routeRef.current), [navigate])
 }
 
 // ---------------------------------------------------------------------------
@@ -362,7 +362,7 @@ function makeRouter(routerOpts: RouterOpts): InternalRouter {
 
 interface TargetRouter {
   router: SpaceRouter<RouteData>
-  navigate: (to: To, currentRoute?: Route<RouteData>) => void
+  navigate: (to: To, currentRoute?: Route<RouteData> | null) => void
   resolve: RouterTargets['resolve']
   navigateResolved: RouterTargets['navigate']
 }
@@ -395,8 +395,12 @@ function useTargetRouter({
 
   const resolveTarget = useCallback(
     (to: To, routeAtCallSite?: Route<RouteData> | null): ResolvedTarget => {
-      const sourceRoute = routeAtCallSite ?? committedRoute.current
-      const initialHref = router.href(to, sourceRoute ?? undefined)
+      const sourceRoute = routeAtCallSite === undefined ? committedRoute.current : routeAtCallSite
+      // The listener uses an internal catch-all to observe unmatched URLs.
+      // Avoid letting space-router use that private match as the implicit
+      // merge source when the app has no current route.
+      const hrefTarget = sourceRoute === null && typeof to !== 'string' && to.merge ? { ...to, merge: false } : to
+      const initialHref = router.href(hrefTarget, sourceRoute ?? undefined)
       const routeHref = asRouteHref(initialHref, mode)
       const replace = typeof to !== 'string' && to.replace === true
       const transform = transformQueryRef.current
@@ -451,9 +455,9 @@ function useTargetRouter({
       outstandingNavigation.current = intent
       router.navigate({ url: href, replace })
 
-      // An unmatched or non-route target never reaches the route listener,
-      // so release its guard after route registration and scheduled emits
-      // have had a chance to run. This keeps it retryable.
+      // Release the guard for unmatched/non-route targets after route
+      // registration and scheduled emits have had a chance to run. This
+      // keeps an unmatched target retryable.
       queueMicrotask(() => {
         if (outstandingNavigation.current !== intent || (target.routeUrl !== null && matchTarget(target.routeUrl))) {
           return
@@ -465,7 +469,7 @@ function useTargetRouter({
   )
 
   const navigate = useCallback(
-    (to: To, routeAtCallSite?: Route<RouteData>) => {
+    (to: To, routeAtCallSite?: Route<RouteData> | null) => {
       navigateResolved(resolveTarget(to, routeAtCallSite))
     },
     [navigateResolved, resolveTarget],
@@ -480,10 +484,13 @@ function useTargetRouter({
       href(to, curr?: Route<RouteData>) {
         return resolveTarget(to, curr).href
       },
+      match(url) {
+        return matchTarget(url)
+      },
     }),
     // A new wrapper makes consumers recompute hrefs when the application
     // replaces its transform, while the callbacks still read the latest ref.
-    [router, navigate, resolveTarget, transformQuery],
+    [router, navigate, resolveTarget, matchTarget, transformQuery],
   )
 
   useLayoutEffect(() => {
@@ -554,6 +561,15 @@ const DEFAULT_PREFETCH_HOVER_DELAY_MS = 50
 interface RouteHistory {
   current: Route<RouteData> | null
   previous: Route<RouteData> | null
+  resolved: boolean
+}
+
+const UNMATCHED_ROUTE = Symbol('react-space-router unmatched route')
+type InternalRouteData = RouteData & { [UNMATCHED_ROUTE]?: true }
+const UNMATCHED_ROUTE_DEFINITION = { path: '*', [UNMATCHED_ROUTE]: true } as RouteDefinition<RouteData>
+
+function isUnmatchedRoute(route: Route<RouteData>): boolean {
+  return route.data.some((segment) => (segment as InternalRouteData)[UNMATCHED_ROUTE] === true)
 }
 
 export function Router({
@@ -571,9 +587,10 @@ export function Router({
 }: RouterProps) {
   const [{ router, routerOpts }, setRouter] = useState<InternalRouter>(() => makeRouter({ mode, qs, sync }))
 
-  const [{ current: currRoute, previous: previousRoute }, setRouteHistory] = useState<RouteHistory>({
+  const [{ current: currRoute, previous: previousRoute, resolved }, setRouteHistory] = useState<RouteHistory>({
     current: null,
     previous: null,
+    resolved: false,
   })
   const [pending, setPending] = useState<PendingNavigation | null>(null)
   const [isPending, startRouterTransition] = useTransition()
@@ -583,11 +600,12 @@ export function Router({
   // navigation started before the next layout commit must see the same source
   // route, so batched and superseded destinations never become `previous`.
   const committedRoute = useRef<Route<RouteData> | null>(null)
+  const lastSuccessfulRoute = useRef<Route<RouteData> | null>(null)
   const committed = useRef<PreparedRoute | null>(null)
   const pendingPrepared = useRef<PreparedRoute | null>(null)
   const initialPrepared = useRef<PreparedRoute | null>(null)
   const previousRoutes = useRef(routes)
-  const hasCurrentRoute = useRef(false)
+  const hasResolvedRoute = useRef(false)
 
   // `holding` is true during the pre-commit window where `<DelayedSuspense>`
   // boundaries should re-throw their fallback (so the previous route stays
@@ -615,6 +633,7 @@ export function Router({
   }, [])
 
   const matcher = useMemo(() => createMatcher(routes, { qs }), [routes, qs])
+  const listeningRoutes = useMemo(() => [...routes, UNMATCHED_ROUTE_DEFINITION], [routes])
 
   const targetRouter = useTargetRouter({
     router,
@@ -628,7 +647,7 @@ export function Router({
   const commit = useCallback(
     (prepared: PreparedRoute) => {
       const { route: next, matched } = prepared
-      const previous = committedRoute.current
+      const previous = lastSuccessfulRoute.current
 
       // The urgent set makes the pending navigation visible immediately;
       // the clear is deferred inside the transition so it only lands once
@@ -637,7 +656,7 @@ export function Router({
       // back/forward all register the same way.
       setPending({ route: next, matchedUrl: matched.url })
       startRouterTransition(() => {
-        setRouteHistory({ current: next, previous })
+        setRouteHistory({ current: next, previous, resolved: true })
         setPending(null)
       })
 
@@ -667,18 +686,38 @@ export function Router({
     [applyTransform, commit, data],
   )
 
+  const beginUnmatched = useCallback(() => {
+    const superseded = pendingPrepared.current
+    pendingPrepared.current = null
+    if (superseded) releaseHandles(superseded.handles)
+
+    setPending(null)
+    startRouterTransition(() => {
+      setRouteHistory((history) =>
+        history.resolved && history.current === null
+          ? history
+          : { current: null, previous: history.previous, resolved: true },
+      )
+    })
+  }, [])
+
   const releaseAll = useCallback(() => {
-    const handles = new Set([...(committed.current?.handles ?? []), ...(pendingPrepared.current?.handles ?? [])])
+    const handles = new Set([
+      ...(committed.current?.handles ?? []),
+      ...(pendingPrepared.current?.handles ?? []),
+      ...(initialPrepared.current?.handles ?? []),
+    ])
     releaseHandles([...handles])
     committed.current = null
     pendingPrepared.current = null
+    initialPrepared.current = null
   }, [])
 
   const initialRoute = useMemo<Pick<PreparedRoute, 'route' | 'matched'> | null>(() => {
-    if (currRoute) return null
+    if (resolved) return null
     const matched = matcher.match(router.getUrl())
     return matched ? { route: applyTransform(matched), matched } : null
-  }, [currRoute, router, matcher, applyTransform])
+  }, [resolved, router, matcher, applyTransform])
 
   // Prepare the initial destination during render so its components can read
   // seeded data on their first render and code/data loading overlaps. The
@@ -687,15 +726,16 @@ export function Router({
     initialPrepared.current = { ...initialRoute, handles: prepareRoute(initialRoute.route, data) }
   }
 
-  const activeRoute = currRoute ?? committed.current?.route ?? initialRoute?.route ?? null
+  const activeRoute = resolved ? currRoute : (committed.current?.route ?? initialRoute?.route ?? null)
 
   // A rendered current route means the transition reached React's commit
   // path. Mark it during render so same-URL navigations started from child
   // layout effects are not mistaken for the router listener's initial emit.
-  if (currRoute) hasCurrentRoute.current = true
+  if (resolved) hasResolvedRoute.current = true
 
   useLayoutEffect(() => {
     committedRoute.current = currRoute
+    if (currRoute) lastSuccessfulRoute.current = currRoute
   }, [currRoute])
 
   useEffect(() => {
@@ -714,13 +754,18 @@ export function Router({
 
   useEffect(() => {
     const transition = (matched: Route<RouteData>) => {
+      if (isUnmatchedRoute(matched)) {
+        beginUnmatched()
+        return
+      }
+
       // Transform fresh on every navigation because application state may
       // change the result even when the matched URL is identical.
       const transformed = applyTransform(matched)
 
       // The listener's first emit adopts the preparation created during the
       // initial render. Every later same-URL emit is a real navigation.
-      if (!hasCurrentRoute.current && committed.current?.route.url === transformed.url) {
+      if (!hasResolvedRoute.current && committed.current?.route.url === transformed.url) {
         const superseded = pendingPrepared.current
         pendingPrepared.current = null
         if (superseded) releaseHandles(superseded.handles)
@@ -730,27 +775,42 @@ export function Router({
 
       beginNavigation(matched, transformed)
     }
-    return router.listen(routes, transition)
-  }, [router, routes, applyTransform, commit, beginNavigation])
+    return router.listen(listeningRoutes, transition)
+  }, [router, listeningRoutes, applyTransform, commit, beginNavigation, beginUnmatched])
 
   useEffect(() => {
     if (previousRoutes.current === routes) return
     previousRoutes.current = routes
 
+    // History and hash listeners emit the current URL when they subscribe, so
+    // their route-table update is already owned by the listener above. Memory
+    // mode has no initial emit and therefore needs this explicit rematch.
+    if ((routerOpts.mode ?? 'history') !== 'memory') return
+
     const currentUrl = currRoute?.url ?? committed.current?.route.url ?? router.getUrl()
     const matched = currentUrl ? matcher.match(currentUrl) : undefined
     if (matched) beginNavigation(matched)
-  }, [routes, router, matcher, beginNavigation, currRoute?.url])
+    else beginUnmatched()
+  }, [routes, router, routerOpts.mode, matcher, beginNavigation, beginUnmatched, currRoute?.url])
 
   useEffect(() => {
     const prepared = pendingPrepared.current
-    if (!currRoute || !prepared || prepared.route !== currRoute) return
+    if (!resolved) return
+
+    if (!currRoute) {
+      const previous = committed.current
+      committed.current = null
+      if (previous) releaseHandles(previous.handles)
+      return
+    }
+
+    if (!prepared || prepared.route !== currRoute) return
 
     const previous = committed.current
     committed.current = prepared
     pendingPrepared.current = null
     if (previous) releaseHandles(previous.handles)
-  }, [currRoute])
+  }, [currRoute, resolved])
 
   useEffect(() => releaseAll, [releaseAll])
 
@@ -876,20 +936,25 @@ function prepareRoute(route: Route<RouteData>, data: DataAdapter | undefined): P
   const ctx = routePrepareContext(route)
   const handles: PreparedHandle[] = []
 
-  for (const segment of route.data) {
-    if (segment.resolver) preloadResolver(segment.resolver)
-    if (segment.prepare) {
-      const result = segment.prepare(ctx)
-      if (result) {
-        handles.push(...result)
+  try {
+    for (const segment of route.data) {
+      if (segment.resolver) preloadResolver(segment.resolver)
+      if (segment.prepare) {
+        const result = segment.prepare(ctx)
+        if (result) {
+          handles.push(...result)
+        }
+      }
+      if (segment.queries) {
+        const adapter = requireAdapter(data)
+        for (const [def, args] of segment.queries(ctx)) {
+          handles.push(adapter.prepare(def, args))
+        }
       }
     }
-    if (segment.queries) {
-      const adapter = requireAdapter(data)
-      for (const [def, args] of segment.queries(ctx)) {
-        handles.push(adapter.prepare(def, args))
-      }
-    }
+  } catch (error) {
+    releaseHandles(handles)
+    throw error
   }
 
   return handles
@@ -1186,7 +1251,7 @@ export function useLinkState(to: LinkTo): LinkState {
 }
 
 export interface LinkOwnProps {
-  href?: LinkTo
+  href: LinkTo
   replace?: boolean
   current?: boolean
   prefetch?: PrefetchMode
@@ -1209,19 +1274,22 @@ function composeTrigger<E>(
   }
 }
 
-export function Link({
-  href: to,
-  replace,
-  current,
-  prefetch,
-  onClick,
-  onMouseEnter,
-  onMouseLeave,
-  onFocus,
-  onTouchStart,
-  children,
-  ...anchorProps
-}: LinkProps) {
+export const Link = forwardRef<HTMLAnchorElement, LinkProps>(function Link(
+  {
+    href: to,
+    replace,
+    current,
+    prefetch,
+    onClick,
+    onMouseEnter,
+    onMouseLeave,
+    onFocus,
+    onTouchStart,
+    children,
+    ...anchorProps
+  },
+  forwardedRef,
+) {
   const linkTo: LinkTarget = typeof to === 'string' ? { url: to } : { ...to }
   if (replace !== undefined) linkTo.replace = replace
   if (current !== undefined) linkTo.current = current
@@ -1233,12 +1301,21 @@ export function Link({
     linkProps.onClick(event)
   }
 
+  const mergedRef = useCallback(
+    (element: HTMLAnchorElement | null) => {
+      linkProps.ref?.(element)
+      if (typeof forwardedRef === 'function') forwardedRef(element)
+      else if (forwardedRef) forwardedRef.current = element
+    },
+    [linkProps.ref, forwardedRef],
+  )
+
   return (
     <a
       aria-current={linkProps['aria-current']}
       data-pending={linkProps['data-pending']}
       {...anchorProps}
-      ref={linkProps.ref}
+      ref={mergedRef}
       href={linkProps.href}
       // eslint-disable-next-line react/jsx-handler-names
       onClick={handleClick}
@@ -1250,7 +1327,7 @@ export function Link({
       {children}
     </a>
   )
-}
+})
 
 export interface NavigateProps {
   to: To

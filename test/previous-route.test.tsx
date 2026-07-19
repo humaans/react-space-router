@@ -3,7 +3,7 @@
 import test from 'ava'
 import { act, Suspense } from 'react'
 import ReactDOM from 'react-dom/client'
-import { Router, RouterContext, Routes, usePreviousRoute, useRoute, useSpaceRouter, type Route } from '../src/index.tsx'
+import { Router, Routes, usePreviousRoute, useRoute, useSpaceRouter, type Route } from '../src/index.tsx'
 import { g, setup } from './helpers.ts'
 
 test.serial('usePreviousRoute is available on the destination first render and counts same-URL commits', async (t) => {
@@ -170,7 +170,7 @@ test.serial('a suspended destination superseded before commit never becomes prev
   t.true(window.document.body.textContent?.includes('/final <- /home'))
 })
 
-test.serial('unmatched navigation leaves previous route unchanged and traversal advances it', async (t) => {
+test.serial('unmatched navigation clears current route without advancing successful history', async (t) => {
   setup()
   history.pushState({}, '', '/a')
 
@@ -207,7 +207,8 @@ test.serial('unmatched navigation leaves previous route unchanged and traversal 
   await act(async () => {
     router.navigate('/missing')
   })
-  t.is(window.document.body.textContent, '/b <- /a')
+  t.is(window.document.body.textContent, 'undefined <- /a')
+  t.is(router.match('/missing'), undefined)
 
   g.location.href = '/a'
   g.location.pathname = '/a'
@@ -279,11 +280,7 @@ test.serial('usePreviousRoute throws outside Router', (t) => {
     t.throws(
       () => {
         act(() => {
-          ReactDOM.createRoot(root).render(
-            <RouterContext.Provider value={undefined}>
-              <NoRouter />
-            </RouterContext.Provider>,
-          )
+          ReactDOM.createRoot(root).render(<NoRouter />)
         })
       },
       { message: /Application must be wrapped in <Router \/>/ },

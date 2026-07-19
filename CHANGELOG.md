@@ -8,6 +8,7 @@ The router is now built around React's transition machinery: navigations run ins
 - Route state lives inside `<Router>`; the prop-based lifecycle hooks (`useRoute`, `onNavigating`, `onNavigated`) are removed. Read the current route with `useRoute()`, run post-navigation logic in regular effects, and replace `onNavigating`-based preloading with per-route `resolver` and `prepare`.
 - Function-form `<Link>` props (`className`, `style`, `extraProps`) are removed. Style current and pending links in plain CSS via the `aria-current="page"` and `data-pending` attributes, or use `useLinkState(to)` when the state needs to affect rendered output.
 - `useInternalRouterInstance` is renamed to `useSpaceRouter`. Same escape hatch, same return value — the underlying space-router instance.
+- `PreparedHandle` now requires only the `release()` lease lifecycle that the router consumes; richer data-layer handles remain compatible. The undocumented `RouterContext` export is removed, and `<Link href>` is now required.
 
 ### New
 
@@ -17,12 +18,19 @@ The router is now built around React's transition machinery: navigations run ins
 - Fetch-as-you-render data loading via route `prepare(ctx)` — fetches start when navigation begins (including cold direct loads), in parallel with chunk download, and the returned `PreparedHandle`s stay pinned while the route is committed.
 - Declarative data loading via route `queries` + a `<Router data>` adapter: declare a route's data once and the adapter runs it as `prepare` on navigation and `prefetch` on hover. The adapter is a minimal `{ prepare, prefetch }` contract co-designed with (and satisfied directly by) figbird's kit — the router stays data-layer-agnostic. The low-level `prepare`/`prefetch` fields remain for divergent routes or adapter-less data layers.
 - Link prefetching: `<Link prefetch>` (`true`/`'hover'`/`'visible'`) warms a route's chunk and data on hover or visibility, `<Router prefetchLinks>` sets the default for all links, route `prefetchable: false` vetoes speculation for expensive routes, and `usePrefetch()` exposes the primitive for custom triggers.
+- `<Link>` forwards its anchor ref, composing it with the internal observer ref used by `prefetch='visible'`.
 - `<DelayedSuspense>` and `pendingDelayMs` for browser-style loading: hold the previous page briefly, then degrade to a skeleton.
 - `transformRoute(route)` pre-commit hook for URL rewrites (e.g. persisted-query restoration), with automatic address-bar sync.
 - `transformQuery(query, { to, sourceRoute, targetRoute })` for app-owned destination-query policy across navigation, href, link, `<Navigate>`, and prefetch APIs. Direct loads, browser traversal, external/protocol URLs, and same-page fragments remain untouched.
 - Consecutive identical outstanding navigation requests from the same source route are coalesced, preventing duplicate history writes while preserving A → B → A and intentional same-URL navigation after a commit.
 - Matched path params are injected as props onto the route segment that declares them.
 - `scrollGroup` for keeping scroll position across related routes.
+
+### Fixed
+
+- Replacing the route table prepares the current destination exactly once in history/hash mode; memory mode still performs its required explicit rematch.
+- Route preparation is transactional: if a later segment throws, every handle already acquired for that attempt is released.
+- Unmatched URLs now clear `useRoute()` and `<Routes>`, and release the prior route's preparation handles, without advancing `usePreviousRoute()`'s successful-route history.
 
 ## 0.6.6
 

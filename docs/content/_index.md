@@ -259,12 +259,11 @@ The shape returned by `prepare()` functions. The router collects these from ever
 
 ```ts
 interface PreparedHandle {
-  promise: Promise<unknown>
   release(): void
 }
 ```
 
-The router stores the handles and calls `release()`. Your data layer decides what `promise` means; extra fields on the handle are ignored.
+The router stores the handles and calls `release()`. Extra fields on a data layer's handle are ignored, so richer handles such as figbird's `{ key, promise, release }` satisfy this contract directly.
 
 ### `<DelayedSuspense />`
 
@@ -298,6 +297,7 @@ Props:
 - `current` set to true/false to override automatic current-page detection.
 - `prefetch` warm the target route speculatively: `true`/`'hover'` after the Router's cancellable hover-intent delay, but immediately on focus and touch; `'visible'` when the link scrolls into view. Overrides the Router-level `prefetchLinks` default in either direction.
 - `onClick` user click handler. Runs before the router's internal click handling; call `event.preventDefault()` to stop SPA navigation.
+- `ref` is forwarded to the rendered anchor, including when visibility prefetching also observes it.
 
 The rest of the props are spread onto the `<a>` element.
 
@@ -338,7 +338,7 @@ Get the underlying Space Router instance. See [space-router docs](https://kidkar
 const route = useRoute()
 ```
 
-Subscribe to the current route, or `null` when the current URL does not match the router's route table. A matched initial route is available synchronously throughout `<Router>`, including components rendered outside `<Routes>`. The route has the shape `{ url, pathname, params, query, search, hash, pattern, data }`:
+Subscribe to the current route, or `null` when the current URL does not match the router's route table. On an unmatched URL, `<Routes>` renders nothing and the prior route's preparation handles are released. A matched initial route is available synchronously throughout `<Router>`, including components rendered outside `<Routes>`. The route has the shape `{ url, pathname, params, query, search, hash, pattern, data }`:
 
 - `url` full relative URL string including query string and hash if any.
 - `pathname` the pathname portion.
