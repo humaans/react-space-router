@@ -52,6 +52,10 @@ export interface PreparedHandle {
   release(): void
 }
 
+/**
+ * Synchronous navigation setup. Must not throw; asynchronous failures should
+ * surface later through the data layer's Suspense read path.
+ */
 export type RoutePrepare = (ctx: RoutePrepareContext) => readonly PreparedHandle[] | PreparedHandle[] | void
 
 /**
@@ -115,16 +119,25 @@ export interface RouteData {
 // Resolver loads and their React.lazy wrappers are shared by resolver identity.
 const resolverPromiseCache = new WeakMap<RouteResolver, Promise<ResolverModule>>()
 const resolverComponentCache = new WeakMap<RouteResolver, ComponentType<any>>()
+const resolverComponentEvictionPending = new WeakSet<RouteResolver>()
 
 function preloadResolver(resolver: RouteResolver): Promise<ResolverModule> {
   let promise = resolverPromiseCache.get(resolver)
   if (!promise) {
+    if (resolverComponentEvictionPending.delete(resolver)) {
+      resolverComponentCache.delete(resolver)
+    }
     promise = resolver()
-    promise.catch(() => {
-      // Keep the original rejected promise cached for React.lazy/error
-      // boundaries, but mark preload rejections as observed.
-    })
     resolverPromiseCache.set(resolver, promise)
+    promise.catch(() => {
+      // React.lazy must retain this rejected wrapper long enough to throw into
+      // the current error boundary. Mark it stale so the next navigation's
+      // preload replaces it, rather than retrying during React's own render.
+      if (resolverPromiseCache.get(resolver) === promise) {
+        resolverPromiseCache.delete(resolver)
+        resolverComponentEvictionPending.add(resolver)
+      }
+    })
   }
   return promise
 }
@@ -1163,13 +1176,33 @@ function useScrollToTop(route: Route<RouteData> | null, navigationSource: Naviga
 
     const data = route.data[route.data.length - 1]
     const scrollGroup = data.scrollGroup || route.pathname
-    if (prevScrollGroup.current !== scrollGroup) {
-      prevScrollGroup.current = scrollGroup
-      if (navigationSource !== 'traversal' && typeof window !== 'undefined') {
-        window.scrollTo(0, 0)
+    const scrollGroupChanged = prevScrollGroup.current !== scrollGroup
+    prevScrollGroup.current = scrollGroup
+
+    if (navigationSource === 'traversal' || typeof window === 'undefined') return
+
+    if (route.hash) {
+      const encodedId = route.hash.replace(/^#/, '')
+      let id = encodedId
+      try {
+        id = decodeURIComponent(encodedId)
+      } catch {
+        // Malformed escapes remain usable as literal element IDs.
       }
+
+      const target = document.getElementById(id)
+      if (target) {
+        target.scrollIntoView()
+        return
+      }
+      window.scrollTo(0, 0)
+      return
     }
-  }, [route && route.pathname, navigationSource, disabled])
+
+    if (scrollGroupChanged) {
+      window.scrollTo(0, 0)
+    }
+  }, [route?.pathname, route?.hash, navigationSource, disabled])
 }
 
 // ---------------------------------------------------------------------------

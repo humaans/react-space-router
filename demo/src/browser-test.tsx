@@ -15,7 +15,12 @@ function TallPage({ name, next }: { name: string; next?: string }) {
   return (
     <>
       <nav>
-        {next && <Link href={next}>Open page B</Link>}
+        {next && (
+          <>
+            <Link href={next}>Open page B</Link>
+            <Link href={`${next}#anchor`}>Open page B at anchor</Link>
+          </>
+        )}
         <Link href='#anchor'>Jump to anchor</Link>
       </nav>
       <main>

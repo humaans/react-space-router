@@ -1,7 +1,12 @@
-import { expect, test } from '@playwright/test'
+import { expect, test, type Page } from '@playwright/test'
+
+async function openDemo(page: Page) {
+  await page.goto('/')
+  await expect(page.getByRole('heading', { name: 'Loading Modes Demo' })).toBeVisible()
+}
 
 test('holds the previous page while a Suspense destination loads', async ({ page }) => {
-  await page.goto('/')
+  await openDemo(page)
 
   const target = page.getByRole('link', { name: /Wait for ready/ })
   await target.click()
@@ -17,7 +22,7 @@ test('holds the previous page while a Suspense destination loads', async ({ page
 })
 
 test('can traverse back while a destination is still suspended', async ({ page }) => {
-  await page.goto('/')
+  await openDemo(page)
 
   await page.getByRole('link', { name: /Wait for ready/ }).click()
   await expect(page).toHaveURL('/mode-b')
@@ -34,7 +39,7 @@ test('can traverse back while a destination is still suspended', async ({ page }
 })
 
 test('reveals delayed fallbacks after the configured threshold', async ({ page }) => {
-  await page.goto('/')
+  await openDemo(page)
 
   await page.getByRole('link', { name: /Timed fallback/ }).click()
   await expect(page.getByRole('heading', { name: 'Loading Modes Demo' })).toBeVisible()

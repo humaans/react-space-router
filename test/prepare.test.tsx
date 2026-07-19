@@ -415,12 +415,16 @@ test.serial('Routes resolves lazy resolver components', async (t) => {
   t.is(resolverCalls, 1, 'resolver result is cached by function reference')
 })
 
-test.serial('Router observes rejected resolver preload promises', async (t) => {
+test.serial('a rejected resolver reaches an error boundary and can be retried', async (t) => {
   setup()
 
   const root = document.getElementById('root')
   const originalConsoleError = console.error
   console.error = () => {}
+
+  let resolverCalls = 0
+  let rejectFirstAttempt: (error: Error) => void
+  let router
 
   class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
     state = { hasError: false }
@@ -430,7 +434,18 @@ test.serial('Router observes rejected resolver preload promises', async (t) => {
     }
 
     render() {
-      return this.state.hasError ? <div>Error</div> : this.props.children
+      return this.state.hasError ? (
+        <button
+          onClick={() => {
+            router.navigate('/broken')
+            this.setState({ hasError: false })
+          }}
+        >
+          Retry
+        </button>
+      ) : (
+        this.props.children
+      )
     }
   }
 
@@ -438,11 +453,15 @@ test.serial('Router observes rejected resolver preload promises', async (t) => {
     { path: '/', component: () => <div>Home</div> },
     {
       path: '/broken',
-      resolver: () => Promise.reject(new Error('broken import')),
+      resolver: () => {
+        resolverCalls++
+        if (resolverCalls > 1) return Promise.resolve({ default: () => <div>Recovered</div> })
+        return new Promise((_, reject) => {
+          rejectFirstAttempt = reject
+        })
+      },
     },
   ]
-
-  let router
 
   function Capture() {
     const r = useSpaceRouter()
@@ -473,11 +492,17 @@ test.serial('Router observes rejected resolver preload promises', async (t) => {
 
     await act(async () => {
       router.navigate('/broken')
-      await Promise.resolve()
-      await Promise.resolve()
     })
+    t.is(window.document.body.innerHTML, '<div id="root"><div>Home</div></div>')
 
-    t.is(window.document.body.innerHTML, '<div id="root"><div>Error</div></div>')
+    await act(async () => rejectFirstAttempt(new Error('broken import')))
+    t.is(window.document.body.innerHTML, '<div id="root"><button>Retry</button></div>')
+    t.is(resolverCalls, 1)
+
+    await act(async () => document.querySelector('button')!.click())
+
+    t.is(window.document.body.innerHTML, '<div id="root"><div>Recovered</div></div>')
+    t.is(resolverCalls, 2)
   } finally {
     console.error = originalConsoleError
   }

@@ -60,3 +60,54 @@ test.serial('scrolls new destinations to top but does not override back/forward 
   await act(async () => navigate('/b'))
   t.deepEqual(scrolls, [[0, 0]])
 })
+
+test.serial('scrolls app navigation to a fragment and falls back to top when it is missing', async (t) => {
+  setup()
+
+  const scrolls: Array<[number, number]> = []
+  const fragments: string[] = []
+  window.scrollTo = (x, y) => scrolls.push([x as number, y as number])
+  g.window.HTMLElement.prototype.scrollIntoView = function () {
+    fragments.push(this.id)
+  }
+
+  let navigate: ReturnType<typeof useNavigate>
+
+  function Controls() {
+    navigate = useNavigate()
+    return null
+  }
+
+  const routes = [
+    { path: '/a', scrollGroup: 'docs', component: () => <div>A</div> },
+    {
+      path: '/b',
+      scrollGroup: 'docs',
+      component: () => <div id='install'>Install</div>,
+    },
+    { path: '/c', scrollGroup: 'docs', component: () => <div>C</div> },
+  ]
+
+  g.location.href = '/a'
+  g.location.pathname = '/a'
+
+  const root = ReactDOM.createRoot(document.getElementById('root')!)
+  await act(async () => {
+    root.render(
+      <Router routes={routes}>
+        <Controls />
+        <Routes />
+      </Router>,
+    )
+  })
+
+  scrolls.length = 0
+
+  await act(async () => navigate('/b#install'))
+  t.deepEqual(fragments, ['install'])
+  t.deepEqual(scrolls, [])
+
+  await act(async () => navigate('/c#missing'))
+  t.deepEqual(fragments, ['install'])
+  t.deepEqual(scrolls, [[0, 0]])
+})

@@ -142,6 +142,26 @@ One caveat: a cold `resolver` chunk always holds the previous page briefly — a
 
 The [demo](https://github.com/humaans/react-space-router/tree/master/demo) shows these modes side by side over simulated latencies — run it with `npm run demo`.
 
+## Errors and recovery
+
+Put a React error boundary outside the Suspense boundary that contains `<Routes />`. Resolver failures, errors thrown while rendering a route, and rejected data reads then reach the route error boundary, while promises still go to Suspense:
+
+```jsx
+<Router routes={routes}>
+  <RouteErrorBoundary>
+    <Suspense fallback={<PageSkeleton />}>
+      <Routes />
+    </Suspense>
+  </RouteErrorBoundary>
+</Router>
+```
+
+`RouteErrorBoundary` above is your application's regular React error boundary. A boundary declared inside a lazy route cannot catch failure to download that route, because the component containing it has not loaded yet. Put an additional application boundary outside `<Router>` if you also want to report initial synchronous configuration errors.
+
+When a resolver rejects, starting that navigation again replaces the rejected resolver and lazy-component cache entries; a retry action should navigate to the failed URL and reset the boundary in the same event. This can recover from transient network or CDN failures. After a deployment, however, an old tab may still request a chunk URL that no longer exists; retrying then requests the same stale URL. Route error UI should offer a full-page reload (`window.location.reload()`) as the dependable recovery path so the browser downloads the current application bundle and chunk map.
+
+Data loading follows the same React model: `prepare` starts or pins work synchronously, and route components read it through the data cache. The read should throw a pending promise to Suspense and a rejected request error to the error boundary. Route and adapter `prepare` functions must not throw synchronously; asynchronous request failure belongs in that read path.
+
 ## Prefetching
 
 Prefetching warms the route the user is likely to visit next. The usual setup is: declare data once on the route with `queries`, give `<Router>` a data adapter, then opt links into prefetching.
@@ -181,11 +201,11 @@ Props:
   - `component` a React component to render. Accepts an ESM-default module shape (`{ default: Component }`) too.
   - `resolver` `() => import('./Screen')` — a dynamic import. The router preloads this at navigation time and renders via `React.lazy`. Cold imports suspend at the destination's Suspense boundary.
   - `queries(ctx)` declares the route's data needs once as `[def, args]` pairs, run through the `<Router data>` adapter — as `prepare` on navigation, as `prefetch` on speculation (see [Prefetching](#prefetching)). Requires a `data` adapter.
-  - `prepare(ctx)` the low-level alternative to `queries` for prepare. Called at navigation time with `{ pathname, url, params, query }`; returns `PreparedHandle` objects pinned for the lifetime of the committed navigation and released when the next navigation commits.
+  - `prepare(ctx)` the low-level alternative to `queries` for prepare. Called at navigation time with `{ pathname, url, params, query }`; returns `PreparedHandle` objects pinned for the lifetime of the committed navigation and released when the next navigation commits. It is synchronous setup and must not throw; surface request failures later through the data cache's Suspense read path.
   - `prefetch(ctx)` the low-level alternative to `queries` for prefetch — called when a prefetching link warms this route. May fire at any frequency; the return value is ignored.
   - `prefetchable` set `false` to exclude a route from speculative prefetch (no chunk preload, no `prefetch`) while still preparing on real navigation. A route-level veto that beats an explicit `<Link prefetch>`.
   - `props` props to pass to the segment's component.
-  - `scrollGroup` a string that groups routes; app-created navigations within a group don't scroll to top.
+  - `scrollGroup` a string that groups routes; app-created navigations within a group don't scroll to top unless the destination has an explicit hash fragment.
   - `routes` nested route definitions.
   - `...metadata` any other keys you want — they're available on `route.data[i]`.
 - `mode` one of `history`, `hash`, `memory` — default is `history`.
@@ -271,11 +291,11 @@ Initial/direct URLs and browser back/forward traversal bypass `transformQuery`, 
 
 Renders the components matched from the enclosing `<Router routes={routes}>` at this location. Nested ancestor segments wrap their descendants automatically — parents render `{children}` to position the matched child. Segments without a `component` or `resolver` are transparent wrappers for their descendants.
 
-When a navigation happens, every matched segment's `resolver()` is preloaded and every matched segment's `prepare()` is called, so chunk download and data loading can overlap. The router does not await the returned prepare promises before committing; the destination's nearest `<Suspense>` boundary handles any still-cold reads. This includes cold direct loads: the initial route's `resolver()` and `prepare()` are kicked off during the first render, before its components read from the data cache.
+When a navigation happens, every matched segment's `resolver()` is preloaded and every matched segment's `prepare()` is called, so chunk download and data loading can overlap. Preparation synchronously starts or pins work and returns lifecycle handles; the router does not await the underlying requests before committing. The destination's nearest `<Suspense>` boundary handles any still-cold reads. This includes cold direct loads: the initial route's `resolver()` and `prepare()` are kicked off during the first render, before its components read from the data cache.
 
 Props:
 
-- `disableScrollToTop` disables the window scroll reset. By default, app-created navigation to a different pathname or `scrollGroup` scrolls to the top; browser Back/Forward traversal is left to the browser's native scroll restoration.
+- `disableScrollToTop` disables automatic scrolling. By default, app-created navigation with a hash fragment scrolls to that element after the route commits, falling back to the top if it is not found; other app-created navigation to a different pathname or `scrollGroup` scrolls to the top. Browser Back/Forward traversal is left to native scroll restoration. Fragment scrolling is best-effort: a target rendered later behind a nested Suspense boundary may not exist at commit time.
 
 #### Path params as component props
 

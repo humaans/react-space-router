@@ -28,6 +28,8 @@ The router is now built around React's transition machinery: navigations run ins
 
 ### Fixed
 
+- Rejected route resolvers no longer remain permanently cached; resetting an error boundary can retry transient chunk-load failures, while the documentation explains full-page reload recovery for stale deployments.
+- App-created navigation to a cross-page hash fragment now scrolls to the destination element after commit, falling back to the top when it is absent. Back/Forward and same-page hash links remain browser-owned.
 - Replacing the route table prepares the current destination exactly once in history/hash mode; memory mode still performs its required explicit rematch.
 - Route preparation is transactional: if a later segment throws, every handle already acquired for that attempt is released.
 - Initial preparation handles remain leak-free under React 18's discarded StrictMode render while separate Router instances retain independent leases.
@@ -36,8 +38,9 @@ The router is now built around React's transition machinery: navigations run ins
 
 ### Polish
 
+- The documentation now covers error-boundary placement, chunk-load recovery, rejected data reads, and the synchronous non-throwing contract for route preparation.
 - CI now exercises the supported peer range against both React 18 and React 19.
-- Chromium CI now covers Suspense navigation, interrupted traversal, native scroll restoration, and browser-owned hash links.
+- Chromium CI now covers Suspense navigation, interrupted traversal, native scroll restoration, browser-owned same-page hashes, and router-managed cross-page fragments.
 - The documentation now defines redirects, the complete path-pattern grammar, and the native ESM/ES2022 browser baseline.
 
 ## 0.6.6
