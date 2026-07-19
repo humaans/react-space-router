@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import { BlockNavigation, Link } from 'react-space-router'
+import { demoHref } from '../routing'
 
 export default function Blocking() {
   const [savedValue, setSavedValue] = useState('A small, focused router.')
@@ -34,7 +35,7 @@ export default function Blocking() {
           >
             Save
           </button>
-          <Link href='/' className='button'>
+          <Link href={demoHref('/')} className='button'>
             Go to overview
           </Link>
         </div>

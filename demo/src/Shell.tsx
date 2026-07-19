@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link, usePending, useRoute } from 'react-space-router'
 import { clearCache } from './data'
+import { demoHref } from './routing'
 
 /**
  * Top-of-page progress bar — driven by `usePending()`. Renders nothing
@@ -57,30 +58,30 @@ export function Shell({ children }: { children: ReactNode }) {
       <aside className='sidebar'>
         <h1>Loading Modes</h1>
         <nav>
-          <Link href='/' className='nav-link'>
+          <Link href={demoHref('/')} className='nav-link'>
             Overview
             <small>How to read this demo</small>
           </Link>
-          <Link href='/mode-a' className='nav-link'>
+          <Link href={demoHref('/mode-a')} className='nav-link'>
             (a) Immediate + skeletons
             <small>Show new shell + skeletons fast</small>
           </Link>
-          <Link href='/mode-b' className='nav-link'>
+          <Link href={demoHref('/mode-b')} className='nav-link'>
             (b) Wait for ready
             <small>Hold old page until everything's ready</small>
           </Link>
-          <Link href='/mode-c' className='nav-link'>
+          <Link href={demoHref('/mode-c')} className='nav-link'>
             (c) Timed fallback
             <small>(b) for 500ms, then fall back to (a)</small>
           </Link>
-          <Link href='/mode-d/atlas' current={isModeD} className='nav-link'>
+          <Link href={demoHref('/mode-d/atlas')} current={isModeD} className='nav-link'>
             (d) Detail swap fade
             <small>Fade old item, wait for new item</small>
           </Link>
         </nav>
         <h1>Router Features</h1>
         <nav>
-          <Link href='/blocking' className='nav-link'>
+          <Link href={demoHref('/blocking')} className='nav-link'>
             Navigation blocking
             <small>Guard unsaved changes with custom UI</small>
           </Link>

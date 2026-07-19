@@ -42,4 +42,6 @@ The package is published as native ESM targeting ECMAScript 2022. It is intended
 
 See the [API Docs](https://humaans.github.io/react-space-router/) for examples, component and hook references, loading UI guidance, prefetching, and route data loading details.
 
+Try the [live demo](https://humaans.github.io/react-space-router/demo/) to compare Suspense loading modes and navigation blocking interactively.
+
 See the [Migration Guide](./MIGRATION.md) for upgrade notes.

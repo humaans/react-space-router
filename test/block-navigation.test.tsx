@@ -175,7 +175,7 @@ test.serial('custom BlockNavigation cancels and replays a cancelable traversal',
     const event = new window.Event('navigate', { cancelable: true })
     Object.assign(event, {
       navigationType: 'traverse',
-      destination: { key, sameDocument: true },
+      destination: { key, sameDocument: true, url: 'http://localhost/a' },
       hashChange: false,
     })
     return event
@@ -210,4 +210,43 @@ test.serial('custom BlockNavigation cancels and replays a cancelable traversal',
   t.deepEqual(traversedKeys, ['entry-a'])
   t.is(location.pathname, '/a')
   t.is(document.body.textContent, 'Page A')
+})
+
+test.serial('hash-mode traversal blocks route hashes but not ordinary fragments', (t) => {
+  setup()
+
+  const navigation = new window.EventTarget() as EventTarget & {
+    traverseTo(key: string): { finished: Promise<void> }
+  }
+  navigation.traverseTo = () => ({ finished: Promise.resolve() })
+  Object.defineProperty(window, 'navigation', { configurable: true, value: navigation })
+
+  const navigateEvent = (url: string) => {
+    const event = new window.Event('navigate', { cancelable: true })
+    Object.assign(event, {
+      navigationType: 'traverse',
+      destination: { key: url, sameDocument: true, url },
+      hashChange: true,
+    })
+    return event
+  }
+
+  act(() => {
+    ReactDOM.createRoot(document.getElementById('root')!).render(
+      <Router sync mode='hash' routes={routes}>
+        <BlockNavigation>{() => <div role='dialog'>Blocked</div>}</BlockNavigation>
+        <Routes />
+      </Router>,
+    )
+  })
+
+  const fragment = navigateEvent('http://localhost/#section')
+  act(() => navigation.dispatchEvent(fragment))
+  t.false(fragment.defaultPrevented)
+  t.falsy(document.querySelector('[role=dialog]'))
+
+  const route = navigateEvent('http://localhost/#/a')
+  act(() => navigation.dispatchEvent(route))
+  t.true(route.defaultPrevented)
+  t.is(document.querySelector('[role=dialog]')?.textContent, 'Blocked')
 })

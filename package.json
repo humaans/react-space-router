@@ -45,8 +45,8 @@
     "build": "rm -rf dist && tsc",
     "prepack": "npm run build",
     "watch": "tsc -w",
-    "release": "np --no-release-draft",
-    "release:next": "np --tag=next --any-branch --no-release-draft",
+    "release": "np --no-publish && npm publish",
+    "release:next": "np --tag=next --any-branch --no-release-draft --no-publish && npm publish --tag=next",
     "docs:watch": "hugo server -s docs",
     "docs:build": "hugo -s docs",
     "release:docs": "npm run docs:build && gh-pages -d docs/public"

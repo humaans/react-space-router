@@ -132,7 +132,7 @@ export default function Inbox() {
 
 One caveat: a cold `resolver` chunk always holds the previous page briefly — a boundary inside a chunk that hasn't downloaded yet can't show a fallback. The router minimizes that window by preloading the chunk the moment navigation starts, in parallel with `prepare()`.
 
-The [demo](https://github.com/humaans/react-space-router/tree/master/demo) shows these modes side by side over simulated latencies — run it with `npm run demo`.
+The [live demo](https://humaans.github.io/react-space-router/demo/) shows these modes side by side over simulated latencies, or run it locally with `npm run demo`.
 
 ## Errors and recovery
 

@@ -29,6 +29,7 @@ The router is now built around React's transition machinery: navigations run ins
 
 ### Fixed
 
+- Navigation blocking now distinguishes hash-mode route traversal (`#/route`) from ordinary fragments, so Back/Forward guards work in hash-routed applications without taking ownership of `#section` links.
 - Rejected route resolvers no longer remain permanently cached; resetting an error boundary can retry transient chunk-load failures, while the documentation explains full-page reload recovery for stale deployments.
 - App-created navigation to a cross-page hash fragment now scrolls to the destination element after commit, falling back to the top when it is absent. Back/Forward and same-page hash links remain browser-owned.
 - Replacing the route table prepares the current destination exactly once in history/hash mode; memory mode still performs its required explicit rematch.

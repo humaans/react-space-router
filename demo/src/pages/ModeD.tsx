@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react'
 import { Link, usePendingRoute } from 'react-space-router'
 import { read } from '../data'
+import { demoHref } from '../routing'
 
 const ITEMS = [
   {
@@ -79,7 +80,7 @@ export default function ModeD({ id = ITEMS[0].id }: { id?: string }) {
             <Link
               key={item.id}
               href={{
-                url: `/mode-d/${item.id}`,
+                url: demoHref(`/mode-d/${item.id}`),
                 current: item.id === currentId,
               }}
               prefetch

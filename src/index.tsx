@@ -277,7 +277,7 @@ interface RegisteredNavigationBlocker {
 
 interface BrowserNavigateEvent extends Event {
   navigationType: 'push' | 'replace' | 'reload' | 'traverse'
-  destination: { key: string; sameDocument: boolean }
+  destination: { key: string; sameDocument: boolean; url: string }
   hashChange: boolean
 }
 
@@ -299,7 +299,7 @@ function browserNavigation(): BrowserNavigation | undefined {
   return (window as Window & { navigation?: BrowserNavigation }).navigation
 }
 
-function createNavigationBlockerRegistry(): NavigationBlockerRegistry {
+function createNavigationBlockerRegistry(mode?: Mode): NavigationBlockerRegistry {
   const blockers: RegisteredNavigationBlocker[] = []
   let listening = false
   let traversalBypassKey: string | null = null
@@ -314,7 +314,11 @@ function createNavigationBlockerRegistry(): NavigationBlockerRegistry {
 
   const onNavigate = (rawEvent: Event) => {
     const event = rawEvent as BrowserNavigateEvent
-    if (event.navigationType !== 'traverse' || event.hashChange || !event.destination.sameDocument) {
+    if (
+      event.navigationType !== 'traverse' ||
+      !event.destination.sameDocument ||
+      (event.hashChange && !isHashRouteDestination(event.destination.url, mode))
+    ) {
       return
     }
 
@@ -387,6 +391,16 @@ function createNavigationBlockerRegistry(): NavigationBlockerRegistry {
       blockers.length = 0
       unlisten()
     },
+  }
+}
+
+function isHashRouteDestination(url: string, mode?: Mode): boolean {
+  if (mode !== 'hash') return false
+  try {
+    const hash = new URL(url, window.location.href).hash
+    return hash === '' || hash.startsWith('#/')
+  } catch {
+    return false
   }
 }
 
@@ -886,7 +900,7 @@ export function Router({
 
   const matcher = useMemo(() => createMatcher(routes, { qs }), [routes, qs])
   const listeningRoutes = useMemo(() => [...routes, UNMATCHED_ROUTE_DEFINITION], [routes])
-  const [blockers] = useState(createNavigationBlockerRegistry)
+  const blockers = useMemo(() => createNavigationBlockerRegistry(routerOpts.mode), [routerOpts.mode])
 
   const targetRouter = useTargetRouter({
     router,
