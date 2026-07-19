@@ -3,7 +3,7 @@
 import test from 'ava'
 import { act } from 'react'
 import ReactDOM from 'react-dom/client'
-import { Router, Routes, Link, usePrefetch, type RoutePrepareContext } from '../src/index.tsx'
+import { Router, Routes, Link, useNavigate, usePrefetch, type RoutePrepareContext } from '../src/index.tsx'
 import { g, setup } from './helpers.ts'
 
 function hover(el: Element) {
@@ -314,4 +314,51 @@ test.serial('usePrefetch warms a target programmatically and no-ops on unmatched
   })
 
   t.deepEqual(prefetched, ['9', '10'])
+})
+
+test.serial('usePrefetch stays stable and resolves from the latest committed route', async (t) => {
+  setup()
+  g.location.href = '/items/one'
+  g.location.pathname = '/items/one'
+
+  const root = document.getElementById('root')
+  const prefetched: string[] = []
+  const prefetchReferences: unknown[] = []
+  let navigate
+
+  function Capture() {
+    navigate = useNavigate()
+    prefetchReferences.push(usePrefetch())
+    return null
+  }
+
+  await act(async () => {
+    ReactDOM.createRoot(root).render(
+      <Router
+        sync
+        routes={[
+          {
+            path: '/items/:id',
+            component: () => null,
+            prefetch: ({ params }: RoutePrepareContext) => prefetched.push(params.id),
+          },
+        ]}
+      >
+        <Capture />
+        <Routes />
+      </Router>,
+    )
+  })
+
+  const initialPrefetch = prefetchReferences[0] as ReturnType<typeof usePrefetch>
+
+  await act(async () => {
+    navigate('/items/two')
+  })
+  act(() => {
+    initialPrefetch({ query: { warm: 'yes' }, merge: true })
+  })
+
+  t.deepEqual(prefetched, ['two'])
+  t.true(prefetchReferences.every((reference) => reference === initialPrefetch))
 })

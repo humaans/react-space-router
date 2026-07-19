@@ -139,7 +139,6 @@ test.serial('Routes renders the current route supplied by RouterContext', async 
       navigate: () => {},
       isPending: false,
       pending: null,
-      qs: undefined,
     } as any
     return (
       <RouterContext.Provider value={ctx}>

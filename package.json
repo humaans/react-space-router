@@ -51,7 +51,7 @@
     "release:docs": "npm run docs:build && gh-pages -d docs/public"
   },
   "dependencies": {
-    "space-router": "^1.4.0"
+    "space-router": "^1.4.1"
   },
   "devDependencies": {
     "@swc-node/register": "^1.12.1",

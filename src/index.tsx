@@ -14,6 +14,7 @@ import {
   type ComponentType,
   type MouseEvent,
   type ReactNode,
+  type RefObject,
 } from 'react'
 import {
   createMatcher,
@@ -109,15 +110,11 @@ export interface RouteData {
   [extra: string]: unknown
 }
 
-// Internal caches keyed by the resolver function reference. Generic params are
-// erased here — the cache is structurally a map of unknown resolvers to their
-// lazily-imported component types.
-type AnyResolver = () => Promise<{ default: ComponentType<any> }>
+// Resolver loads and their React.lazy wrappers are shared by resolver identity.
+const resolverPromiseCache = new WeakMap<RouteResolver, Promise<ResolverModule>>()
+const resolverComponentCache = new WeakMap<RouteResolver, ComponentType<any>>()
 
-const resolverPromiseCache = new WeakMap<AnyResolver, Promise<{ default: ComponentType<any> }>>()
-const resolverComponentCache = new WeakMap<AnyResolver, ComponentType<any>>()
-
-function preloadResolver(resolver: AnyResolver): Promise<{ default: ComponentType<any> }> {
+function preloadResolver(resolver: RouteResolver): Promise<ResolverModule> {
   let promise = resolverPromiseCache.get(resolver)
   if (!promise) {
     promise = resolver()
@@ -130,7 +127,7 @@ function preloadResolver(resolver: AnyResolver): Promise<{ default: ComponentTyp
   return promise
 }
 
-function getResolverComponent(resolver: AnyResolver): ComponentType<any> {
+function getResolverComponent(resolver: RouteResolver): ComponentType<any> {
   let component = resolverComponentCache.get(resolver)
   if (!component) {
     component = reactLazy(() => preloadResolver(resolver))
@@ -199,17 +196,19 @@ interface RouterContextValue {
   navigate: (to: To, currentRoute?: Route<RouteData>) => void
   isPending: boolean
   pending: PendingNavigation | null
-  qs: Qs | undefined
   prefetchLinks: PrefetchMode | undefined
 }
 
 export const RouterContext = createContext<RouterContextValue | undefined>(undefined)
 
 interface ResolvedTarget {
+  /** Final browser-facing href after app-level target transforms. */
   href: string
+  /** Normalized route-table URL, or `null` for targets outside the router. */
   routeUrl: string | null
-  navigationKey: string
+  /** Whether navigation replaces the current history entry. */
   replace: boolean
+  /** Committed route identity captured when the target was resolved. */
   sourceRoute: Route<RouteData> | null
 }
 
@@ -371,6 +370,7 @@ interface TargetRouterOptions {
   router: SpaceRouter<RouteData>
   mode: Mode | undefined
   currentRoute: Route<RouteData> | null
+  committedRoute: RefObject<Route<RouteData> | null>
   transformQuery: TransformQuery | undefined
   matcher: ReturnType<typeof createMatcher<RouteData>>
 }
@@ -378,8 +378,14 @@ interface TargetRouterOptions {
 // Owns app-created target resolution as one subsystem: route classification,
 // query transformation, source capture, matching, navigation coalescing, and
 // retry release. Browser/direct URLs never enter this path.
-function useTargetRouter({ router, mode, currentRoute, transformQuery, matcher }: TargetRouterOptions): TargetRouter {
-  const committedRoute = useRef<Route<RouteData> | null>(null)
+function useTargetRouter({
+  router,
+  mode,
+  currentRoute,
+  committedRoute,
+  transformQuery,
+  matcher,
+}: TargetRouterOptions): TargetRouter {
   const outstandingNavigation = useRef<OutstandingNavigation | null>(null)
   const transformQueryRef = useRef(transformQuery)
   transformQueryRef.current = transformQuery
@@ -399,7 +405,6 @@ function useTargetRouter({ router, mode, currentRoute, transformQuery, matcher }
         return {
           href: initialHref,
           routeUrl: routeHref?.url ?? null,
-          navigationKey: routeHref?.url ?? initialHref,
           replace,
           sourceRoute,
         }
@@ -417,7 +422,6 @@ function useTargetRouter({ router, mode, currentRoute, transformQuery, matcher }
       return {
         href,
         routeUrl: resolvedRouteHref?.url ?? null,
-        navigationKey: resolvedRouteHref?.url ?? href,
         replace,
         sourceRoute,
       }
@@ -427,7 +431,8 @@ function useTargetRouter({ router, mode, currentRoute, transformQuery, matcher }
 
   const navigateResolved = useCallback(
     (target: ResolvedTarget) => {
-      const { href, navigationKey: targetUrl, replace, sourceRoute } = target
+      const { href, replace, sourceRoute } = target
+      const targetUrl = target.routeUrl ?? href
       const outstanding = outstandingNavigation.current
 
       // Coalesce only consecutive identical outstanding requests from the
@@ -481,7 +486,6 @@ function useTargetRouter({ router, mode, currentRoute, transformQuery, matcher }
   )
 
   useLayoutEffect(() => {
-    committedRoute.current = currentRoute
     if (currentRoute) outstandingNavigation.current = null
   }, [currentRoute])
 
@@ -607,6 +611,7 @@ export function Router({
     router,
     mode: routerOpts.mode,
     currentRoute: currRoute,
+    committedRoute,
     transformQuery,
     matcher,
   })
@@ -761,10 +766,9 @@ export function Router({
       navigate: targetRouter.navigate,
       isPending,
       pending,
-      qs,
       prefetchLinks,
     }),
-    [targetRouter.router, targetRouter.navigate, activeRoute, previousRoute, isPending, pending, qs, prefetchLinks],
+    [targetRouter.router, targetRouter.navigate, activeRoute, previousRoute, isPending, pending, prefetchLinks],
   )
 
   useEffect(() => {
@@ -1001,13 +1005,17 @@ function normalizeLinkTarget(to: LinkTo): LinkTarget {
 export function usePrefetch(): (to: LinkTo) => void {
   const targets = useRouterTargets()
   const route = useRoute()
+  const routeRef = useRef(route)
   const prefetchResolved = usePrefetchResolved()
+  useLayoutEffect(() => {
+    routeRef.current = route
+  }, [route])
 
   return useCallback(
     (to: LinkTo) => {
-      prefetchResolved(targets.resolve(to, route))
+      prefetchResolved(targets.resolve(to, routeRef.current))
     },
-    [targets, route, prefetchResolved],
+    [targets, prefetchResolved],
   )
 }
 
@@ -1073,6 +1081,7 @@ export function useLinkProps(to: LinkTo): LinkPropsResult {
   const prefetchMode = resolvePrefetchMode(target.prefetch ?? prefetchLinks)
   const visibleObserver = useRef<IntersectionObserver | null>(null)
 
+  // `href` re-arms the one-shot observer when this link's destination changes.
   const observeVisible = useCallback(
     (el: HTMLAnchorElement | null) => {
       visibleObserver.current?.disconnect()
