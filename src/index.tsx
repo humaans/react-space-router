@@ -245,6 +245,218 @@ function useRouterTargets(): RouterTargets {
   return targets
 }
 
+// ---------------------------------------------------------------------------
+// Navigation blocking
+// ---------------------------------------------------------------------------
+
+export interface BlockNavigationControls {
+  proceed(): void
+  cancel(): void
+}
+
+interface NativeBlockNavigationProps {
+  message?: string
+  children?: never
+}
+
+interface CustomBlockNavigationProps {
+  message?: never
+  children: (controls: BlockNavigationControls) => ReactNode
+}
+
+export type BlockNavigationProps = NativeBlockNavigationProps | CustomBlockNavigationProps
+
+interface BlockedAttempt {
+  proceed(): void
+}
+
+interface RegisteredNavigationBlocker {
+  request(attempt: BlockedAttempt): 'allow' | 'blocked'
+  cancel(): void
+}
+
+interface BrowserNavigateEvent extends Event {
+  navigationType: 'push' | 'replace' | 'reload' | 'traverse'
+  destination: { key: string; sameDocument: boolean }
+  hashChange: boolean
+}
+
+interface BrowserNavigation extends EventTarget {
+  traverseTo(key: string): { finished: Promise<unknown> }
+}
+
+interface NavigationBlockerRegistry {
+  register(blocker: RegisteredNavigationBlocker): () => void
+  attemptAppNavigation(proceed: () => void): void
+  dispose(): void
+}
+
+const NavigationBlockerContext = createContext<NavigationBlockerRegistry | undefined>(undefined)
+const DEFAULT_BLOCK_NAVIGATION_MESSAGE = 'Discard unsaved changes?'
+
+function browserNavigation(): BrowserNavigation | undefined {
+  if (typeof window === 'undefined') return undefined
+  return (window as Window & { navigation?: BrowserNavigation }).navigation
+}
+
+function createNavigationBlockerRegistry(): NavigationBlockerRegistry {
+  const blockers: RegisteredNavigationBlocker[] = []
+  let listening = false
+  let traversalBypassKey: string | null = null
+
+  const first = () => blockers[0]
+
+  const onBeforeUnload = (event: BeforeUnloadEvent) => {
+    if (!first()) return
+    event.preventDefault()
+    event.returnValue = true
+  }
+
+  const onNavigate = (rawEvent: Event) => {
+    const event = rawEvent as BrowserNavigateEvent
+    if (event.navigationType !== 'traverse' || event.hashChange || !event.destination.sameDocument) {
+      return
+    }
+
+    const key = event.destination.key
+    if (traversalBypassKey === key) {
+      traversalBypassKey = null
+      return
+    }
+
+    const blocker = first()
+    if (!blocker) return
+
+    // Browsers intentionally make some repeated/cross-origin traversals
+    // non-cancelable. Let those proceed and clear any now-stale custom UI.
+    if (!event.cancelable || !key) {
+      blocker.cancel()
+      return
+    }
+
+    const result = blocker.request({
+      proceed() {
+        const navigation = browserNavigation()
+        if (!navigation) return
+
+        traversalBypassKey = key
+        try {
+          void navigation.traverseTo(key).finished.catch(() => {
+            if (traversalBypassKey === key) traversalBypassKey = null
+          })
+        } catch {
+          traversalBypassKey = null
+        }
+      },
+    })
+
+    if (result === 'blocked') event.preventDefault()
+  }
+
+  const listen = () => {
+    if (listening || typeof window === 'undefined') return
+    listening = true
+    window.addEventListener('beforeunload', onBeforeUnload)
+    browserNavigation()?.addEventListener('navigate', onNavigate)
+  }
+
+  const unlisten = () => {
+    if (!listening || typeof window === 'undefined') return
+    listening = false
+    window.removeEventListener('beforeunload', onBeforeUnload)
+    browserNavigation()?.removeEventListener('navigate', onNavigate)
+    traversalBypassKey = null
+  }
+
+  return {
+    register(blocker) {
+      blockers.push(blocker)
+      listen()
+
+      return () => {
+        const index = blockers.indexOf(blocker)
+        if (index !== -1) blockers.splice(index, 1)
+        if (blockers.length === 0) unlisten()
+      }
+    },
+    attemptAppNavigation(proceed) {
+      const blocker = first()
+      if (!blocker || blocker.request({ proceed }) === 'allow') proceed()
+    },
+    dispose() {
+      blockers.length = 0
+      unlisten()
+    },
+  }
+}
+
+/**
+ * Guards navigation while mounted. With no children it uses `window.confirm`;
+ * render-function children are shown only after a navigation is blocked and
+ * receive the one-shot `proceed` / `cancel` controls.
+ */
+export function BlockNavigation(props: BlockNavigationProps) {
+  const registry = useContext(NavigationBlockerContext)
+  if (!registry) {
+    throw new Error('<BlockNavigation> must be rendered inside <Router />')
+  }
+
+  const render = 'children' in props ? props.children : undefined
+  const message = 'message' in props ? (props.message ?? DEFAULT_BLOCK_NAVIGATION_MESSAGE) : undefined
+  const custom = render !== undefined
+  const config = useRef({ render, message })
+  config.current = { render, message }
+
+  const pendingRef = useRef<BlockedAttempt | null>(null)
+  const [pending, setPending] = useState<BlockedAttempt | null>(null)
+  const clearPending = useCallback(() => {
+    pendingRef.current = null
+    setPending(null)
+  }, [])
+
+  const blocker = useMemo<RegisteredNavigationBlocker>(
+    () => ({
+      request(attempt) {
+        const current = config.current
+        if (!current.render) {
+          return window.confirm(current.message ?? DEFAULT_BLOCK_NAVIGATION_MESSAGE) ? 'allow' : 'blocked'
+        }
+        if (pendingRef.current) return 'blocked'
+
+        pendingRef.current = attempt
+        setPending(attempt)
+        return 'blocked'
+      },
+      cancel: clearPending,
+    }),
+    [clearPending],
+  )
+
+  useLayoutEffect(() => {
+    const unregister = registry.register(blocker)
+    return () => {
+      // Unmounting owns cancellation. No history action has happened yet.
+      clearPending()
+      unregister()
+    }
+  }, [registry, blocker, custom, clearPending])
+
+  const controls = useMemo<BlockNavigationControls>(
+    () => ({
+      proceed() {
+        const attempt = pendingRef.current
+        if (!attempt) return
+        clearPending()
+        attempt.proceed()
+      },
+      cancel: clearPending,
+    }),
+    [clearPending],
+  )
+
+  return pending && render ? render(controls) : null
+}
+
 // Internal context for `<DelayedSuspense>`. Set by `<Router>` based on
 // `usePending()` + a configurable threshold. `holding` is true only during
 // the pre-commit window where we want the previous route to stay on screen.
@@ -403,6 +615,7 @@ interface TargetRouterOptions {
   committedRoute: RefObject<Route<RouteData> | null>
   transformQuery: TransformQuery | undefined
   matcher: ReturnType<typeof createMatcher<RouteData>>
+  blockers: NavigationBlockerRegistry
 }
 
 // Owns app-created target resolution as one subsystem: route classification,
@@ -415,6 +628,7 @@ function useTargetRouter({
   committedRoute,
   transformQuery,
   matcher,
+  blockers,
 }: TargetRouterOptions): TargetRouter {
   const outstandingNavigation = useRef<OutstandingNavigation | null>(null)
   const transformQueryRef = useRef(transformQuery)
@@ -481,20 +695,24 @@ function useTargetRouter({
       }
 
       const intent = { targetUrl, replace, sourceRoute }
-      outstandingNavigation.current = intent
-      router.navigate({ url: href, replace })
+      const proceed = () => {
+        outstandingNavigation.current = intent
+        router.navigate({ url: href, replace })
 
-      // Release the guard for unmatched/non-route targets after route
-      // registration and scheduled emits have had a chance to run. This
-      // keeps an unmatched target retryable.
-      queueMicrotask(() => {
-        if (outstandingNavigation.current !== intent || (target.routeUrl !== null && matchTarget(target.routeUrl))) {
-          return
-        }
-        outstandingNavigation.current = null
-      })
+        // Release the guard for unmatched/non-route targets after route
+        // registration and scheduled emits have had a chance to run. This
+        // keeps an unmatched target retryable.
+        queueMicrotask(() => {
+          if (outstandingNavigation.current !== intent || (target.routeUrl !== null && matchTarget(target.routeUrl))) {
+            return
+          }
+          outstandingNavigation.current = null
+        })
+      }
+
+      blockers.attemptAppNavigation(proceed)
     },
-    [router, matchTarget],
+    [router, matchTarget, blockers],
   )
 
   const navigate = useCallback(
@@ -668,6 +886,7 @@ export function Router({
 
   const matcher = useMemo(() => createMatcher(routes, { qs }), [routes, qs])
   const listeningRoutes = useMemo(() => [...routes, UNMATCHED_ROUTE_DEFINITION], [routes])
+  const [blockers] = useState(createNavigationBlockerRegistry)
 
   const targetRouter = useTargetRouter({
     router,
@@ -676,6 +895,7 @@ export function Router({
     committedRoute,
     transformQuery,
     matcher,
+    blockers,
   })
 
   const commit = useCallback(
@@ -856,6 +1076,7 @@ export function Router({
   }, [currRoute, resolved])
 
   useEffect(() => releaseAll, [releaseAll])
+  useEffect(() => blockers.dispose, [blockers])
 
   const prefetchResolved = useCallback(
     (target: ResolvedTarget) => {
@@ -904,7 +1125,9 @@ export function Router({
   return (
     <RouterContext.Provider value={ctx}>
       <RouterTargetsContext.Provider value={targets}>
-        <DelayedSuspenseContext.Provider value={holding}>{children}</DelayedSuspenseContext.Provider>
+        <NavigationBlockerContext.Provider value={blockers}>
+          <DelayedSuspenseContext.Provider value={holding}>{children}</DelayedSuspenseContext.Provider>
+        </NavigationBlockerContext.Provider>
       </RouterTargetsContext.Provider>
     </RouterContext.Provider>
   )

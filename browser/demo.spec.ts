@@ -48,3 +48,26 @@ test('reveals delayed fallbacks after the configured threshold', async ({ page }
   await expect(page.locator('.is-skeleton')).toBeVisible()
   await expect(page.getByText(/You might also like/)).toBeVisible({ timeout: 5_000 })
 })
+
+test('navigation blocking demo can stay or discard and leave', async ({ page }) => {
+  await openDemo(page)
+  await page.getByRole('link', { name: /Navigation blocking/ }).click()
+  await expect(page.getByRole('heading', { name: 'Navigation Blocking' })).toBeVisible()
+
+  await page.getByLabel('Project note').fill('An edited note')
+  await expect(page.getByText('Unsaved changes', { exact: true })).toBeVisible()
+  await page.getByRole('link', { name: 'Go to overview' }).click()
+
+  const dialog = page.getByRole('dialog', { name: 'Discard unsaved changes?' })
+  await expect(dialog).toBeVisible()
+  await expect(page).toHaveURL('/blocking')
+
+  await dialog.getByRole('button', { name: 'Stay here' }).click()
+  await expect(dialog).toBeHidden()
+  await expect(page).toHaveURL('/blocking')
+
+  await page.getByRole('link', { name: 'Go to overview' }).click()
+  await dialog.getByRole('button', { name: 'Discard and leave' }).click()
+  await expect(page.getByRole('heading', { name: 'Loading Modes Demo' })).toBeVisible()
+  await expect(page).toHaveURL('/')
+})

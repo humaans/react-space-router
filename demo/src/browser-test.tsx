@@ -1,6 +1,6 @@
-import React, { Suspense } from 'react'
+import React, { Suspense, useState } from 'react'
 import { createRoot } from 'react-dom/client'
-import { Link, Router, Routes } from 'react-space-router'
+import { BlockNavigation, Link, Router, Routes } from 'react-space-router'
 
 function Index() {
   return (
@@ -38,10 +38,40 @@ const routes = [
   { path: '/browser-test/b', component: () => <TallPage name='B' /> },
 ]
 
-createRoot(document.getElementById('root')!).render(
-  <Router routes={routes}>
-    <Suspense fallback={null}>
-      <Routes />
-    </Suspense>
-  </Router>,
-)
+function BrowserFixture() {
+  const [dirty, setDirty] = useState(false)
+
+  return (
+    <Router routes={routes}>
+      <aside className='guard-controls'>
+        <label>
+          <input type='checkbox' checked={dirty} onChange={(event) => setDirty(event.currentTarget.checked)} />
+          Unsaved changes
+        </label>
+      </aside>
+      {dirty && (
+        <BlockNavigation>
+          {({ proceed, cancel }) => (
+            <div role='dialog' aria-label='Discard unsaved changes?' className='guard-dialog'>
+              <p>Discard unsaved changes?</p>
+              <button onClick={cancel}>Stay</button>
+              <button
+                onClick={() => {
+                  proceed()
+                  setDirty(false)
+                }}
+              >
+                Discard
+              </button>
+            </div>
+          )}
+        </BlockNavigation>
+      )}
+      <Suspense fallback={null}>
+        <Routes />
+      </Suspense>
+    </Router>
+  )
+}
+
+createRoot(document.getElementById('root')!).render(<BrowserFixture />)

@@ -78,6 +78,13 @@ export function Shell({ children }: { children: ReactNode }) {
             <small>Fade old item, wait for new item</small>
           </Link>
         </nav>
+        <h1>Router Features</h1>
+        <nav>
+          <Link href='/blocking' className='nav-link'>
+            Navigation blocking
+            <small>Guard unsaved changes with custom UI</small>
+          </Link>
+        </nav>
         <div className='sidebar-footer'>
           <div className='status-row'>
             <NavTimer />

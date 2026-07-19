@@ -25,6 +25,7 @@ The router is now built around React's transition machinery: navigations run ins
 - Consecutive identical outstanding navigation requests from the same source route are coalesced, preventing duplicate history writes while preserving A → B → A and intentional same-URL navigation after a commit.
 - Matched path params are injected as props onto the route segment that declares them.
 - `scrollGroup` for keeping scroll position across related routes.
+- `<BlockNavigation>` for declarative unsaved-change guards: native confirmation or render-function custom UI, with pre-history app navigation blocking, Navigation API Back/Forward replay where available, and `beforeunload` exit protection.
 
 ### Fixed
 

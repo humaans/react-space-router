@@ -366,14 +366,14 @@ test.serial('popstate emits are deferred to a macrotask in async mode', async (t
   // committed yet. The traversal emit is deferred to a macrotask (via the
   // space-router `schedule` option) so React treats back/forward as a
   // regular async transition instead of a synchronous popstate flush.
-  await act(async () => {
+  act(() => {
     g.location.href = '/next'
     g.location.pathname = '/next'
     window.dispatchEvent(new window.PopStateEvent('popstate'))
-    await Promise.resolve()
-    await Promise.resolve()
-    await Promise.resolve()
   })
+  await Promise.resolve()
+  await Promise.resolve()
+  await Promise.resolve()
   t.true(
     window.document.body.innerHTML.includes('<div>Home</div>'),
     'traversal emit must not commit within the popstate task',

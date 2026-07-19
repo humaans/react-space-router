@@ -162,6 +162,32 @@ When a resolver rejects, starting that navigation again replaces the rejected re
 
 Data loading follows the same React model: `prepare` starts or pins work synchronously, and route components read it through the data cache. The read should throw a pending promise to Suspense and a rejected request error to the error boundary. Route and adapter `prepare` functions must not throw synchronously; asynchronous request failure belongs in that read path.
 
+## Blocking navigation
+
+Render `<BlockNavigation>` while a page has changes that would be lost. The native mode asks for confirmation with the browser's dialog:
+
+```jsx
+{isDirty && <BlockNavigation message='Discard unsaved changes?' />}
+```
+
+For application UI, provide a render function. It renders only after a navigation is attempted:
+
+```jsx
+{isDirty && (
+  <BlockNavigation>
+    {({ proceed, cancel }) => (
+      <DiscardChangesDialog onDiscard={proceed} onCancel={cancel} />
+    )}
+  </BlockNavigation>
+)}
+```
+
+`proceed()` performs the retained navigation once; `cancel()` stays on the current page. Unmounting the blocker also cancels a pending attempt. While confirmation is pending, further attempts are ignored, so the dialog always represents the first attempted destination.
+
+Links, `<Navigate>`, `useNavigate()`, and `useSpaceRouter().navigate()` are blocked before history changes in every supported browser. Cancelable same-document Back/Forward traversal is also blocked in browsers with the Navigation API, then replayed to the exact history entry on `proceed()`. Without that API, Back/Forward cannot be intercepted and proceeds normally. Full-page exits and reloads use `beforeunload`; browsers own that prompt and may ignore the supplied message. Same-page fragment navigation remains browser-owned and is not blocked.
+
+When multiple blockers are mounted, the first one handles each attempted navigation.
+
 ## Prefetching
 
 Prefetching warms the route the user is likely to visit next. The usual setup is: declare data once on the route with `queries`, give `<Router>` a data adapter, then opt links into prefetching.
@@ -319,6 +345,24 @@ export default function IssueDetail({ id }) {
 ```
 
 If you also need cross-cutting access from a parent layout, reach for `useRoute()` from there.
+
+### `<BlockNavigation />`
+
+Guards navigation for as long as it is mounted. Pass `message` for a native confirmation dialog, or render-function `children` for custom UI; the two modes are mutually exclusive.
+
+```ts
+type BlockNavigationProps =
+  | { message?: string; children?: never }
+  | {
+      message?: never
+      children: (controls: {
+        proceed(): void
+        cancel(): void
+      }) => ReactNode
+    }
+```
+
+With neither prop, the native message is `Discard unsaved changes?`. See [Blocking navigation](#blocking-navigation) for behavior and browser coverage.
 
 ### `PreparedHandle`
 

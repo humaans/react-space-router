@@ -12,6 +12,7 @@ React Space Router is a set of hooks and components for keeping your app in sync
 - Nested, code-split routes with path params passed straight to route components.
 - Route-level data loading and prefetching through a small, data-layer-agnostic adapter.
 - Link prefetching on hover, focus, touch, or visibility.
+- Declarative navigation blocking with native or custom confirmation UI.
 - Pending route state for global indicators, sidebars, tabs, and breadcrumbs.
 - Delayed loading fallbacks for fast-feeling browser-style transitions.
 

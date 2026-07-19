@@ -71,4 +71,8 @@ export const routes = [
     queries: ({ params }) => [[itemDetail, { id: params.id }]],
     scrollGroup: 'mode-d',
   },
+  {
+    path: '/blocking',
+    resolver: slowImport(0, () => import('./pages/Blocking')),
+  },
 ] satisfies RouterProps['routes']

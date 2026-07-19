@@ -41,3 +41,38 @@ test('cross-page hash navigation scrolls to the destination fragment', async ({ 
   await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(1_500)
   await expect(page.locator('#anchor')).toBeInViewport()
 })
+
+test('custom navigation guard can cancel and proceed with an app navigation', async ({ page }) => {
+  await openHistoryFixture(page)
+  await page.getByLabel('Unsaved changes').check()
+
+  await page.getByRole('link', { name: 'Open page B', exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: 'Discard unsaved changes?' })
+  await expect(dialog).toBeVisible()
+  await expect(page).toHaveURL(/\/browser-test\/a$/)
+
+  await dialog.getByRole('button', { name: 'Stay' }).click()
+  await expect(dialog).toBeHidden()
+  await expect(page).toHaveURL(/\/browser-test\/a$/)
+
+  await page.getByRole('link', { name: 'Open page B', exact: true }).click()
+  await dialog.getByRole('button', { name: 'Discard' }).click()
+  await expect(page.getByRole('heading', { name: 'Page B' })).toBeVisible()
+  await expect(page).toHaveURL(/\/browser-test\/b$/)
+})
+
+test('custom navigation guard can cancel and replay Back', async ({ page }) => {
+  await openHistoryFixture(page)
+  await page.getByRole('link', { name: 'Open page B', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'Page B' })).toBeVisible()
+  await page.getByLabel('Unsaved changes').check()
+
+  await page.evaluate(() => history.back())
+  const dialog = page.getByRole('dialog', { name: 'Discard unsaved changes?' })
+  await expect(dialog).toBeVisible()
+  await expect(page).toHaveURL(/\/browser-test\/b$/)
+
+  await dialog.getByRole('button', { name: 'Discard' }).click()
+  await expect(page.getByRole('heading', { name: 'Page A' })).toBeVisible()
+  await expect(page).toHaveURL(/\/browser-test\/a$/)
+})
