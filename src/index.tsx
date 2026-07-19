@@ -195,6 +195,7 @@ interface RouterContextValue {
   router: SpaceRouter<RouteData>
   route: Route<RouteData> | null
   previousRoute: Route<RouteData> | null
+  navigationSource: NavigationSource
   navigate: (to: To, currentRoute?: Route<RouteData> | null) => void
   isPending: boolean
   pending: PendingNavigation | null
@@ -313,7 +314,10 @@ interface RouterOpts {
 interface InternalRouter {
   router: SpaceRouter<RouteData>
   routerOpts: RouterOpts
+  getNavigationSource(): NavigationSource
 }
+
+type NavigationSource = 'navigation' | 'traversal'
 
 interface OutstandingNavigation {
   targetUrl: string
@@ -347,19 +351,29 @@ function asRouteHref(href: string, mode: Mode | undefined): RouteHref | null {
 
 function makeRouter(routerOpts: RouterOpts): InternalRouter {
   const { mode, qs, sync } = routerOpts
+  let navigationSource: NavigationSource = 'navigation'
   const router = createRouter<RouteData>({
     mode,
     qs,
-    sync,
     // React 19 flushes state updates scheduled during the popstate task
     // synchronously (to cooperate with the browser's scroll restoration) —
     // but a synchronous "transition" that suspends shows Suspense fallbacks
     // instead of holding the previous route, and pending state never paints.
     // Deliver traversal emits in a macrotask so back/forward gets the same
-    // async transition semantics as link clicks.
-    schedule: sync ? undefined : (fire, { traversal }) => (traversal ? setTimeout(fire, 0) : queueMicrotask(fire)),
+    // async transition semantics as link clicks. Record the source only when
+    // the scheduled emit actually runs, so a superseding navigation cannot
+    // inherit stale traversal metadata.
+    schedule: (fire, { traversal }) => {
+      const run = () => {
+        navigationSource = traversal ? 'traversal' : 'navigation'
+        fire()
+      }
+      if (sync) run()
+      else if (traversal) setTimeout(run, 0)
+      else queueMicrotask(run)
+    },
   })
-  return { router, routerOpts }
+  return { router, routerOpts, getNavigationSource: () => navigationSource }
 }
 
 interface TargetRouter {
@@ -563,6 +577,7 @@ const DEFAULT_PREFETCH_HOVER_DELAY_MS = 50
 interface RouteHistory {
   current: Route<RouteData> | null
   previous: Route<RouteData> | null
+  navigationSource: NavigationSource
   resolved: boolean
 }
 
@@ -587,13 +602,17 @@ export function Router({
   pendingDelayMs = DEFAULT_PENDING_DELAY_MS,
   children,
 }: RouterProps) {
-  const [{ router, routerOpts }, setRouter] = useState<InternalRouter>(() => makeRouter({ mode, qs, sync }))
+  const [{ router, routerOpts, getNavigationSource }, setRouter] = useState<InternalRouter>(() =>
+    makeRouter({ mode, qs, sync }),
+  )
 
-  const [{ current: currRoute, previous: previousRoute, resolved }, setRouteHistory] = useState<RouteHistory>({
-    current: null,
-    previous: null,
-    resolved: false,
-  })
+  const [{ current: currRoute, previous: previousRoute, navigationSource, resolved }, setRouteHistory] =
+    useState<RouteHistory>({
+      current: null,
+      previous: null,
+      navigationSource: 'navigation',
+      resolved: false,
+    })
   const [pending, setPending] = useState<PendingNavigation | null>(null)
   const [isPending, startRouterTransition] = useTransition()
 
@@ -647,7 +666,7 @@ export function Router({
   })
 
   const commit = useCallback(
-    (prepared: PreparedRoute) => {
+    (prepared: PreparedRoute, source: NavigationSource = 'navigation') => {
       const { route: next, matched } = prepared
       const previous = lastSuccessfulRoute.current
 
@@ -658,7 +677,7 @@ export function Router({
       // back/forward all register the same way.
       setPending({ route: next, matchedUrl: matched.url })
       startRouterTransition(() => {
-        setRouteHistory({ current: next, previous, resolved: true })
+        setRouteHistory({ current: next, previous, navigationSource: source, resolved: true })
         setPending(null)
       })
 
@@ -676,14 +695,18 @@ export function Router({
   // prepare the transformed destination, and commit that exact prepared
   // object. URL identity is never used to transfer lease ownership.
   const beginNavigation = useCallback(
-    (matched: Route<RouteData>, transformed: Route<RouteData> = applyTransform(matched)) => {
+    (
+      matched: Route<RouteData>,
+      transformed: Route<RouteData> = applyTransform(matched),
+      source: NavigationSource = 'navigation',
+    ) => {
       const superseded = pendingPrepared.current
       pendingPrepared.current = null
       if (superseded) releaseHandles(superseded.handles)
 
       const prepared = { route: transformed, matched, handles: prepareRoute(transformed, data) }
       pendingPrepared.current = prepared
-      commit(prepared)
+      commit(prepared, source)
     },
     [applyTransform, commit, data],
   )
@@ -698,7 +721,12 @@ export function Router({
       setRouteHistory((history) =>
         history.resolved && history.current === null
           ? history
-          : { current: null, previous: history.previous, resolved: true },
+          : {
+              current: null,
+              previous: history.previous,
+              navigationSource: history.navigationSource,
+              resolved: true,
+            },
       )
     })
   }, [])
@@ -771,14 +799,14 @@ export function Router({
         const superseded = pendingPrepared.current
         pendingPrepared.current = null
         if (superseded) releaseHandles(superseded.handles)
-        commit(committed.current)
+        commit(committed.current, getNavigationSource())
         return
       }
 
-      beginNavigation(matched, transformed)
+      beginNavigation(matched, transformed, getNavigationSource())
     }
     return router.listen(listeningRoutes, transition)
-  }, [router, listeningRoutes, applyTransform, commit, beginNavigation, beginUnmatched])
+  }, [router, listeningRoutes, applyTransform, commit, beginNavigation, beginUnmatched, getNavigationSource])
 
   useEffect(() => {
     if (previousRoutes.current === routes) return
@@ -834,6 +862,7 @@ export function Router({
       router: targetRouter.router,
       route: activeRoute,
       previousRoute,
+      navigationSource,
       navigate: targetRouter.navigate,
       isPending,
       pending,
@@ -845,6 +874,7 @@ export function Router({
       targetRouter.navigate,
       activeRoute,
       previousRoute,
+      navigationSource,
       isPending,
       pending,
       prefetchLinks,
@@ -1068,8 +1098,8 @@ function releaseHandles(handles: PreparedHandle[]) {
 }
 
 export function Routes({ disableScrollToTop }: RoutesProps) {
-  const route = useRoute()
-  useScrollToTop(route, disableScrollToTop)
+  const { route, navigationSource } = useRouterCtx()
+  useScrollToTop(route, navigationSource, disableScrollToTop)
 
   return useMemo(() => {
     if (!route) return null
@@ -1125,7 +1155,7 @@ function resolveSegmentComponent(segment: RouteData): ComponentType<any> | null 
   return typeof component === 'function' ? component : component.default
 }
 
-function useScrollToTop(route: Route<RouteData> | null, disabled?: boolean) {
+function useScrollToTop(route: Route<RouteData> | null, navigationSource: NavigationSource, disabled?: boolean) {
   const prevScrollGroup = useRef<string | undefined>(undefined)
 
   useEffect(() => {
@@ -1135,11 +1165,11 @@ function useScrollToTop(route: Route<RouteData> | null, disabled?: boolean) {
     const scrollGroup = data.scrollGroup || route.pathname
     if (prevScrollGroup.current !== scrollGroup) {
       prevScrollGroup.current = scrollGroup
-      if (typeof window !== 'undefined') {
+      if (navigationSource !== 'traversal' && typeof window !== 'undefined') {
         window.scrollTo(0, 0)
       }
     }
-  }, [route && route.pathname, disabled])
+  }, [route && route.pathname, navigationSource, disabled])
 }
 
 // ---------------------------------------------------------------------------

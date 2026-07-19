@@ -185,7 +185,7 @@ Props:
   - `prefetch(ctx)` the low-level alternative to `queries` for prefetch — called when a prefetching link warms this route. May fire at any frequency; the return value is ignored.
   - `prefetchable` set `false` to exclude a route from speculative prefetch (no chunk preload, no `prefetch`) while still preparing on real navigation. A route-level veto that beats an explicit `<Link prefetch>`.
   - `props` props to pass to the segment's component.
-  - `scrollGroup` a string that groups routes; navigations within a group don't scroll to top.
+  - `scrollGroup` a string that groups routes; app-created navigations within a group don't scroll to top.
   - `routes` nested route definitions.
   - `...metadata` any other keys you want — they're available on `route.data[i]`.
 - `mode` one of `history`, `hash`, `memory` — default is `history`.
@@ -275,7 +275,7 @@ When a navigation happens, every matched segment's `resolver()` is preloaded and
 
 Props:
 
-- `disableScrollToTop` disables the scroll-to-top behavior after each navigation.
+- `disableScrollToTop` disables the window scroll reset. By default, app-created navigation to a different pathname or `scrollGroup` scrolls to the top; browser Back/Forward traversal is left to the browser's native scroll restoration.
 
 #### Path params as component props
 

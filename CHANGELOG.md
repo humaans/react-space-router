@@ -32,6 +32,7 @@ The router is now built around React's transition machinery: navigations run ins
 - Route preparation is transactional: if a later segment throws, every handle already acquired for that attempt is released.
 - Initial preparation handles remain leak-free under React 18's discarded StrictMode render while separate Router instances retain independent leases.
 - Unmatched URLs now clear `useRoute()` and `<Routes>`, and release the prior route's preparation handles, without advancing `usePreviousRoute()`'s successful-route history.
+- Back/Forward traversal now leaves scroll restoration to the browser instead of applying the router's new-page scroll reset after commit.
 
 ### Polish
 
