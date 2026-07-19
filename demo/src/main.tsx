@@ -8,7 +8,7 @@ import './styles.css'
 
 function App() {
   return (
-    <Router mode='history' pendingDelayMs={500} data={data} routes={routes}>
+    <Router pendingDelayMs={500} data={data} routes={routes}>
       <Shell>
         <Suspense fallback={null}>
           <Routes />

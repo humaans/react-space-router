@@ -1,3 +1,4 @@
+import type { RouterProps } from 'react-space-router'
 import { prepare, slowImport, type QueryDef } from './data'
 
 // Latency budgets we'll reuse across routes. Tweak here to see the modes
@@ -70,4 +71,4 @@ export const routes = [
     queries: ({ params }) => [[itemDetail, { id: params.id }]],
     scrollGroup: 'mode-d',
   },
-]
+] satisfies RouterProps['routes']

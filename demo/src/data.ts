@@ -1,8 +1,8 @@
 // A tiny suspense-aware data layer used to simulate prepared queries.
 //
 // Two surfaces:
-//   prepare(key, ms) → returns a PreparedHandle for the router to await.
-//   read(key)        → reads a previously-prepared value, suspends if pending.
+//   prepare(key, ms) → starts the request and returns a release-only lease.
+//   read(key)        → reads the prepared value, suspending on its promise.
 //
 // Cache lives in-module — refreshing the page resets it, exactly what the
 // demo expects.
@@ -75,10 +75,8 @@ export function read(key: string): Value {
 
 /** Returns a PreparedHandle the router can pin while the route is committed. */
 export function prepare(key: string, ms: number): PreparedHandle {
-  const entry = load(key, ms)
-  const promise = entry.status === 'pending' ? entry.promise : Promise.resolve()
+  load(key, ms)
   return {
-    promise,
     release: () => {
       // Demo: keep entries around so revisits feel snappy. A real data layer
       // would refcount. Use a "Reset cache" button (or full reload) to clear.

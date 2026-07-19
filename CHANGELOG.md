@@ -37,6 +37,7 @@ The router is now built around React's transition machinery: navigations run ins
 ### Polish
 
 - CI now exercises the supported peer range against both React 18 and React 19.
+- Chromium CI now covers Suspense navigation, interrupted traversal, native scroll restoration, and browser-owned hash links.
 - The documentation now defines redirects, the complete path-pattern grammar, and the native ESM/ES2022 browser baseline.
 
 ## 0.6.6
