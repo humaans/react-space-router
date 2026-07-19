@@ -90,7 +90,7 @@ test.serial('transformQuery gives href and prefetch APIs one resolved destinatio
 
   await act(async () => {
     ReactDOM.createRoot(root).render(
-      <Router sync transformQuery={sourceAwareTransform(calls)} routes={routes}>
+      <Router sync prefetchHoverDelayMs={0} transformQuery={sourceAwareTransform(calls)} routes={routes}>
         <Routes />
       </Router>,
     )
@@ -532,6 +532,7 @@ test.serial('transformQuery and prefetch bypass non-route hrefs even with a wild
     ReactDOM.createRoot(root).render(
       <Router
         sync
+        prefetchHoverDelayMs={0}
         transformQuery={(query) => {
           transformCalls++
           return { ...query, transformed: 'yes' }

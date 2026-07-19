@@ -60,7 +60,7 @@ test.serial(
 
     await act(async () => {
       ReactDOM.createRoot(root).render(
-        <Router sync data={adapter} routes={routes}>
+        <Router sync data={adapter} prefetchHoverDelayMs={0} routes={routes}>
           <CaptureRouter />
           <Routes />
         </Router>,
@@ -150,7 +150,7 @@ test.serial('prefetchable:false vetoes speculation but still prepares on navigat
 
   await act(async () => {
     ReactDOM.createRoot(root).render(
-      <Router sync data={adapter} routes={routes}>
+      <Router sync data={adapter} prefetchHoverDelayMs={0} routes={routes}>
         <CaptureRouter />
         <Routes />
       </Router>,

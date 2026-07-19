@@ -162,9 +162,9 @@ export type TransformQuery = (
   context: TransformQueryContext,
 ) => Record<string, unknown> | null
 
-// Prefetch trigger for links: `true` is shorthand for `'hover'` (hover,
-// focus, and touchstart), `'visible'` prefetches when the link scrolls into
-// view. The trigger decides *when* to prefetch; the matched route's
+// Prefetch trigger for links: `true` is shorthand for `'hover'` (delayed
+// hover intent, immediate focus and touchstart), `'visible'` prefetches when
+// the link scrolls into view. The trigger decides *when* to prefetch; the matched route's
 // `prefetch`/`resolver` fields decide *what* — a link to a route that
 // declares neither is a no-op.
 export type PrefetchMode = boolean | 'hover' | 'visible'
@@ -197,6 +197,7 @@ interface RouterContextValue {
   isPending: boolean
   pending: PendingNavigation | null
   prefetchLinks: PrefetchMode | undefined
+  prefetchHoverDelayMs: number
 }
 
 export const RouterContext = createContext<RouterContextValue | undefined>(undefined)
@@ -532,6 +533,12 @@ export interface RouterProps {
    */
   prefetchLinks?: PrefetchMode
   /**
+   * Hover-intent delay before a link prefetch starts. Leaving the link before
+   * the delay expires cancels it; focus and touchstart remain immediate.
+   * Default is `50` ms. Set to `0` for immediate hover prefetching.
+   */
+  prefetchHoverDelayMs?: number
+  /**
    * How long to hold the previous route on screen before `<DelayedSuspense>`
    * boundaries fall back to their fallback content. Default is `1000` ms.
    * No effect on plain `<Suspense>` boundaries — those always show their
@@ -542,6 +549,7 @@ export interface RouterProps {
 }
 
 const DEFAULT_PENDING_DELAY_MS = 1000
+const DEFAULT_PREFETCH_HOVER_DELAY_MS = 50
 
 interface RouteHistory {
   current: Route<RouteData> | null
@@ -557,6 +565,7 @@ export function Router({
   transformQuery,
   data,
   prefetchLinks,
+  prefetchHoverDelayMs = DEFAULT_PREFETCH_HOVER_DELAY_MS,
   pendingDelayMs = DEFAULT_PENDING_DELAY_MS,
   children,
 }: RouterProps) {
@@ -767,8 +776,18 @@ export function Router({
       isPending,
       pending,
       prefetchLinks,
+      prefetchHoverDelayMs,
     }),
-    [targetRouter.router, targetRouter.navigate, activeRoute, previousRoute, isPending, pending, prefetchLinks],
+    [
+      targetRouter.router,
+      targetRouter.navigate,
+      activeRoute,
+      previousRoute,
+      isPending,
+      pending,
+      prefetchLinks,
+      prefetchHoverDelayMs,
+    ],
   )
 
   useEffect(() => {
@@ -1030,6 +1049,7 @@ export interface LinkPropsResult {
   onClick: (e: MouseEvent<HTMLAnchorElement>) => void
   // Present only when a prefetch trigger is active for this link.
   onMouseEnter?: () => void
+  onMouseLeave?: () => void
   onFocus?: () => void
   onTouchStart?: () => void
   ref?: (el: HTMLAnchorElement | null) => void
@@ -1071,7 +1091,7 @@ function useLinkTarget(to: LinkTo): LinkState & { target: LinkTarget; resolved: 
  */
 export function useLinkProps(to: LinkTo): LinkPropsResult {
   const { target, resolved, href, isCurrent, isPending } = useLinkTarget(to)
-  const { prefetchLinks } = useRouterCtx()
+  const { prefetchLinks, prefetchHoverDelayMs } = useRouterCtx()
   const targets = useRouterTargets()
   const prefetchResolved = usePrefetchResolved()
   const resolvedRef = useRef(resolved)
@@ -1080,6 +1100,32 @@ export function useLinkProps(to: LinkTo): LinkPropsResult {
   // Link-level `prefetch` overrides the Router-level `prefetchLinks` default.
   const prefetchMode = resolvePrefetchMode(target.prefetch ?? prefetchLinks)
   const visibleObserver = useRef<IntersectionObserver | null>(null)
+  const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const cancelHoverPrefetch = useCallback(() => {
+    if (hoverTimer.current === null) return
+    clearTimeout(hoverTimer.current)
+    hoverTimer.current = null
+  }, [])
+
+  const prefetchImmediately = useCallback(() => {
+    cancelHoverPrefetch()
+    prefetchResolved(resolvedRef.current)
+  }, [cancelHoverPrefetch, prefetchResolved])
+
+  const scheduleHoverPrefetch = useCallback(() => {
+    cancelHoverPrefetch()
+    if (prefetchHoverDelayMs <= 0) {
+      prefetchResolved(resolvedRef.current)
+      return
+    }
+    hoverTimer.current = setTimeout(() => {
+      hoverTimer.current = null
+      prefetchResolved(resolvedRef.current)
+    }, prefetchHoverDelayMs)
+  }, [cancelHoverPrefetch, prefetchHoverDelayMs, prefetchResolved])
+
+  useLayoutEffect(() => cancelHoverPrefetch, [cancelHoverPrefetch, href, prefetchMode, prefetchHoverDelayMs])
 
   // `href` re-arms the one-shot observer when this link's destination changes.
   const observeVisible = useCallback(
@@ -1103,6 +1149,7 @@ export function useLinkProps(to: LinkTo): LinkPropsResult {
   )
 
   function onClick(event: MouseEvent<HTMLAnchorElement>) {
+    cancelHoverPrefetch()
     if (shouldNavigate(event)) {
       event.preventDefault()
       targets.navigate(resolved)
@@ -1117,10 +1164,10 @@ export function useLinkProps(to: LinkTo): LinkPropsResult {
   }
 
   if (prefetchMode === 'hover') {
-    const trigger = () => prefetchResolved(resolved)
-    result.onMouseEnter = trigger
-    result.onFocus = trigger
-    result.onTouchStart = trigger
+    result.onMouseEnter = scheduleHoverPrefetch
+    result.onMouseLeave = cancelHoverPrefetch
+    result.onFocus = prefetchImmediately
+    result.onTouchStart = prefetchImmediately
   } else if (prefetchMode === 'visible') {
     result.ref = observeVisible
   }
@@ -1169,6 +1216,7 @@ export function Link({
   prefetch,
   onClick,
   onMouseEnter,
+  onMouseLeave,
   onFocus,
   onTouchStart,
   children,
@@ -1195,6 +1243,7 @@ export function Link({
       // eslint-disable-next-line react/jsx-handler-names
       onClick={handleClick}
       onMouseEnter={composeTrigger(onMouseEnter, linkProps.onMouseEnter)}
+      onMouseLeave={composeTrigger(onMouseLeave, linkProps.onMouseLeave)}
       onFocus={composeTrigger(onFocus, linkProps.onFocus)}
       onTouchStart={composeTrigger(onTouchStart, linkProps.onTouchStart)}
     >

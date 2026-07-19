@@ -157,7 +157,7 @@ const routes = [
 
 On navigation, each query runs through `data.prepare(def, args)` and the returned handles stay pinned until the route changes. On prefetch, the same query runs through `data.prefetch(def, args)` and the return value is ignored. Resolver chunks are warmed too.
 
-`<Link prefetch>` means hover/focus/touch. Use `prefetch='visible'` for viewport-based prefetching, `<Router prefetchLinks>` to make prefetching the default for all links, and `prefetch={false}` to opt one link out. A route can set `prefetchable: false` to block speculative warming while still preparing normally on real navigation.
+`<Link prefetch>` means cancellable hover intent (50ms by default) plus immediate focus/touch. Use `prefetch='visible'` for viewport-based prefetching, `<Router prefetchLinks>` to make prefetching the default for all links, and `prefetch={false}` to opt one link out. Configure the hover delay with `<Router prefetchHoverDelayMs={50}>`; `0` restores immediate hover prefetching. A route can set `prefetchable: false` to block speculative warming while still preparing normally on real navigation.
 
 For unusual cases, use route-level `prepare(ctx)` / `prefetch(ctx)` directly, or call `usePrefetch()` from your own trigger.
 
@@ -188,6 +188,7 @@ Props:
 - `transformQuery(query, { to, sourceRoute, targetRoute })` an optional pure, synchronous mapping for the query of app-created destinations. It returns the query serialized by the configured `qs` codec, or `null` to remove the query. See [Query transform](#query-transform).
 - `data` a data adapter of shape `{ prepare(def, args), prefetch(def, args) }` that bridges route `queries` to a data layer (see [Prefetching](#prefetching)). `prepare` returns a `PreparedHandle`; `prefetch` warms speculatively. figbird's kit satisfies this directly. Should be referentially stable; required only if a route uses `queries`.
 - `prefetchLinks` default prefetch trigger for every link: `true`/`'hover'` or `'visible'`. Individual links override with their own `prefetch` prop, including `prefetch={false}` to opt out. Off by default.
+- `prefetchHoverDelayMs` cancellable hover-intent delay for prefetching links. Focus and touchstart remain immediate. Default: `50`; set to `0` for immediate hover prefetching.
 - `pendingDelayMs` how long `<DelayedSuspense>` holds the previous route before rendering its fallback during an in-flight navigation. Default: `1000`.
 
 #### Query transform
@@ -295,7 +296,7 @@ Props:
   - `merge` merge partial `to` object into the current route.
 - `replace` replace the current entry in the navigation stack instead of pushing.
 - `current` set to true/false to override automatic current-page detection.
-- `prefetch` warm the target route speculatively: `true`/`'hover'` on hover, focus, and touch, `'visible'` when the link scrolls into view. Overrides the Router-level `prefetchLinks` default in either direction.
+- `prefetch` warm the target route speculatively: `true`/`'hover'` after the Router's cancellable hover-intent delay, but immediately on focus and touch; `'visible'` when the link scrolls into view. Overrides the Router-level `prefetchLinks` default in either direction.
 - `onClick` user click handler. Runs before the router's internal click handling; call `event.preventDefault()` to stop SPA navigation.
 
 The rest of the props are spread onto the `<a>` element.

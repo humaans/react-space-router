@@ -10,6 +10,14 @@ function hover(el: Element) {
   el.dispatchEvent(new window.MouseEvent('mouseover', { bubbles: true }))
 }
 
+function leave(el: Element) {
+  el.dispatchEvent(new window.MouseEvent('mouseout', { bubbles: true, relatedTarget: document.body }))
+}
+
+function wait(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
 test.serial('Link prefetch preloads the resolver chunk and runs route prefetch on hover', async (t) => {
   setup()
 
@@ -39,7 +47,7 @@ test.serial('Link prefetch preloads the resolver chunk and runs route prefetch o
 
   await act(async () => {
     ReactDOM.createRoot(root).render(
-      <Router sync routes={routes}>
+      <Router sync prefetchHoverDelayMs={0} routes={routes}>
         <Routes />
       </Router>,
     )
@@ -68,6 +76,52 @@ test.serial('Link prefetch preloads the resolver chunk and runs route prefetch o
   t.is(resolverCalls, 1)
 })
 
+test.serial('hover prefetch waits for intent while focus and touch remain immediate', async (t) => {
+  setup()
+
+  const root = document.getElementById('root')
+  const prefetched: string[] = []
+  const routes = [
+    {
+      path: '/',
+      component: () => (
+        <Link href='/target' prefetch>
+          Target
+        </Link>
+      ),
+    },
+    { path: '/target', component: () => null, prefetch: () => prefetched.push('target') },
+  ]
+
+  await act(async () => {
+    ReactDOM.createRoot(root).render(
+      <Router sync routes={routes}>
+        <Routes />
+      </Router>,
+    )
+  })
+
+  const link = window.document.querySelector('a')!
+
+  act(() => hover(link))
+  await wait(20)
+  t.deepEqual(prefetched, [])
+
+  act(() => leave(link))
+  await wait(50)
+  t.deepEqual(prefetched, [])
+
+  act(() => link.dispatchEvent(new window.FocusEvent('focusin', { bubbles: true })))
+  t.deepEqual(prefetched, ['target'])
+
+  act(() => link.dispatchEvent(new window.Event('touchstart', { bubbles: true })))
+  t.deepEqual(prefetched, ['target', 'target'])
+
+  act(() => hover(link))
+  await wait(80)
+  t.deepEqual(prefetched, ['target', 'target', 'target'])
+})
+
 test.serial('Router prefetchLinks turns prefetch on for all links, prefetch={false} opts out', async (t) => {
   setup()
 
@@ -92,7 +146,7 @@ test.serial('Router prefetchLinks turns prefetch on for all links, prefetch={fal
 
   await act(async () => {
     ReactDOM.createRoot(root).render(
-      <Router sync prefetchLinks routes={routes}>
+      <Router sync prefetchLinks prefetchHoverDelayMs={0} routes={routes}>
         <Routes />
       </Router>,
     )
@@ -132,7 +186,12 @@ test.serial('prefetch receives the transformed route, matching what a navigation
 
   await act(async () => {
     ReactDOM.createRoot(root).render(
-      <Router sync transformRoute={(route) => ({ ...route, query: { ...route.query, restored: '1' } })} routes={routes}>
+      <Router
+        sync
+        prefetchHoverDelayMs={0}
+        transformRoute={(route) => ({ ...route, query: { ...route.query, restored: '1' } })}
+        routes={routes}
+      >
         <Routes />
       </Router>,
     )
