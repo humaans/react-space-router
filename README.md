@@ -32,12 +32,6 @@ If you need SSR, use a framework/router designed around request-time rendering. 
 $ npm install react-space-router
 ```
 
-## Compatibility
-
-The peer dependency is React 18 or newer, with React 18 and React 19 exercised in CI.
-
-The package is published as native ESM targeting ECMAScript 2022. It is intended for modern evergreen browsers and does not include downlevel transforms or polyfills. Applications targeting older JavaScript engines must transpile the package as part of their build and provide any required platform polyfills. Visibility prefetching requires `IntersectionObserver`; when it is unavailable, `prefetch='visible'` safely does nothing.
-
 ## Docs
 
 See the [API Docs](https://humaans.github.io/react-space-router/) for examples, component and hook references, loading UI guidance, prefetching, and route data loading details.

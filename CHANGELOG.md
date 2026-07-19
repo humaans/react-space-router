@@ -1,14 +1,14 @@
 ## 1.0.0
 
-The router is now built around React's transition machinery: navigations run inside `useTransition`, Suspense keeps the previous route on screen while the destination loads, and the destination's code and data are kicked off as soon as navigation begins. See the [docs](https://humaans.github.io/react-space-router/) for usage guides and [MIGRATION.md](./MIGRATION.md) for a step-by-step migration from 0.6.x.
+The router is now built around React's transition machinery: navigations run inside `useTransition`, Suspense keeps the previous route on screen while the destination loads, and the destination's code and data are kicked off as soon as navigation begins. See the [docs](https://humaans.github.io/react-space-router/) for usage guides and [MIGRATION.md](./MIGRATION.md) for a concise migration guide from 0.6.x.
 
 ### Breaking
 
 - Route definitions move from `<Routes routes={routes}>` to `<Router routes={routes}>`; `<Routes />` now marks where the matched route tree renders.
-- Route state lives inside `<Router>`; the prop-based lifecycle hooks (`useRoute`, `onNavigating`, `onNavigated`) are removed. Read the current route with `useRoute()`, run post-navigation logic in regular effects, and replace `onNavigating`-based preloading with per-route `resolver` and `prepare`.
+- Route state lives inside `<Router>`; the `useRoute`, `onNavigating`, and `onNavigated` props are removed. Read the current route with `useRoute()`, run post-navigation logic in regular effects, and replace `onNavigating`-based preloading with per-route `resolver` and `prepare`.
 - Function-form `<Link>` props (`className`, `style`, `extraProps`) are removed. Style current and pending links in plain CSS via the `aria-current="page"` and `data-pending` attributes, or use `useLinkState(to)` when the state needs to affect rendered output.
 - `useInternalRouterInstance` is renamed to `useSpaceRouter`. Same escape hatch, same return value — the underlying space-router instance.
-- `PreparedHandle` now requires only the `release()` lease lifecycle that the router consumes; richer data-layer handles remain compatible. The undocumented `RouterContext` export is removed, and `<Link href>` is now required.
+- The package is now native ESM targeting ECMAScript 2022. CommonJS consumers must migrate to ESM, and applications targeting older JavaScript engines must transpile the package and provide any required polyfills.
 
 ### New
 
@@ -24,7 +24,6 @@ The router is now built around React's transition machinery: navigations run ins
 - `transformQuery(query, { to, sourceRoute, targetRoute })` for app-owned destination-query policy across navigation, href, link, `<Navigate>`, and prefetch APIs. Direct loads, browser traversal, external/protocol URLs, and same-page fragments remain untouched.
 - Consecutive identical outstanding navigation requests from the same source route are coalesced, preventing duplicate history writes while preserving A → B → A and intentional same-URL navigation after a commit.
 - Matched path params are injected as props onto the route segment that declares them.
-- `scrollGroup` for keeping scroll position across related routes.
 - `<BlockNavigation>` for declarative unsaved-change guards: native confirmation or render-function custom UI, with pre-history app navigation blocking, Navigation API Back/Forward replay where available, and `beforeunload` exit protection.
 
 ### Fixed
@@ -44,6 +43,7 @@ The router is now built around React's transition machinery: navigations run ins
 - CI now exercises the supported peer range against both React 18 and React 19.
 - Chromium CI now covers Suspense navigation, interrupted traversal, native scroll restoration, browser-owned same-page hashes, and router-managed cross-page fragments.
 - The documentation now defines redirects, the complete path-pattern grammar, and the native ESM/ES2022 browser baseline.
+- `PreparedHandle` now describes only the `release()` lifecycle the router consumes, so richer data-layer handles remain compatible. `<Link href>` is required in the public types, and the undocumented `RouterContext` export has been removed.
 
 ## 0.6.6
 
