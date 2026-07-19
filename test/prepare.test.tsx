@@ -276,7 +276,7 @@ test.serial('Router seeds the initial route synchronously for route components',
 
   function Home() {
     const route = useRoute()
-    return <div>route={route?.pathname ?? 'null'}</div>
+    return <div>route={route.pathname}</div>
   }
 
   function App() {

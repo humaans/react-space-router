@@ -445,6 +445,26 @@ test.serial('Link rendered alongside Routes in async mode does not crash', async
   t.is(link?.getAttribute('aria-current'), null)
 })
 
+test.serial('Link remains usable when the current URL is unmatched', async (t) => {
+  setup()
+  history.pushState({}, '', '/missing')
+
+  const root = document.getElementById('root')
+
+  await act(async () => {
+    ReactDOM.createRoot(root).render(
+      <Router routes={[{ path: '/', component: () => <div>Home</div> }]}>
+        <Link href='/'>Home</Link>
+        <Routes />
+      </Router>,
+    )
+  })
+
+  const link = window.document.querySelector('a')
+  t.is(link?.getAttribute('href'), '/')
+  t.is(link?.getAttribute('aria-current'), null)
+})
+
 test.serial('Link clears pending href when async navigation commits', async (t) => {
   setup()
 

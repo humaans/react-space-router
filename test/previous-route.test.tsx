@@ -77,7 +77,7 @@ test.serial('usePreviousRoute ignores batched destinations that never commit', a
   function Page() {
     const route = useRoute()
     const previous = usePreviousRoute()
-    return <div>{`${route?.url} <- ${previous?.url ?? 'none'}`}</div>
+    return <div>{`${route.url} <- ${previous?.url ?? 'none'}`}</div>
   }
 
   await act(async () => {
@@ -121,7 +121,7 @@ test.serial('a suspended destination superseded before commit never becomes prev
     router = useSpaceRouter()
     const route = useRoute()
     const previous = usePreviousRoute()
-    return <span>{`${route?.url} <- ${previous?.url ?? 'none'}`}</span>
+    return <span>{`${route.url} <- ${previous?.url ?? 'none'}`}</span>
   }
 
   function Slow() {
@@ -181,7 +181,7 @@ test.serial('unmatched navigation clears current route without advancing success
     router = useSpaceRouter()
     const route = useRoute()
     const previous = usePreviousRoute()
-    return <div>{`${route?.url} <- ${previous?.url ?? 'none'}`}</div>
+    return <div>{`${route.url} <- ${previous?.url ?? 'none'}`}</div>
   }
 
   await act(async () => {
@@ -189,11 +189,10 @@ test.serial('unmatched navigation clears current route without advancing success
       <Router
         sync
         routes={[
-          { path: '/a', component: () => null },
-          { path: '/b', component: () => null },
+          { path: '/a', component: AppState },
+          { path: '/b', component: AppState },
         ]}
       >
-        <AppState />
         <Routes />
       </Router>,
     )
@@ -207,7 +206,7 @@ test.serial('unmatched navigation clears current route without advancing success
   await act(async () => {
     router.navigate('/missing')
   })
-  t.is(window.document.body.textContent, 'undefined <- /a')
+  t.is(window.document.body.textContent, '')
   t.is(router.match('/missing'), undefined)
 
   g.location.href = '/a'

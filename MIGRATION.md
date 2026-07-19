@@ -39,7 +39,7 @@ function PageView() {
   const previousRoute = usePreviousRoute()
 
   useEffect(() => {
-    if (route) trackPageView(route, previousRoute)
+    trackPageView(route, previousRoute)
   }, [route, previousRoute])
 
   return null

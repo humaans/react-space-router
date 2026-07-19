@@ -441,7 +441,7 @@ Get the underlying Space Router instance. See [space-router docs](https://kidkar
 const route = useRoute()
 ```
 
-Subscribe to the current route, or `null` when the current URL does not match the router's route table. On an unmatched URL, `<Routes>` renders nothing and the prior route's preparation handles are released. A matched initial route is available synchronously throughout `<Router>`, including components rendered outside `<Routes>`. The route has the shape `{ url, pathname, params, query, search, hash, pattern, data }`:
+Subscribe to the current matched route. `useRoute()` returns a route directly and throws when the current URL does not match the router's route table; add a wildcard route when unmatched URLs should still render within the application. On an unmatched URL, `<Routes>` renders nothing and the prior route's preparation handles are released. A matched initial route is available synchronously throughout `<Router>`, including components rendered outside `<Routes>`. The route has the shape `{ url, pathname, params, query, search, hash, pattern, data }`:
 
 - `url` full relative URL string including query string and hash if any.
 - `pathname` the pathname portion.

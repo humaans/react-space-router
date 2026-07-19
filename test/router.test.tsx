@@ -190,6 +190,25 @@ test.serial('useRoute throws outside Router', (t) => {
   }
 })
 
+test.serial('useRoute throws when the current URL is unmatched', (t) => {
+  setup()
+
+  function UnmatchedRouteConsumer() {
+    useRoute()
+    return null
+  }
+
+  const error = t.throws(() =>
+    renderToString(
+      <Router routes={[{ path: '/matched', component: () => null }]}>
+        <UnmatchedRouteConsumer />
+      </Router>,
+    ),
+  )
+
+  t.regex(error.message, /useRoute\(\) requires a matched route/)
+})
+
 test.serial('transformRoute rewrites the route before commit and syncs the URL', async (t) => {
   setup()
 
@@ -602,8 +621,8 @@ test.serial('Routes parses query hash splat optional params and wildcard routes'
     const route = useRoute()
     return (
       <div>
-        path={route?.pathname}; params={JSON.stringify(route?.params)}; query={JSON.stringify(route?.query)}; hash=
-        {route?.hash}
+        path={route.pathname}; params={JSON.stringify(route.params)}; query={JSON.stringify(route.query)}; hash=
+        {route.hash}
       </div>
     )
   }

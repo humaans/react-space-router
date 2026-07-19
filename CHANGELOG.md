@@ -4,6 +4,7 @@ The router is now built around React's transition machinery: navigations run ins
 
 ### Breaking
 
+- `useRoute()` now returns `Route` directly and throws when the current URL is unmatched. Applications that handle unmatched URLs within the router should configure a wildcard route.
 - Route definitions move from `<Routes routes={routes}>` to `<Router routes={routes}>`; `<Routes />` now marks where the matched route tree renders.
 - Route state lives inside `<Router>`; the `useRoute`, `onNavigating`, and `onNavigated` props are removed. Read the current route with `useRoute()`, run post-navigation logic in regular effects, and replace `onNavigating`-based preloading with per-route `resolver` and `prepare`.
 - Function-form `<Link>` props (`className`, `style`, `extraProps`) are removed. Style current and pending links in plain CSS via the `aria-current="page"` and `data-pending` attributes, or use `useLinkState(to)` when the state needs to affect rendered output.
@@ -34,7 +35,7 @@ The router is now built around React's transition machinery: navigations run ins
 - Replacing the route table prepares the current destination exactly once in history/hash mode; memory mode still performs its required explicit rematch.
 - Route preparation is transactional: if a later segment throws, every handle already acquired for that attempt is released.
 - Initial preparation handles remain leak-free under React 18's discarded StrictMode render while separate Router instances retain independent leases.
-- Unmatched URLs now clear `useRoute()` and `<Routes>`, and release the prior route's preparation handles, without advancing `usePreviousRoute()`'s successful-route history.
+- Unmatched URLs now clear the current route and `<Routes>`, and release the prior route's preparation handles, without advancing `usePreviousRoute()`'s successful-route history.
 - Back/Forward traversal now leaves scroll restoration to the browser instead of applying the router's new-page scroll reset after commit.
 
 ### Polish

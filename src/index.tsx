@@ -488,8 +488,19 @@ export function useSpaceRouter(): SpaceRouter<RouteData> {
   return useRouterCtx().router
 }
 
-export function useRoute(): Route<RouteData> | null {
-  return useRouterCtx().route
+/**
+ * The current matched route. Throws when the current URL does not match the
+ * router's route table; configure a wildcard route when unmatched URLs should
+ * still render within the application.
+ */
+export function useRoute(): Route<RouteData> {
+  const route = useRouterCtx().route
+  if (!route) {
+    throw new Error(
+      "useRoute() requires a matched route. The current URL does not match <Router>'s route table; add a wildcard route if it should be handled.",
+    )
+  }
+  return route
 }
 
 /**
@@ -531,8 +542,7 @@ export function usePendingRoute(): Route<RouteData> | null {
 }
 
 export function useNavigate() {
-  const { navigate } = useRouterCtx()
-  const route = useRoute()
+  const { navigate, route } = useRouterCtx()
   const routeRef = useRef(route)
   useLayoutEffect(() => {
     routeRef.current = route
@@ -1465,7 +1475,7 @@ function normalizeLinkTarget(to: LinkTo): LinkTarget {
  */
 export function usePrefetch(): (to: LinkTo) => void {
   const targets = useRouterTargets()
-  const route = useRoute()
+  const { route } = useRouterCtx()
   const routeRef = useRef(route)
   const prefetchResolved = usePrefetchResolved()
   useLayoutEffect(() => {
@@ -1508,9 +1518,8 @@ export interface LinkState {
 function useLinkTarget(to: LinkTo): LinkState & { target: LinkTarget; resolved: ResolvedTarget; href: string } {
   const target = normalizeLinkTarget(to)
 
-  const { router, pending } = useRouterCtx()
+  const { router, route: currRoute, pending } = useRouterCtx()
   const targets = useRouterTargets()
-  const currRoute = useRoute()
 
   const resolved = targets.resolve(to, currRoute)
   const { href, routeUrl: hrefUrl } = resolved
@@ -1712,7 +1721,7 @@ export interface NavigateProps {
 
 export function Navigate({ to }: NavigateProps) {
   const targets = useRouterTargets()
-  const route = useRoute()
+  const { route } = useRouterCtx()
   const resolved = targets.resolve(to, route)
 
   useEffect(() => {

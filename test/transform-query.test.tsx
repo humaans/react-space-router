@@ -285,7 +285,7 @@ test.serial('direct loads and browser traversal bypass transformQuery', async (t
 
   function Page() {
     const route = useRoute()
-    return <div>{route?.url}</div>
+    return <div>{route.url}</div>
   }
 
   await act(async () => {

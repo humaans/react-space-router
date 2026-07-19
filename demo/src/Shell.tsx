@@ -45,12 +45,12 @@ function NavTimer() {
 
 function CurrentRoute() {
   const route = useRoute()
-  return <span className='status-pill'>{route?.pathname ?? '—'}</span>
+  return <span className='status-pill'>{route.pathname}</span>
 }
 
 export function Shell({ children }: { children: ReactNode }) {
   const route = useRoute()
-  const isModeD = route?.pathname?.startsWith('/mode-d/')
+  const isModeD = route.pathname.startsWith('/mode-d/')
 
   return (
     <div className='app'>
