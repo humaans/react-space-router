@@ -6,8 +6,6 @@ toc: true
 
 # React Space Router
 
-> [Space Router](https://kidkarolis.github.io/space-router/) bindings for React
-
 React Space Router is a set of hooks and components for keeping your app in sync with the URL and performing page navigations. Suspense-native and built around React's transition machinery. A library built by and used at [Humaans](https://humaans.io/).
 
 - Suspense-native navigation that keeps the previous route visible while the next one loads.
@@ -26,12 +24,6 @@ React Space Router is a set of hooks and components for keeping your app in sync
 ```sh
 $ npm install react-space-router
 ```
-
-## Compatibility
-
-The peer dependency is React 18 or newer, with React 18 and React 19 exercised in CI.
-
-The published package is native ESM targeting ECMAScript 2022. It is intended for modern evergreen browsers and does not include downlevel transforms or polyfills. Applications targeting older JavaScript engines must transpile the package as part of their build and provide any required platform polyfills. Visibility prefetching requires `IntersectionObserver`; when it is unavailable, `prefetch='visible'` safely does nothing.
 
 ## Example
 
@@ -244,6 +236,18 @@ Props:
 - `prefetchHoverDelayMs` cancellable hover-intent delay for prefetching links. Focus and touchstart remain immediate. Default: `50`; set to `0` for immediate hover prefetching.
 - `pendingDelayMs` how long `<DelayedSuspense>` holds the previous route before rendering its fallback during an in-flight navigation. Default: `1000`.
 
+#### Prepared handles
+
+The shape returned by `prepare()` functions. The router collects these from every matched segment, pins them while the route is committed, and calls `release()` when the next navigation commits or `<Router>` unmounts.
+
+```ts
+interface PreparedHandle {
+  release(): void
+}
+```
+
+The router stores the handles and calls `release()`. Extra fields on a data layer's handle are ignored, so richer handles such as figbird's `{ key, promise, release }` satisfy this contract directly.
+
 #### Path patterns
 
 Route matching is segment-based. Query strings and hashes are parsed into the route but do not participate in path matching.
@@ -363,18 +367,6 @@ type BlockNavigationProps =
 ```
 
 With neither prop, the native message is `Discard unsaved changes?`. See [Blocking navigation](#blocking-navigation) for behavior and browser coverage.
-
-### `PreparedHandle`
-
-The shape returned by `prepare()` functions. The router collects these from every matched segment, pins them while the route is committed, and calls `release()` when the next navigation commits or `<Router>` unmounts.
-
-```ts
-interface PreparedHandle {
-  release(): void
-}
-```
-
-The router stores the handles and calls `release()`. Extra fields on a data layer's handle are ignored, so richer handles such as figbird's `{ key, promise, release }` satisfy this contract directly.
 
 ### `<DelayedSuspense />`
 
