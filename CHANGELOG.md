@@ -30,7 +30,13 @@ The router is now built around React's transition machinery: navigations run ins
 
 - Replacing the route table prepares the current destination exactly once in history/hash mode; memory mode still performs its required explicit rematch.
 - Route preparation is transactional: if a later segment throws, every handle already acquired for that attempt is released.
+- Initial preparation handles remain leak-free under React 18's discarded StrictMode render while separate Router instances retain independent leases.
 - Unmatched URLs now clear `useRoute()` and `<Routes>`, and release the prior route's preparation handles, without advancing `usePreviousRoute()`'s successful-route history.
+
+### Polish
+
+- CI now exercises the supported peer range against both React 18 and React 19.
+- The documentation now defines redirects, the complete path-pattern grammar, and the native ESM/ES2022 browser baseline.
 
 ## 0.6.6
 

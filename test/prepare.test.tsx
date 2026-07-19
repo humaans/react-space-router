@@ -227,6 +227,48 @@ test.serial('initial route prepare stays leak-free under StrictMode double rende
   t.true(prepareCalls >= 1)
 })
 
+test.serial('Router instances sharing a route table acquire independent initial handles', async (t) => {
+  setup()
+
+  const root = document.getElementById('root')
+  let prepareCalls = 0
+  let releaseCalls = 0
+  const routes = [
+    {
+      path: '/',
+      prepare: () => {
+        prepareCalls++
+        return [{ release: () => releaseCalls++ }]
+      },
+      component: () => <div>Home</div>,
+    },
+  ]
+
+  let rootHandle: ReactDOM.Root
+  await act(async () => {
+    rootHandle = ReactDOM.createRoot(root)
+    rootHandle.render(
+      <>
+        <Router sync routes={routes}>
+          <Routes />
+        </Router>
+        <Router sync routes={routes}>
+          <Routes />
+        </Router>
+      </>,
+    )
+  })
+
+  t.is(prepareCalls, 2)
+  t.is(releaseCalls, 0)
+
+  await act(async () => {
+    rootHandle.unmount()
+  })
+
+  t.is(releaseCalls, 2)
+})
+
 test.serial('Router seeds the initial route synchronously for route components', async (t) => {
   setup()
 

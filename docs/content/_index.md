@@ -27,6 +27,12 @@ React Space Router is a set of hooks and components for keeping your app in sync
 $ npm install react-space-router
 ```
 
+## Compatibility
+
+The peer dependency is React 18 or newer, with React 18 and React 19 exercised in CI.
+
+The published package is native ESM targeting ECMAScript 2022. It is intended for modern evergreen browsers and does not include downlevel transforms or polyfills. Applications targeting older JavaScript engines must transpile the package as part of their build and provide any required platform polyfills. Visibility prefetching requires `IntersectionObserver`; when it is unavailable, `prefetch='visible'` safely does nothing.
+
 ## Example
 
 ```js
@@ -169,8 +175,9 @@ Wraps the application and provides router context and state. Route state lives i
 
 Props:
 
-- `routes` an array of route definitions, where each route is an object of shape `{ path, component, resolver, queries, prepare, props, scrollGroup, routes, ...metadata }`:
-  - `path` URL pattern, which may include `:named` segments.
+- `routes` an array of route definitions, where each route is an object of shape `{ path, redirect, component, resolver, queries, prepare, props, scrollGroup, routes, ...metadata }`:
+  - `path` complete URL pattern. See [Path patterns](#path-patterns).
+  - `redirect` a navigation target, or `(route) => target`. Redirects replace the current history entry before the route reaches React. See [Redirects](#redirects).
   - `component` a React component to render. Accepts an ESM-default module shape (`{ default: Component }`) too.
   - `resolver` `() => import('./Screen')` — a dynamic import. The router preloads this at navigation time and renders via `React.lazy`. Cold imports suspend at the destination's Suspense boundary.
   - `queries(ctx)` declares the route's data needs once as `[def, args]` pairs, run through the `<Router data>` adapter — as `prepare` on navigation, as `prefetch` on speculation (see [Prefetching](#prefetching)). Requires a `data` adapter.
@@ -190,6 +197,46 @@ Props:
 - `prefetchLinks` default prefetch trigger for every link: `true`/`'hover'` or `'visible'`. Individual links override with their own `prefetch` prop, including `prefetch={false}` to opt out. Off by default.
 - `prefetchHoverDelayMs` cancellable hover-intent delay for prefetching links. Focus and touchstart remain immediate. Default: `50`; set to `0` for immediate hover prefetching.
 - `pendingDelayMs` how long `<DelayedSuspense>` holds the previous route before rendering its fallback during an in-flight navigation. Default: `1000`.
+
+#### Path patterns
+
+Route matching is segment-based. Query strings and hashes are parsed into the route but do not participate in path matching.
+
+| Pattern | Meaning | Example result |
+| --- | --- | --- |
+| `/settings` | Exact static path | Matches `/settings` (with or without a trailing slash) |
+| `/people/:id` | One required segment | `/people/42` gives `params.id === '42'` |
+| `/people/:id?` | Zero or one segment | `/people` gives `params.id === ''` |
+| `/files/:path+` | One or more remaining segments | `/files/a/b` gives `params.path === 'a/b'` |
+| `/files/:path*` | Zero or more remaining segments | `/files` gives `params.path === ''` |
+| `*` | Whole-pattern wildcard | Matches any URL and adds no named param |
+
+Static segments are case-sensitive. Parameter names use letters, numbers, and underscores. `+` and `*` parameters consume the remainder of the pathname and should be the final segment. Parameters are decoded safely; malformed percent escapes are left as written instead of crashing matching.
+
+Routes are checked in declaration order and the first match wins, so put a catch-all `*` route last. A nested route's `path` is still a complete pattern—nesting builds the matched component/data hierarchy but does not prefix child paths automatically.
+
+#### Redirects
+
+A route can redirect to any target accepted by `navigate()`. Static redirects are concise:
+
+```js
+{ path: '/old-settings', redirect: '/settings' }
+```
+
+A function receives the matched route and can preserve params, query, or other state:
+
+```js
+{
+  path: '/people/:id',
+  redirect: route => ({
+    pathname: '/employees/:id',
+    params: route.params,
+    query: route.query,
+  }),
+}
+```
+
+Redirects are resolved before component loading, data preparation, or React rendering and always replace the current history entry. A redirect can be declared on any segment in a matched nested branch. Redirect loops throw after ten redirects.
 
 #### Query transform
 

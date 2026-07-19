@@ -23,6 +23,7 @@ import {
   type Mode,
   type NavigateTarget,
   type Qs,
+  type Redirect,
   type Route,
   type RouteDefinition,
   type Router as SpaceRouter,
@@ -95,6 +96,7 @@ export type RouteResolver = () => Promise<ResolverModule>
 
 export interface RouteData {
   path?: string
+  redirect?: Redirect<RouteData>
   component?: ComponentType<any> | { default: ComponentType<any> } | null
   resolver?: RouteResolver
   prepare?: RoutePrepare
@@ -603,7 +605,7 @@ export function Router({
   const lastSuccessfulRoute = useRef<Route<RouteData> | null>(null)
   const committed = useRef<PreparedRoute | null>(null)
   const pendingPrepared = useRef<PreparedRoute | null>(null)
-  const initialPrepared = useRef<PreparedRoute | null>(null)
+  const initialPrepared = useRef<InitialPreparedRoute | null>(null)
   const previousRoutes = useRef(routes)
   const hasResolvedRoute = useRef(false)
 
@@ -705,7 +707,7 @@ export function Router({
     const handles = new Set([
       ...(committed.current?.handles ?? []),
       ...(pendingPrepared.current?.handles ?? []),
-      ...(initialPrepared.current?.handles ?? []),
+      ...(initialPrepared.current?.prepared.handles ?? []),
     ])
     releaseHandles([...handles])
     committed.current = null
@@ -722,8 +724,8 @@ export function Router({
   // Prepare the initial destination during render so its components can read
   // seeded data on their first render and code/data loading overlaps. The
   // effect below adopts these handles into the normal release lifecycle.
-  if (initialRoute && !committed.current && initialPrepared.current?.route.url !== initialRoute.route.url) {
-    initialPrepared.current = { ...initialRoute, handles: prepareRoute(initialRoute.route, data) }
+  if (initialRoute && !committed.current && initialPrepared.current?.prepared.route.url !== initialRoute.route.url) {
+    initialPrepared.current = prepareInitialRoute(routes, initialRoute, data)
   }
 
   const activeRoute = resolved ? currRoute : (committed.current?.route ?? initialRoute?.route ?? null)
@@ -745,8 +747,8 @@ export function Router({
     // the render-prepared handles before this effect runs again. Re-prepare
     // when there is nothing left to adopt.
     const prepared =
-      initialPrepared.current?.route.url === initialRoute.route.url
-        ? initialPrepared.current
+      initialPrepared.current?.prepared.route.url === initialRoute.route.url
+        ? claimInitialRoute(initialPrepared.current, initialRoute, data)
         : { ...initialRoute, handles: prepareRoute(initialRoute.route, data) }
     initialPrepared.current = null
     committed.current = prepared
@@ -917,6 +919,81 @@ interface PreparedRoute {
   route: Route<RouteData>
   matched: Route<RouteData>
   handles: PreparedHandle[]
+}
+
+interface InitialPreparedRoute {
+  prepared: PreparedRoute
+  routes: RouteDefinition<RouteData>[]
+  data: DataAdapter | undefined
+  claimed: boolean
+}
+
+// React 18 StrictMode throws away the hook state from its first development
+// render, so a render-owned ref alone cannot carry the initial preparation
+// handles into the second render. Keep an unclaimed preparation by stable
+// route-table identity until a committed Router adopts it. Separate Router
+// instances may render the same table; only the first claimant reuses the
+// record and later claimants prepare their own leases.
+const initialPreparationCache = new WeakMap<RouteDefinition<RouteData>[], InitialPreparedRoute[]>()
+
+function prepareInitialRoute(
+  routes: RouteDefinition<RouteData>[],
+  initial: Pick<PreparedRoute, 'route' | 'matched'>,
+  data: DataAdapter | undefined,
+): InitialPreparedRoute {
+  const cached = initialPreparationCache
+    .get(routes)
+    ?.find(
+      (entry) =>
+        !entry.claimed &&
+        entry.data === data &&
+        entry.prepared.matched.url === initial.matched.url &&
+        samePreparationPlan(entry.prepared.route, initial.route),
+    )
+  if (cached) return cached
+
+  const entry: InitialPreparedRoute = {
+    prepared: { ...initial, handles: prepareRoute(initial.route, data) },
+    routes,
+    data,
+    claimed: false,
+  }
+  const entries = initialPreparationCache.get(routes)
+  if (entries) entries.push(entry)
+  else initialPreparationCache.set(routes, [entry])
+  return entry
+}
+
+function samePreparationPlan(a: Route<RouteData>, b: Route<RouteData>): boolean {
+  return (
+    a.url === b.url &&
+    a.data.length === b.data.length &&
+    a.data.every(
+      (segment, index) =>
+        segment.resolver === b.data[index].resolver &&
+        segment.prepare === b.data[index].prepare &&
+        segment.queries === b.data[index].queries,
+    )
+  )
+}
+
+function claimInitialRoute(
+  entry: InitialPreparedRoute,
+  initial: Pick<PreparedRoute, 'route' | 'matched'>,
+  data: DataAdapter | undefined,
+): PreparedRoute {
+  if (entry.claimed) {
+    return { ...initial, handles: prepareRoute(initial.route, data) }
+  }
+
+  entry.claimed = true
+  const entries = initialPreparationCache.get(entry.routes)
+  if (entries) {
+    const remaining = entries.filter((candidate) => candidate !== entry)
+    if (remaining.length) initialPreparationCache.set(entry.routes, remaining)
+    else initialPreparationCache.delete(entry.routes)
+  }
+  return entry.prepared
 }
 
 function routePrepareContext(route: Route<RouteData>): RoutePrepareContext {
