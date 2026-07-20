@@ -32,6 +32,7 @@ The router is now built around React's transition machinery: navigations run ins
 - Navigation blocking now distinguishes hash-mode route traversal (`#/route`) from ordinary fragments, so Back/Forward guards work in hash-routed applications without taking ownership of `#section` links.
 - Rejected route resolvers no longer remain permanently cached; resetting an error boundary can retry transient chunk-load failures, while the documentation explains full-page reload recovery for stale deployments.
 - App-created navigation to a cross-page hash fragment now scrolls to the destination element after commit, falling back to the top when it is absent. Back/Forward and same-page hash links remain browser-owned.
+- Hash-mode links now produce browser-ready `#/...` hrefs for plain and object targets through space-router 2.0, without application-side URL rewriting.
 - Replacing the route table prepares the current destination exactly once in history/hash mode; memory mode still performs its required explicit rematch.
 - Route preparation is transactional: if a later segment throws, every handle already acquired for that attempt is released.
 - Initial preparation handles remain leak-free under React 18's discarded StrictMode render while separate Router instances retain independent leases.
@@ -45,6 +46,7 @@ The router is now built around React's transition machinery: navigations run ins
 - Chromium CI now covers Suspense navigation, interrupted traversal, native scroll restoration, browser-owned same-page hashes, and router-managed cross-page fragments.
 - The documentation now defines redirects, the complete path-pattern grammar, and the native ESM/ES2022 browser baseline.
 - `PreparedHandle` now describes only the `release()` lifecycle the router consumes, so richer data-layer handles remain compatible. `<Link href>` is required in the public types, and the undocumented `RouterContext` export has been removed.
+- Mode-aware route URL classification, unmatched emissions, and Back/Forward source metadata now come directly from space-router 2.0 instead of being duplicated in the React layer.
 
 ## 0.6.6
 

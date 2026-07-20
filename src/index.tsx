@@ -21,6 +21,7 @@ import {
   createMatcher,
   createRouter,
   type Mode,
+  type NavigationInfo,
   type NavigateTarget,
   type Qs,
   type Redirect,
@@ -299,7 +300,7 @@ function browserNavigation(): BrowserNavigation | undefined {
   return (window as Window & { navigation?: BrowserNavigation }).navigation
 }
 
-function createNavigationBlockerRegistry(mode?: Mode): NavigationBlockerRegistry {
+function createNavigationBlockerRegistry(router: SpaceRouter<RouteData>): NavigationBlockerRegistry {
   const blockers: RegisteredNavigationBlocker[] = []
   let listening = false
   let traversalBypassKey: string | null = null
@@ -317,7 +318,7 @@ function createNavigationBlockerRegistry(mode?: Mode): NavigationBlockerRegistry
     if (
       event.navigationType !== 'traverse' ||
       !event.destination.sameDocument ||
-      (event.hashChange && !isHashRouteDestination(event.destination.url, mode))
+      (event.hashChange && !isRouteHashDestination(event.destination.url, router))
     ) {
       return
     }
@@ -394,11 +395,12 @@ function createNavigationBlockerRegistry(mode?: Mode): NavigationBlockerRegistry
   }
 }
 
-function isHashRouteDestination(url: string, mode?: Mode): boolean {
-  if (mode !== 'hash') return false
+function isRouteHashDestination(url: string, router: SpaceRouter<RouteData>): boolean {
   try {
     const hash = new URL(url, window.location.href).hash
-    return hash === '' || hash.startsWith('#/')
+    // A hash-mode traversal to the root has no fragment. `#/` lets the core
+    // apply the same route-vs-fragment rule used by links and navigation.
+    return router.routeUrl(hash || '#/') !== null
   } catch {
     return false
   }
@@ -563,7 +565,6 @@ interface RouterOpts {
 interface InternalRouter {
   router: SpaceRouter<RouteData>
   routerOpts: RouterOpts
-  getNavigationSource(): NavigationSource
 }
 
 type NavigationSource = 'navigation' | 'traversal'
@@ -574,33 +575,8 @@ interface OutstandingNavigation {
   sourceRoute: Route<RouteData> | null
 }
 
-interface RouteHref {
-  url: string
-  prefix: '' | '#'
-}
-
-function normalizeRouteUrl(url: string): string {
-  return url.replace(/^\/?#?\/?/, '/').replace(/\/$/, '') || '/'
-}
-
-function asRouteHref(href: string, mode: Mode | undefined): RouteHref | null {
-  // Protocol and protocol-relative targets belong to the browser, not the
-  // app's route table. This includes http(s), mailto, tel, and custom schemes.
-  if (/^(?:[a-z][a-z\d+.-]*:|\/\/)/i.test(href)) return null
-
-  // In history/memory mode a leading hash is an in-page fragment. In hash
-  // mode only `#/...` denotes a route; `#section` remains an in-page fragment.
-  if (href.startsWith('#')) {
-    if (mode !== 'hash' || !href.startsWith('#/')) return null
-    return { url: normalizeRouteUrl(href.slice(1)), prefix: '#' }
-  }
-
-  return { url: normalizeRouteUrl(href), prefix: '' }
-}
-
 function makeRouter(routerOpts: RouterOpts): InternalRouter {
   const { mode, qs, sync } = routerOpts
-  let navigationSource: NavigationSource = 'navigation'
   const router = createRouter<RouteData>({
     mode,
     qs,
@@ -609,20 +585,15 @@ function makeRouter(routerOpts: RouterOpts): InternalRouter {
     // but a synchronous "transition" that suspends shows Suspense fallbacks
     // instead of holding the previous route, and pending state never paints.
     // Deliver traversal emits in a macrotask so back/forward gets the same
-    // async transition semantics as link clicks. Record the source only when
-    // the scheduled emit actually runs, so a superseding navigation cannot
-    // inherit stale traversal metadata.
+    // async transition semantics as link clicks. Space Router carries the
+    // source metadata through to the surviving listener emission.
     schedule: (fire, { traversal }) => {
-      const run = () => {
-        navigationSource = traversal ? 'traversal' : 'navigation'
-        fire()
-      }
-      if (sync) run()
-      else if (traversal) setTimeout(run, 0)
-      else queueMicrotask(run)
+      if (sync) fire()
+      else if (traversal) setTimeout(fire, 0)
+      else queueMicrotask(fire)
     },
   })
-  return { router, routerOpts, getNavigationSource: () => navigationSource }
+  return { router, routerOpts }
 }
 
 interface TargetRouter {
@@ -634,7 +605,6 @@ interface TargetRouter {
 
 interface TargetRouterOptions {
   router: SpaceRouter<RouteData>
-  mode: Mode | undefined
   currentRoute: Route<RouteData> | null
   committedRoute: RefObject<Route<RouteData> | null>
   transformQuery: TransformQuery | undefined
@@ -647,7 +617,6 @@ interface TargetRouterOptions {
 // retry release. Browser/direct URLs never enter this path.
 function useTargetRouter({
   router,
-  mode,
   currentRoute,
   committedRoute,
   transformQuery,
@@ -663,20 +632,19 @@ function useTargetRouter({
   const resolveTarget = useCallback(
     (to: To, routeAtCallSite?: Route<RouteData> | null): ResolvedTarget => {
       const sourceRoute = routeAtCallSite === undefined ? committedRoute.current : routeAtCallSite
-      // The listener uses an internal catch-all to observe unmatched URLs.
-      // Avoid letting space-router use that private match as the implicit
-      // merge source when the app has no current route.
+      // When the app has no current route, don't let the underlying router
+      // infer a merge source independently from the URL.
       const hrefTarget = sourceRoute === null && typeof to !== 'string' && to.merge ? { ...to, merge: false } : to
       const initialHref = router.href(hrefTarget, sourceRoute ?? undefined)
-      const routeHref = asRouteHref(initialHref, mode)
+      const routeUrl = router.routeUrl(initialHref)
       const replace = typeof to !== 'string' && to.replace === true
       const transform = transformQueryRef.current
-      const targetRoute = routeHref && transform ? matchTarget(routeHref.url) : undefined
+      const targetRoute = routeUrl !== null && transform ? matchTarget(routeUrl) : undefined
 
-      if (!routeHref || !transform || !targetRoute) {
+      if (routeUrl === null || !transform || !targetRoute) {
         return {
           href: initialHref,
-          routeUrl: routeHref?.url ?? null,
+          routeUrl,
           replace,
           sourceRoute,
         }
@@ -688,17 +656,15 @@ function useTargetRouter({
         query,
         hash: targetRoute.hash || null,
       })
-      const href = `${routeHref.prefix}${resolvedHref}`
-      const resolvedRouteHref = asRouteHref(href, mode)
 
       return {
-        href,
-        routeUrl: resolvedRouteHref?.url ?? null,
+        href: resolvedHref,
+        routeUrl: router.routeUrl(resolvedHref),
         replace,
         sourceRoute,
       }
     },
-    [router, mode, matchTarget],
+    [router, matchTarget],
   )
 
   const navigateResolved = useCallback(
@@ -836,14 +802,6 @@ interface RouteHistory {
   resolved: boolean
 }
 
-const UNMATCHED_ROUTE = Symbol('react-space-router unmatched route')
-type InternalRouteData = RouteData & { [UNMATCHED_ROUTE]?: true }
-const UNMATCHED_ROUTE_DEFINITION = { path: '*', [UNMATCHED_ROUTE]: true } as RouteDefinition<RouteData>
-
-function isUnmatchedRoute(route: Route<RouteData>): boolean {
-  return route.data.some((segment) => (segment as InternalRouteData)[UNMATCHED_ROUTE] === true)
-}
-
 export function Router({
   routes,
   mode,
@@ -857,9 +815,7 @@ export function Router({
   pendingDelayMs = DEFAULT_PENDING_DELAY_MS,
   children,
 }: RouterProps) {
-  const [{ router, routerOpts, getNavigationSource }, setRouter] = useState<InternalRouter>(() =>
-    makeRouter({ mode, qs, sync }),
-  )
+  const [{ router, routerOpts }, setRouter] = useState<InternalRouter>(() => makeRouter({ mode, qs, sync }))
 
   const [{ current: currRoute, previous: previousRoute, navigationSource, resolved }, setRouteHistory] =
     useState<RouteHistory>({
@@ -909,12 +865,10 @@ export function Router({
   }, [])
 
   const matcher = useMemo(() => createMatcher(routes, { qs }), [routes, qs])
-  const listeningRoutes = useMemo(() => [...routes, UNMATCHED_ROUTE_DEFINITION], [routes])
-  const blockers = useMemo(() => createNavigationBlockerRegistry(routerOpts.mode), [routerOpts.mode])
+  const blockers = useMemo(() => createNavigationBlockerRegistry(router), [router])
 
   const targetRouter = useTargetRouter({
     router,
-    mode: routerOpts.mode,
     currentRoute: currRoute,
     committedRoute,
     transformQuery,
@@ -1040,11 +994,12 @@ export function Router({
   }, [initialRoute, currRoute, data])
 
   useEffect(() => {
-    const transition = (matched: Route<RouteData>) => {
-      if (isUnmatchedRoute(matched)) {
+    const transition = (matched: Route<RouteData> | undefined, info: NavigationInfo) => {
+      if (!matched) {
         beginUnmatched()
         return
       }
+      const source: NavigationSource = info.traversal ? 'traversal' : 'navigation'
 
       // Transform fresh on every navigation because application state may
       // change the result even when the matched URL is identical.
@@ -1056,14 +1011,14 @@ export function Router({
         const superseded = pendingPrepared.current
         pendingPrepared.current = null
         if (superseded) releaseHandles(superseded.handles)
-        commit(committed.current, getNavigationSource())
+        commit(committed.current, source)
         return
       }
 
-      beginNavigation(matched, transformed, getNavigationSource())
+      beginNavigation(matched, transformed, source)
     }
-    return router.listen(listeningRoutes, transition)
-  }, [router, listeningRoutes, applyTransform, commit, beginNavigation, beginUnmatched, getNavigationSource])
+    return router.listen(routes, transition)
+  }, [router, routes, applyTransform, commit, beginNavigation, beginUnmatched])
 
   useEffect(() => {
     if (previousRoutes.current === routes) return

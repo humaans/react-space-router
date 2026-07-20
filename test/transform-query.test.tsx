@@ -491,8 +491,12 @@ test.serial('transformQuery preserves hash-prefixed route hrefs in hash mode', a
   t.is(transformCalls, 0)
   t.is(router.href('#/target?explicit=1'), '#/target?explicit=1&transformed=yes')
   t.is(transformCalls, 1)
+  t.is(router.href('/target?explicit=1'), '#/target?explicit=1&transformed=yes')
+  t.is(transformCalls, 2)
+  t.is(router.href({ pathname: '/target', query: { explicit: 1 } }), '#/target?explicit=1&transformed=yes')
+  t.is(transformCalls, 3)
   await act(async () => {
-    router.navigate('#/target?explicit=1')
+    router.navigate('/target?explicit=1')
   })
   t.deepEqual(assigned, ['#/target?explicit=1&transformed=yes'])
 })

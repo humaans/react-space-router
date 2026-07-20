@@ -370,6 +370,9 @@ test.serial('useLinkState matches pending and current state for hash-prefixed hr
     const otherLink = useLinkState('#/other')
     return (
       <div>
+        <Link id='slow-link' href='/slow'>
+          Slow
+        </Link>
         <button onClick={() => navigate('/slow')}>Go</button>
         <span data-current={String(slowLink.isCurrent)} data-pending={String(slowLink.isPending)} />
         <span data-pending-other={String(otherLink.isPending)} />
@@ -401,12 +404,14 @@ test.serial('useLinkState matches pending and current state for hash-prefixed hr
     )
   })
 
+  t.is(window.document.querySelector('#slow-link')?.getAttribute('href'), '#/slow')
+
   await act(async () => {
     window.document.querySelector('button')!.click()
   })
 
-  t.is(window.document.querySelector('[data-pending]')?.getAttribute('data-pending'), 'true')
-  t.is(window.document.querySelector('[data-pending]')?.getAttribute('data-current'), 'false')
+  t.is(window.document.querySelector('span[data-pending]')?.getAttribute('data-pending'), 'true')
+  t.is(window.document.querySelector('span[data-pending]')?.getAttribute('data-current'), 'false')
   t.is(window.document.querySelector('[data-pending-other]')?.getAttribute('data-pending-other'), 'false')
 
   await act(async () => {
