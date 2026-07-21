@@ -473,9 +473,9 @@ export function BlockNavigation(props: BlockNavigationProps) {
   return pending && render ? render(controls) : null
 }
 
-// Internal context for `<DelayedSuspense>`. Set by `<Router>` based on
-// `usePending()` + a configurable threshold. `holding` is true only during
-// the pre-commit window where we want the previous route to stay on screen.
+// Internal context for `<DelayedSuspense>`. `<Router>` updates it in the same
+// transition as the destination route, so `holding` is true in the pending
+// tree without changing already-committed fallbacks in the source tree.
 const DelayedSuspenseContext = createContext<boolean>(false)
 
 function useRouterCtx(): RouterContextValue {
@@ -839,20 +839,42 @@ export function Router({
   const previousRoutes = useRef(routes)
   const hasResolvedRoute = useRef(false)
 
-  // `holding` is true during the pre-commit window where `<DelayedSuspense>`
-  // boundaries should re-throw their fallback (so the previous route stays
-  // committed). It flips off either after `pendingDelayMs` elapses while
-  // still pending, or when the transition settles — whichever comes first.
-  const [holding, setHolding] = useState(false)
+  // Hold generations are split across transition and urgent state so only
+  // the destination render sees `holding=true`. The committed source tree
+  // keeps its older render generation; this matters when it already has a
+  // `<DelayedSuspense>` fallback on screen, which must remain visible while
+  // the next route suspends.
+  const nextHoldGeneration = useRef(0)
+  const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [renderHoldGeneration, setRenderHoldGeneration] = useState(0)
+  const [releasedHoldGeneration, setReleasedHoldGeneration] = useState(0)
+  const holding = renderHoldGeneration > releasedHoldGeneration
+
+  const startHold = useCallback(() => {
+    const generation = ++nextHoldGeneration.current
+    if (holdTimer.current !== null) clearTimeout(holdTimer.current)
+    holdTimer.current = setTimeout(() => {
+      holdTimer.current = null
+      setReleasedHoldGeneration((released) => Math.max(released, generation))
+    }, pendingDelayMs)
+    return generation
+  }, [pendingDelayMs])
+
   useEffect(() => {
-    if (!isPending) {
-      setHolding(false)
-      return
+    if (isPending) return
+    if (holdTimer.current !== null) {
+      clearTimeout(holdTimer.current)
+      holdTimer.current = null
     }
-    setHolding(true)
-    const t = setTimeout(() => setHolding(false), pendingDelayMs)
-    return () => clearTimeout(t)
-  }, [isPending, pendingDelayMs])
+    setReleasedHoldGeneration((released) => Math.max(released, nextHoldGeneration.current))
+  }, [isPending])
+
+  useEffect(
+    () => () => {
+      if (holdTimer.current !== null) clearTimeout(holdTimer.current)
+    },
+    [],
+  )
 
   // Keep the latest transform in a ref so router plumbing stays stable
   // without calling stale application code.
@@ -880,6 +902,7 @@ export function Router({
     (prepared: PreparedRoute, source: NavigationSource = 'navigation') => {
       const { route: next, matched } = prepared
       const previous = lastSuccessfulRoute.current
+      const holdGeneration = startHold()
 
       // The urgent set makes the pending navigation visible immediately;
       // the clear is deferred inside the transition so it only lands once
@@ -888,6 +911,7 @@ export function Router({
       // back/forward all register the same way.
       setPending({ route: next, matchedUrl: matched.url })
       startRouterTransition(() => {
+        setRenderHoldGeneration(holdGeneration)
         setRouteHistory({ current: next, previous, navigationSource: source, resolved: true })
         setPending(null)
       })
@@ -899,7 +923,7 @@ export function Router({
         router.replaceUrl(next.url)
       }
     },
-    [router],
+    [router, startHold],
   )
 
   // Begin a fresh navigation: release the superseded pending preparation,

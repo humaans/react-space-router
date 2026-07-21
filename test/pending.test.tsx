@@ -200,6 +200,89 @@ test.serial('DelayedSuspense holds fallback during route transition delay', asyn
   t.is(window.document.body.innerHTML, '<div id="root"><div>Slow</div></div>')
 })
 
+test.serial('committed DelayedSuspense fallback remains visible during the next navigation', async (t) => {
+  setup()
+
+  const root = document.getElementById('root')
+  const sourceGate = new Promise<void>(() => {})
+  let resolveDestination: (() => void) | null = null
+  const destinationGate = new Promise<void>((resolve) => {
+    resolveDestination = resolve
+  })
+
+  function SourceChild() {
+    throw sourceGate
+  }
+
+  function SourcePage() {
+    return (
+      <div>
+        Source page
+        <DelayedSuspense fallback={<span>Source fallback</span>}>
+          <SourceChild />
+        </DelayedSuspense>
+      </div>
+    )
+  }
+
+  function DestinationPage() {
+    if (!(DestinationPage as any).ready) {
+      throw destinationGate.then(() => {
+        ;(DestinationPage as any).ready = true
+      })
+    }
+    return <div>Destination page</div>
+  }
+
+  const routes = [
+    { path: '/', component: SourcePage },
+    { path: '/destination', component: DestinationPage },
+  ]
+
+  let router
+
+  function Capture() {
+    const r = useSpaceRouter()
+    useEffect(() => {
+      router = r
+    }, [r])
+    return null
+  }
+
+  function App() {
+    return (
+      <Router sync pendingDelayMs={10_000} routes={routes}>
+        <Capture />
+        <Suspense fallback={<div>Outer fallback</div>}>
+          <Routes />
+        </Suspense>
+      </Router>
+    )
+  }
+
+  await act(async () => {
+    ReactDOM.createRoot(root).render(<App />)
+  })
+
+  t.true(window.document.body.innerHTML.includes('Source fallback'))
+
+  await act(async () => {
+    router.navigate('/destination')
+  })
+
+  t.true(window.document.body.innerHTML.includes('Source page'))
+  t.true(window.document.body.innerHTML.includes('Source fallback'))
+  t.false(window.document.body.innerHTML.includes('Outer fallback'))
+
+  await act(async () => {
+    resolveDestination!()
+    await Promise.resolve()
+    await Promise.resolve()
+  })
+
+  t.true(window.document.body.innerHTML.includes('Destination page'))
+})
+
 test.serial('usePendingRoute exposes the transformed in-flight route and clears on settle', async (t) => {
   setup()
 
