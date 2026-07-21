@@ -6,14 +6,15 @@ toc: true
 
 # React Space Router
 
-React Space Router is a set of hooks and components for keeping your app in sync with the URL and performing page navigations. Suspense-native and built around React's transition machinery. A library built by and used at [Humaans](https://humaans.io/).
+React Space Router is a minimal, Suspense-first router for React. It uses React’s own transition model to load routes and data, keeping navigation fluid and the API refreshingly simple. Built and used at [Humaans](https://humaans.io/).
 
-- Suspense-native navigation that keeps the previous route visible while the next one loads.
-- Nested, code-split routes with path params passed straight to route components.
-- Route-level data loading and prefetching through a small, data-layer-agnostic adapter.
-- Link prefetching on hover, focus, touch, or visibility.
-- Previous and pending route state for back links, global indicators, sidebars, tabs, and breadcrumbs.
-- Delayed loading fallbacks for fast-feeling browser-style transitions.
+- Control loading UI with Suspense boundaries: show destination skeletons, delay fallbacks for quick loads, or keep the current page visible until the next route is ready.
+- Show immediate navigation feedback with pending state, from a spinner on the action to destination-aware tabs, sidebars, and breadcrumbs.
+- Nest and lazy-load routes, with path parameters passed directly to route components.
+- Declare route data once, then prepare or prefetch it through an adapter that works with any data layer.
+- Prefetch route code and data on hover, focus, touch, or visibility.
+- Use previous route state to build contextual back links.
+- Block navigation with a browser prompt or your own confirmation UI.
 
 ## Why
 
@@ -213,19 +214,7 @@ Wraps the application and provides router context and state. Route state lives i
 
 Props:
 
-- `routes` an array of route definitions, where each route is an object of shape `{ path, redirect, component, resolver, queries, prepare, props, scrollGroup, routes, ...metadata }`:
-  - `path` complete URL pattern. See [Path patterns](#path-patterns).
-  - `redirect` a navigation target, or `(route) => target`. Redirects replace the current history entry before the route reaches React. See [Redirects](#redirects).
-  - `component` a React component to render. Accepts an ESM-default module shape (`{ default: Component }`) too.
-  - `resolver` `() => import('./Screen')` — a dynamic import. The router preloads this at navigation time and renders via `React.lazy`. Cold imports suspend at the destination's Suspense boundary.
-  - `queries(ctx)` declares the route's data needs once as `[def, args]` pairs, run through the `<Router data>` adapter — as `prepare` on navigation, as `prefetch` on speculation (see [Prefetching](#prefetching)). Requires a `data` adapter.
-  - `prepare(ctx)` the low-level alternative to `queries` for prepare. Called at navigation time with `{ pathname, url, params, query }`; returns `PreparedHandle` objects pinned for the lifetime of the committed navigation and released when the next navigation commits. It is synchronous setup and must not throw; surface request failures later through the data cache's Suspense read path.
-  - `prefetch(ctx)` the low-level alternative to `queries` for prefetch — called when a prefetching link warms this route. May fire at any frequency; the return value is ignored.
-  - `prefetchable` set `false` to exclude a route from speculative prefetch (no chunk preload, no `prefetch`) while still preparing on real navigation. A route-level veto that beats an explicit `<Link prefetch>`.
-  - `props` props to pass to the segment's component.
-  - `scrollGroup` a string that groups routes; app-created navigations within a group don't scroll to top unless the destination has an explicit hash fragment.
-  - `routes` nested route definitions.
-  - `...metadata` any other keys you want — they're available on `route.data[i]`.
+- `routes` an array of [route definitions](#route-definitions). Each definition can match a path, render or lazy-load a component, prepare data, redirect, and contain nested routes.
 - `mode` one of `history`, `hash`, `memory` — default is `history`.
 - `qs` a custom query string parser of shape `{ parse, stringify }`.
 - `sync` if `true`, the underlying space-router fires synchronous transitions (useful in tests).
@@ -236,17 +225,40 @@ Props:
 - `prefetchHoverDelayMs` cancellable hover-intent delay for prefetching links. Focus and touchstart remain immediate. Default: `50`; set to `0` for immediate hover prefetching.
 - `pendingDelayMs` how long `<DelayedSuspense>` holds the previous route before rendering its fallback during an in-flight navigation. Default: `1000`.
 
-#### Prepared handles
+#### Route definitions
 
-The shape returned by `prepare()` functions. The router collects these from every matched segment, pins them while the route is committed, and calls `release()` when the next navigation commits or `<Router>` unmounts.
+A route definition describes one segment of a matched route. It can render a component, lazy-load one, prepare data, redirect, or group nested routes.
 
-```ts
-interface PreparedHandle {
-  release(): void
-}
+```js
+const routes = [
+  { path: '/', component: Home },
+  {
+    component: SettingsLayout,
+    routes: [
+      { path: '/settings', component: Settings },
+      {
+        path: '/settings/billing',
+        resolver: () => import('./Billing'),
+      },
+    ],
+  },
+]
 ```
 
-The router stores the handles and calls `release()`. Extra fields on a data layer's handle are ignored, so richer handles such as figbird's `{ key, promise, release }` satisfy this contract directly.
+Pass the array to `<Router routes={routes}>`. Each definition can use these fields:
+
+- `path` an optional, complete URL pattern. See [Path patterns](#path-patterns).
+- `redirect` a navigation target, or `(route) => target`. Redirects replace the current history entry before the route reaches React. See [Redirects](#redirects).
+- `component` a React component to render. It also accepts an ESM-default module shape such as `{ default: Component }`.
+- `resolver` a dynamic import such as `() => import('./Screen')`. The router preloads it at navigation time and renders it with `React.lazy`. A cold import suspends at the destination's Suspense boundary.
+- `queries(ctx)` declares the route's data needs once as `[def, args]` pairs. The `<Router data>` adapter prepares them on navigation and prefetches them during speculation. Requires a `data` adapter. See [Prefetching](#prefetching).
+- `prepare(ctx)` is the low-level alternative to `queries` for navigation. It receives `{ pathname, url, params, query }` and returns handles that stay pinned for the committed navigation. Setup is synchronous and must not throw; surface request errors later through the data cache's Suspense read path.
+- `prefetch(ctx)` is the low-level alternative to `queries` for prefetching. It runs when a prefetching link warms the route, may run at any frequency, and ignores its return value.
+- `prefetchable` set to `false` prevents speculative chunk and data prefetching while preserving normal preparation during navigation. It overrides an explicit `<Link prefetch>`.
+- `props` props passed to the segment's component.
+- `scrollGroup` a string that groups routes. App-created navigation within a group does not scroll to the top unless the destination includes a hash fragment.
+- `routes` nested route definitions.
+- `...metadata` any other fields you need. They are available on `route.data[i]`.
 
 #### Path patterns
 
@@ -287,6 +299,18 @@ A function receives the matched route and can preserve params, query, or other s
 ```
 
 Redirects are resolved before component loading, data preparation, or React rendering and always replace the current history entry. A redirect can be declared on any segment in a matched nested branch. Redirect loops throw after ten redirects.
+
+#### Prepared handles
+
+The shape returned by `prepare()` functions. The router collects these from every matched segment, pins them while the route is committed, and calls `release()` when the next navigation commits or `<Router>` unmounts.
+
+```ts
+interface PreparedHandle {
+  release(): void
+}
+```
+
+The router stores the handles and calls `release()`. Extra fields on a data layer's handle are ignored, so richer handles such as figbird's `{ key, promise, release }` satisfy this contract directly.
 
 #### Query transform
 
