@@ -2,13 +2,15 @@ import React, { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link, usePending, useRoute } from 'react-space-router'
 import { clearCache } from './data'
 
-/**
- * Top-of-page progress bar — driven by `usePending()`. Renders nothing
- * outside of an in-flight transition.
- */
+/** Shared visual for client transitions and the initial Suspense fallback. */
+export function ProgressBarVisual() {
+  return <div className='progress-bar' aria-hidden />
+}
+
+/** Top-of-page progress bar for an in-flight client transition. */
 function ProgressBar() {
   const pending = usePending()
-  return pending ? <div className='progress-bar' aria-hidden /> : null
+  return pending ? <ProgressBarVisual /> : null
 }
 
 /**
