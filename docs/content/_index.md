@@ -18,7 +18,11 @@ React Space Router is a minimal, Suspense-first router for React. It uses React�
 
 ## Why
 
-"Perfection is achieved when there is nothing left to take away." React Space Router is built upon Space Router, a framework-agnostic tiny core that handles URL listening, route matching, and navigation. React Space Router wraps that core into an idiomatic set of React components and hooks. The hope is you'll find React Space Router refreshingly simple compared to the existing alternatives, while still offering enough extensibility for modern Suspense-driven UIs.
+"Perfection is achieved when there is nothing left to take away." That idea guides React Space Router. It builds on Space Router, a small framework-agnostic core for URL listening, route matching, and navigation. The React layer adds nested rendering, Suspense-aware loading, transition state, and data preparation without taking over your data layer.
+
+## Scope
+
+React Space Router is designed for client-rendered single-page applications. Server-side rendering is intentionally out of scope.
 
 ## Install
 
@@ -26,11 +30,11 @@ React Space Router is a minimal, Suspense-first router for React. It uses React�
 $ npm install react-space-router
 ```
 
-## Example
+## Quick start
 
-```js
-import React, { Suspense, useEffect } from 'react'
-import { Router, Routes, Link, useRoute, useNavigate } from 'react-space-router'
+```jsx
+import { Suspense } from 'react'
+import { Router, Routes, Link, useNavigate } from 'react-space-router'
 
 const routes = [
   { path: '/', component: Home },
@@ -54,7 +58,6 @@ function App() {
 }
 
 function Home() {
-  const { pathname, params, query } = useRoute()
   return (
     <div>
       <h1>Home</h1>
@@ -66,13 +69,10 @@ function Home() {
 function Settings() {
   const navigate = useNavigate()
 
-  useEffect(() => {
-    navigate({ url: '/settings/billing' })
-  }, [])
-
   return (
     <div>
       <h1>Settings</h1>
+      <button onClick={() => navigate('/settings/billing')}>Billing</button>
       <Link href='/'>Home</Link>
     </div>
   )
@@ -155,6 +155,31 @@ When a resolver rejects, starting that navigation again replaces the rejected re
 
 Data loading follows the same React model: `prepare` starts or pins work synchronously, and route components read it through the data cache. The read should throw a pending promise to Suspense and a rejected request error to the error boundary. Route and adapter `prepare` functions must not throw synchronously; asynchronous request failure belongs in that read path.
 
+## Prefetching
+
+Prefetching warms the route the user is likely to visit next. The usual setup is: declare data once on the route with `queries`, give `<Router>` a data adapter, then opt links into prefetching.
+
+```js
+import { prepare, prefetch } from './figbird'
+
+const routes = [
+  {
+    path: '/issues/:id',
+    resolver: () => import('./pages/IssueDetail'),
+    queries: ({ params }) => [[issueDetail, { id: +params.id }]],
+  },
+]
+
+<Router routes={routes} data={{ prepare, prefetch }}>...</Router>
+<Link href={`/issues/${id}`} prefetch />
+```
+
+On navigation, each query runs through `data.prepare(def, args)` and the returned handles stay pinned until the route changes. On prefetch, the same query runs through `data.prefetch(def, args)` and the return value is ignored. Resolver chunks are warmed too.
+
+`<Link prefetch>` means cancellable hover intent (50ms by default) plus immediate focus/touch. Use `prefetch='visible'` for viewport-based prefetching, `<Router prefetchLinks>` to make prefetching the default for all links, and `prefetch={false}` to opt one link out. Configure the hover delay with `<Router prefetchHoverDelayMs={50}>`; `0` restores immediate hover prefetching. A route segment can set `prefetchable: false` to skip its own speculative work while still preparing normally on real navigation. Other matched segments still prefetch unless they also opt out.
+
+For unusual cases, use route-level `prepare(ctx)` / `prefetch(ctx)` directly, or call `usePrefetch()` from your own trigger.
+
 ## Blocking navigation
 
 Render `<BlockNavigation>` while a page has changes that would be lost. The native mode asks for confirmation with the browser's dialog:
@@ -181,32 +206,7 @@ Links, `<Navigate>`, `useNavigate()`, and `useSpaceRouter().navigate()` are bloc
 
 When multiple blockers are mounted, the first one handles each attempted navigation.
 
-## Prefetching
-
-Prefetching warms the route the user is likely to visit next. The usual setup is: declare data once on the route with `queries`, give `<Router>` a data adapter, then opt links into prefetching.
-
-```js
-import { prepare, prefetch } from './figbird'
-
-const routes = [
-  {
-    path: '/issues/:id',
-    resolver: () => import('./pages/IssueDetail'),
-    queries: ({ params }) => [[issueDetail, { id: +params.id }]],
-  },
-]
-
-<Router routes={routes} data={{ prepare, prefetch }}>...</Router>
-<Link href={`/issues/${id}`} prefetch />
-```
-
-On navigation, each query runs through `data.prepare(def, args)` and the returned handles stay pinned until the route changes. On prefetch, the same query runs through `data.prefetch(def, args)` and the return value is ignored. Resolver chunks are warmed too.
-
-`<Link prefetch>` means cancellable hover intent (50ms by default) plus immediate focus/touch. Use `prefetch='visible'` for viewport-based prefetching, `<Router prefetchLinks>` to make prefetching the default for all links, and `prefetch={false}` to opt one link out. Configure the hover delay with `<Router prefetchHoverDelayMs={50}>`; `0` restores immediate hover prefetching. A route can set `prefetchable: false` to block speculative warming while still preparing normally on real navigation.
-
-For unusual cases, use route-level `prepare(ctx)` / `prefetch(ctx)` directly, or call `usePrefetch()` from your own trigger.
-
-## API
+## API reference
 
 ### `<Router />`
 
@@ -218,7 +218,7 @@ Props:
 - `mode` one of `history`, `hash`, `memory` — default is `history`.
 - `qs` a custom query string parser of shape `{ parse, stringify }`.
 - `sync` if `true`, the underlying space-router fires synchronous transitions (useful in tests).
-- `transformRoute(route)` an optional pure, synchronous function that runs between match and commit. Return a modified `Route` to change what gets committed; if its `url` differs from the matched URL, the router silently replaces the URL (mode-aware, so it works in hash mode too) so the address bar matches. Use this for things like persisted-query restoration. Must not be async.
+- `transformRoute(route)` an optional pure, synchronous route transform. See [Route transform](#route-transform).
 - `transformQuery(query, { to, sourceRoute, targetRoute })` an optional pure, synchronous mapping for the query of app-created destinations. It returns the query serialized by the configured `qs` codec, or `null` to remove the query. See [Query transform](#query-transform).
 - `data` a data adapter of shape `{ prepare(def, args), prefetch(def, args) }` that bridges route `queries` to a data layer (see [Prefetching](#prefetching)). `prepare` returns a `PreparedHandle`; `prefetch` warms speculatively. figbird's kit satisfies this directly. Should be referentially stable; required only if a route uses `queries`.
 - `prefetchLinks` default prefetch trigger for every link: `true`/`'hover'` or `'visible'`. Individual links override with their own `prefetch` prop, including `prefetch={false}` to opt out. Off by default.
@@ -254,9 +254,9 @@ Pass the array to `<Router routes={routes}>`. Each definition can use these fiel
 - `queries(ctx)` declares the route's data needs once as `[def, args]` pairs. The `<Router data>` adapter prepares them on navigation and prefetches them during speculation. Requires a `data` adapter. See [Prefetching](#prefetching).
 - `prepare(ctx)` is the low-level alternative to `queries` for navigation. It receives `{ pathname, url, params, query }` and returns handles that stay pinned for the committed navigation. Setup is synchronous and must not throw; surface request errors later through the data cache's Suspense read path.
 - `prefetch(ctx)` is the low-level alternative to `queries` for prefetching. It runs when a prefetching link warms the route, may run at any frequency, and ignores its return value.
-- `prefetchable` set to `false` prevents speculative chunk and data prefetching while preserving normal preparation during navigation. It overrides an explicit `<Link prefetch>`.
+- `prefetchable` set to `false` skips speculative resolver, `prefetch`, and query work for this segment while preserving normal preparation during navigation. Other matched segments still prefetch unless they also opt out. It overrides an explicit `<Link prefetch>` for this segment.
 - `props` props passed to the segment's component.
-- `scrollGroup` a string that groups routes. App-created navigation within a group does not scroll to the top unless the destination includes a hash fragment.
+- `scrollGroup` a string set on the destination's final matched definition. App-created navigation between destinations in the same group does not scroll to the top unless the destination includes a hash fragment.
 - `routes` nested route definitions.
 - `...metadata` any other fields you need. They are available on `route.data[i]`.
 
@@ -279,7 +279,7 @@ Routes are checked in declaration order and the first match wins, so put a catch
 
 #### Redirects
 
-A route can redirect to any target accepted by `navigate()`. Static redirects are concise:
+A route can redirect to any [navigation target](#navigation-targets). Static redirects are concise:
 
 ```js
 { path: '/old-settings', redirect: '/settings' }
@@ -302,7 +302,7 @@ Redirects are resolved before component loading, data preparation, or React rend
 
 #### Prepared handles
 
-The shape returned by `prepare()` functions. The router collects these from every matched segment, pins them while the route is committed, and calls `release()` when the next navigation commits or `<Router>` unmounts.
+`data.prepare()` returns one `PreparedHandle`; a route-level `prepare(ctx)` returns an array of them or nothing:
 
 ```ts
 interface PreparedHandle {
@@ -310,7 +310,13 @@ interface PreparedHandle {
 }
 ```
 
-The router stores the handles and calls `release()`. Extra fields on a data layer's handle are ignored, so richer handles such as figbird's `{ key, promise, release }` satisfy this contract directly.
+The router keeps committed handles pinned until the next route commits or `<Router>` unmounts. If a pending navigation is superseded before commit, its handles are released immediately. Extra fields on a data layer's handle are ignored, so richer handles such as figbird's `{ key, promise, release }` satisfy this contract directly.
+
+#### Route transform
+
+`transformRoute(route)` runs after matching and before route preparation, speculative prefetching, or commit. Return a modified route to change what is prepared and rendered; return `undefined` to keep the matched route unchanged.
+
+If the transformed route changes `route.url` during navigation, the router silently replaces the browser URL using the current routing mode. The function can run during rendering and prefetching, so it must be pure, synchronous, and safe to repeat.
 
 #### Query transform
 
@@ -337,6 +343,18 @@ One target-building pipeline is shared by `useNavigate`, `useSpaceRouter().navig
 
 Initial/direct URLs and browser back/forward traversal bypass `transformQuery`, preserving the exact historical URL. Browser-owned targets — external/protocol URLs and same-page fragments such as `#section` — bypass it too, even when the route table contains a wildcard. In hash mode, `#/path` is an app route and is transformed; `#section` is not. The function may run during rendering and whenever callers request an href, so it must be pure, synchronous, and safe to repeat.
 
+#### Navigation targets
+
+Redirects and navigation APIs — including `<Link>`, `<Navigate>`, `useNavigate`, `useSpaceRouter().navigate()`, `useSpaceRouter().href()`, `useLinkProps`, `useLinkState`, `usePrefetch`, and `useMakeHref` — accept a URL string or a target object with these fields:
+
+- `url` a complete URL. When supplied, `pathname`, `params`, `query`, and `hash` are not used to build the URL.
+- `pathname` a pathname or path pattern, which may contain named segments.
+- `params` values to interpolate into named pathname segments.
+- `query` an object serialized by the configured `qs` codec. With `merge: true`, `null` clears the current query.
+- `hash` a fragment string. With `merge: true`, `null` clears the current hash.
+- `merge` resolves omitted fields and partial params or query against the current route.
+- `replace` replaces the current history entry instead of pushing one. It affects navigation, not a generated `href`.
+
 ### `<Routes />`
 
 ```js
@@ -345,7 +363,7 @@ Initial/direct URLs and browser back/forward traversal bypass `transformQuery`, 
 
 Renders the components matched from the enclosing `<Router routes={routes}>` at this location. Nested ancestor segments wrap their descendants automatically — parents render `{children}` to position the matched child. Segments without a `component` or `resolver` are transparent wrappers for their descendants.
 
-When a navigation happens, every matched segment's `resolver()` is preloaded and every matched segment's `prepare()` is called, so chunk download and data loading can overlap. Preparation synchronously starts or pins work and returns lifecycle handles; the router does not await the underlying requests before committing. The destination's nearest `<Suspense>` boundary handles any still-cold reads. This includes cold direct loads: the initial route's `resolver()` and `prepare()` are kicked off during the first render, before its components read from the data cache.
+When a navigation happens, every matched segment's `resolver()` is preloaded, every `prepare()` is called, and declared `queries` run through `data.prepare()`, so chunk download and data loading can overlap. Preparation synchronously starts or pins work and returns lifecycle handles; the router does not await the underlying requests before committing. The destination's nearest `<Suspense>` boundary handles any still-cold reads. This includes cold direct loads: the initial route's resolver and preparation work start during the first render, before its components read from the data cache.
 
 Props:
 
@@ -354,6 +372,8 @@ Props:
 #### Path params as component props
 
 When the router commits a route, it spreads matched path params onto route segment components as own props. Each segment receives only the params declared in its own `path` — wrapping layouts that didn't declare those params get nothing extra, while a parent layout that declares `:orgId` receives `orgId` and a child leaf that declares `:issueId` receives `issueId`.
+
+Static `props` from the route definition are spread last, so they override an injected path param with the same name.
 
 ```js
 const routes = [
@@ -400,7 +420,7 @@ With neither prop, the native message is `Discard unsaved changes?`. See [Blocki
 </DelayedSuspense>
 ```
 
-A router-aware `Suspense` boundary. During an in-flight route transition it re-throws its fallback for the first `pendingDelayMs` milliseconds, which lets the already-committed outer route stay on screen. After the threshold, or outside a pending navigation, it behaves like regular `Suspense` and renders its fallback.
+A router-aware `Suspense` boundary. For the first `pendingDelayMs` milliseconds of an in-flight route transition, it suppresses its own fallback and lets suspension reach an outer boundary, which can keep the already-committed route on screen. After the threshold, or outside a pending navigation, it behaves like regular `Suspense` and renders its fallback.
 
 Use it for routes where you want to avoid flashing a skeleton for fast navigations but still show a loading state for slower data.
 
@@ -410,16 +430,11 @@ Use it for routes where you want to avoid flashing a skeleton for fast navigatio
 <Link href='/profile/32' className='nav' replace />
 ```
 
-Renders an `<a>` with a correct `href` and `onClick` handler that intercepts the click and pushes a history entry instead of triggering a full page reload. Preserves cmd/ctrl/shift/alt + click and middle-click for new-tab/window/download behavior.
+Renders an `<a>` with the correct `href` and client-side click handling, so in-app navigation does not reload the page. It pushes a history entry by default and replaces the current entry when `replace` is set. Preserves cmd/ctrl/shift/alt + click and middle-click for new-tab/window/download behavior.
 
 Props:
 
-- `href` navigation target — a `string` or an object with:
-  - `pathname` the pathname portion, may include named segments.
-  - `params` params to interpolate into the pathname.
-  - `query` query object passed through `qs.stringify`.
-  - `hash` hash fragment.
-  - `merge` merge partial `to` object into the current route.
+- `href` a [navigation target](#navigation-targets).
 - `replace` replace the current entry in the navigation stack instead of pushing.
 - `current` set to true/false to override automatic current-page detection.
 - `prefetch` warm the target route speculatively: `true`/`'hover'` after the Router's cancellable hover-intent delay, but immediately on focus and touch; `'visible'` when the link scrolls into view. Overrides the Router-level `prefetchLinks` default in either direction.
@@ -445,11 +460,11 @@ Active links receive `aria-current="page"` and links whose navigation is in flig
 <Navigate to={{ pathname: '/' }} />
 ```
 
-Redirects to the target URL on mount.
+Starts a client-side navigation after it mounts. It pushes a history entry by default; set `replace: true` on the object target to replace the current entry.
 
 Props:
 
-- `to` `string` or object — same shape as `useNavigate`'s argument.
+- `to` a [navigation target](#navigation-targets).
 
 ### `useSpaceRouter`
 
@@ -457,7 +472,7 @@ Props:
 const router = useSpaceRouter()
 ```
 
-Get the underlying Space Router instance. See [space-router docs](https://kidkarolis.github.io/space-router/) for details. Rarely needed — the other hooks cover the common cases.
+Get the Space Router-compatible instance used by React Space Router. Its `navigate()` and `href()` methods use the same target-processing pipeline as the components and hooks, while `match()` uses the same route table. See the [Space Router docs](https://kidkarolis.github.io/space-router/) for details. Rarely needed — the other hooks cover the common cases.
 
 ### `useRoute`
 
@@ -494,7 +509,7 @@ Both the current and previous routes are post-`transformRoute`.
 const pending = usePending()
 ```
 
-`true` while the router is between navigation start and commit. Backed by React's `useTransition` — flips on as soon as `navigate()` runs and flips off once the destination has committed and the transition has settled.
+`true` while React's route transition is pending. It turns on when navigation starts and turns off when the destination transition settles. Backed by React's `useTransition`.
 
 Use this for top-of-page progress bars and "your click did something" affordances:
 
@@ -513,7 +528,7 @@ Don't use it for skeletons — those belong in destination Suspense boundaries.
 const pendingRoute = usePendingRoute()
 ```
 
-The route the router is currently transitioning toward, or `null` when idle. Set for every navigation source — link clicks, programmatic `navigate()`, and browser back/forward — from commit until the transition settles. Like `useRoute()`, the returned route is post-`transformRoute`.
+The route the router is currently transitioning toward, or `null` when idle. It becomes available after the destination is matched, transformed, and prepared, then clears when the transition settles. This covers every navigation source — link clicks, programmatic `navigate()`, and browser back/forward. Like `useRoute()`, the returned route is post-`transformRoute`.
 
 Where `usePending()` answers "is a navigation happening", `usePendingRoute()` answers "where to". Use it for destination-aware pending UI: highlighting the requested item in a list, fading the surface being replaced, or reading the destination's `params` before it commits:
 
@@ -539,15 +554,7 @@ navigate({ query: { 'top-rated': 1 }, merge: true })
 navigate({ query: { 'top-rated': undefined }, merge: true })
 ```
 
-Get the `navigate` function for performing programmatic navigations. Accepts a `string` URL or an object:
-
-- `url` URL string.
-- `pathname` pathname portion, may include named segments.
-- `params` params to interpolate.
-- `query` query object passed through `qs.stringify`.
-- `hash` hash fragment.
-- `merge` merge partial `to` into the current route.
-- `replace` replace the current history entry instead of pushing.
+Get the `navigate` function for performing programmatic navigations. It accepts any [navigation target](#navigation-targets).
 
 The returned function is stable and resolves merged targets against the latest committed route. Consecutive identical outstanding requests from the same source route are coalesced; an intervening destination remains allowed, and the same URL can be navigated again after a commit.
 
@@ -569,7 +576,7 @@ a[data-pending] {
 }
 ```
 
-Takes a `string` URL or an object — same fields as `useNavigate`, plus:
+Takes a [navigation target](#navigation-targets), plus:
 
 - `current` override automatic current-page detection.
 - `prefetch` warm the target route speculatively (see [Prefetching](#prefetching)). When set, the returned props also carry the trigger — hover/focus/touch handlers, or a `ref` for `'visible'` — so the spread keeps working unchanged.
@@ -610,7 +617,7 @@ async function onSubmit(values) {
 }
 ```
 
-Takes a `string` URL or an object — same fields as `useNavigate`.
+Takes any [navigation target](#navigation-targets).
 
 ### `useMakeHref`
 
@@ -619,9 +626,7 @@ const makeHref = useMakeHref()
 makeHref(to)
 ```
 
-Create a relative URL string to use in `<a href>`.
-
-- `to` object of shape `{ pathname, params, query, hash }`. The `params` interpolate into named pathname segments; `query` is stringified via `qs.stringify`.
+Create a relative URL string to use in `<a href>`. It accepts any [navigation target](#navigation-targets); `replace` affects navigation only and does not change the generated URL.
 
 Without `transformQuery`, a string or `{ url }` is returned as-is. With the transform, those forms go through the same matched destination-query pipeline as object targets and navigation, so generated hrefs remain interchangeable with `navigate`.
 
