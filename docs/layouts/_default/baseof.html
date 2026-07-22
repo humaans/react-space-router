@@ -23,9 +23,6 @@
   {{ partial "meta/ogimage" . }}
   <!-- Site verification -->
   {{ if .IsHome }} {{ partial "site-verification" . }} {{ end }}
-  <!-- add googleAnalytics in config.toml -->
-  {{ template "_internal/google_analytics_async.html" . }}
-
   <link rel="canonical" href="{{ .Permalink }}"> {{ if (isset .Params "prev") }}
   <link rel="prev" href="{{ .Params.prev }}"> {{ end }} {{ if (isset .Params "next") }}
   <link rel="next" href="{{ .Params.next }}"> {{ end }}
@@ -42,16 +39,17 @@
   <meta property="og:image" content="https://humaans.github.io/react-space-router/react-space.png" />
 
   {{ partial "favicon" . }}
-   <link href="https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@200;300;400;500;600;700&family=Vollkorn:wght@400;600;700;900&display=swap" rel="stylesheet">
-   <link href="https://fonts.googleapis.com/css2?family=Vollkorn:wght@400;600;700;900&display=swap" rel="stylesheet"> 
+   <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
 
   {{ $base := resources.Get "styles/base.scss" | toCSS }}
   {{ $syntax := resources.Get "styles/syntax.scss" | toCSS }}
   {{ $main := resources.Get "styles/main.scss" | toCSS }}
+  {{ $typography := resources.Get "styles/typography.scss" | toCSS }}
 
   <link href="{{ $base.RelPermalink }}" rel="stylesheet" type="text/css" />
   <link href="{{ $syntax.RelPermalink }}" rel="stylesheet" type="text/css" />
   <link href="{{ $main.RelPermalink }}" rel="stylesheet" type="text/css" />
+  <link href="{{ $typography.RelPermalink }}" rel="stylesheet" type="text/css" />
 </head>
 
 

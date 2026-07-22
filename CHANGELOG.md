@@ -1,3 +1,53 @@
+## 1.0.0
+
+The router is now built around React's transition machinery: navigations run inside `useTransition`, Suspense keeps the previous route on screen while the destination loads, and the destination's code and data are kicked off as soon as navigation begins. See the [docs](https://humaans.github.io/react-space-router/) for usage guides and [MIGRATION.md](./MIGRATION.md) for a concise migration guide from 0.6.x.
+
+### Breaking
+
+- `useRoute()` now returns `Route` directly and throws when the current URL is unmatched. Applications that handle unmatched URLs within the router should configure a wildcard route.
+- Route definitions move from `<Routes routes={routes}>` to `<Router routes={routes}>`; `<Routes />` now marks where the matched route tree renders.
+- Route state lives inside `<Router>`; the `useRoute`, `onNavigating`, and `onNavigated` props are removed. Read the current route with `useRoute()`, run post-navigation logic in regular effects, and replace `onNavigating`-based preloading with per-route `resolver` and `prepare`.
+- Function-form `<Link>` props (`className`, `style`, `extraProps`) are removed. Style current and pending links in plain CSS via the `aria-current="page"` and `data-pending` attributes, or use `useLinkState(to)` when the state needs to affect rendered output.
+- `useInternalRouterInstance` is renamed to `useSpaceRouter`. Same escape hatch, same return value — the underlying space-router instance.
+- The package is now native ESM targeting ECMAScript 2022. CommonJS consumers must migrate to ESM, and applications targeting older JavaScript engines must transpile the package and provide any required polyfills.
+
+### New
+
+- Suspense-aware navigation: the previous route stays on screen and interactive while the destination suspends. Pending state comes for free — `usePending()` for "is a navigation happening", `usePendingRoute()` for "where to", and a per-link `data-pending` attribute (plus `useLinkState(to)`) for "was it this link" — for clicks, programmatic navigation, and browser back/forward alike.
+- `usePreviousRoute()` for the route preceding the current successful commit. It is available on a destination's first render and ignores pending, suspended, superseded, and unmatched destinations.
+- Code-split routes via `resolver: () => import('./Page')`, preloaded at navigation time and rendered through `React.lazy`.
+- Fetch-as-you-render data loading via route `prepare(ctx)` — fetches start when navigation begins (including cold direct loads), in parallel with chunk download, and the returned `PreparedHandle`s stay pinned while the route is committed.
+- Declarative data loading via route `queries` + a `<Router data>` adapter: declare a route's data once and the adapter runs it as `prepare` on navigation and `prefetch` on hover. The adapter is a minimal `{ prepare, prefetch }` contract co-designed with (and satisfied directly by) figbird's kit — the router stays data-layer-agnostic. The low-level `prepare`/`prefetch` fields remain for divergent routes or adapter-less data layers.
+- Link prefetching: `<Link prefetch>` (`true`/`'hover'`/`'visible'`) warms a route's chunk and data on hover or visibility, `<Router prefetchLinks>` sets the default for all links, route `prefetchable: false` vetoes speculation for expensive routes, and `usePrefetch()` exposes the primitive for custom triggers.
+- `<Link>` forwards its anchor ref, composing it with the internal observer ref used by `prefetch='visible'`.
+- `<DelayedSuspense>` and `pendingDelayMs` for browser-style loading: hold the previous page briefly, then degrade to a skeleton.
+- `transformRoute(route)` pre-commit hook for URL rewrites (e.g. persisted-query restoration), with automatic address-bar sync.
+- `transformQuery(query, { to, sourceRoute, targetRoute })` for app-owned destination-query policy across navigation, href, link, `<Navigate>`, and prefetch APIs. Direct loads, browser traversal, external/protocol URLs, and same-page fragments remain untouched.
+- Consecutive identical outstanding navigation requests from the same source route are coalesced, preventing duplicate history writes while preserving A → B → A and intentional same-URL navigation after a commit.
+- Matched path params are injected as props onto the route segment that declares them.
+- `<BlockNavigation>` for declarative unsaved-change guards: native confirmation or render-function custom UI, with pre-history app navigation blocking, Navigation API Back/Forward replay where available, and `beforeunload` exit protection.
+
+### Fixed
+
+- Navigation blocking now distinguishes hash-mode route traversal (`#/route`) from ordinary fragments, so Back/Forward guards work in hash-routed applications without taking ownership of `#section` links.
+- Rejected route resolvers no longer remain permanently cached; resetting an error boundary can retry transient chunk-load failures, while the documentation explains full-page reload recovery for stale deployments.
+- App-created navigation to a cross-page hash fragment now scrolls to the destination element after commit, falling back to the top when it is absent. Back/Forward and same-page hash links remain browser-owned.
+- Hash-mode links now produce browser-ready `#/...` hrefs for plain and object targets through space-router 2.0, without application-side URL rewriting.
+- Replacing the route table prepares the current destination exactly once in history/hash mode; memory mode still performs its required explicit rematch.
+- Route preparation is transactional: if a later segment throws, every handle already acquired for that attempt is released.
+- Initial preparation handles remain leak-free under React 18's discarded StrictMode render while separate Router instances retain independent leases.
+- Unmatched URLs now clear the current route and `<Routes>`, and release the prior route's preparation handles, without advancing `usePreviousRoute()`'s successful-route history.
+- Back/Forward traversal now leaves scroll restoration to the browser instead of applying the router's new-page scroll reset after commit.
+
+### Polish
+
+- The documentation now covers error-boundary placement, chunk-load recovery, rejected data reads, and the synchronous non-throwing contract for route preparation.
+- CI now exercises the supported peer range against both React 18 and React 19.
+- Chromium CI now covers Suspense navigation, interrupted traversal, native scroll restoration, browser-owned same-page hashes, and router-managed cross-page fragments.
+- The documentation now defines redirects, the complete path-pattern grammar, and the native ESM/ES2022 browser baseline.
+- `PreparedHandle` now describes only the `release()` lifecycle the router consumes, so richer data-layer handles remain compatible. `<Link href>` is required in the public types, and the undocumented `RouterContext` export has been removed.
+- Mode-aware route URL classification, unmatched emissions, and Back/Forward source metadata now come directly from space-router 2.0 instead of being duplicated in the React layer.
+
 ## 0.6.6
 
 - Upgrade all dependencies to address security alerts.

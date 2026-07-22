@@ -1,0 +1,232 @@
+/*
+ * Keep the atmospheric Space Router canvas and translucent page, while using
+ * the compact type rhythm from the Figbird documentation.
+ */
+html,
+body {
+  font-size: 14px;
+  line-height: 1.625;
+}
+
+body {
+  color: #171717;
+  font-family: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 15px;
+  -webkit-font-smoothing: antialiased;
+}
+
+strong,
+b {
+  font-weight: 600;
+}
+
+h1.title,
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  color: #171717;
+  font-family: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-weight: 600;
+  text-rendering: optimizeLegibility;
+}
+
+h1.title,
+h1,
+.h1 {
+  margin-top: 4rem;
+  margin-bottom: 1.5rem;
+  font-size: 2rem;
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+}
+
+h2,
+.h2 {
+  margin-top: 4.5rem;
+  margin-bottom: 1rem;
+  font-size: 1.5rem;
+  line-height: 1.333;
+  letter-spacing: -0.015em;
+}
+
+h3,
+.h3 {
+  margin-top: 2.5rem;
+  margin-bottom: 0.75rem;
+  font-size: 1.25rem;
+  line-height: 1.4;
+  letter-spacing: -0.01em;
+}
+
+h4,
+.h4 {
+  margin-top: 1.5rem;
+  margin-bottom: 0.25rem;
+  font-size: 1rem;
+  line-height: 1.4;
+}
+
+h5,
+.h5 {
+  margin-top: 1.5rem;
+  margin-bottom: 0.5rem;
+  font-size: 1rem;
+  line-height: 1.5;
+}
+
+h6,
+.h6 {
+  margin-top: 1.5rem;
+  margin-bottom: 0.5rem;
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+h1 + h2,
+h2 + h3 {
+  margin-top: 0;
+}
+
+.content li + li {
+  margin-top: 0.375rem;
+}
+
+p code,
+li code,
+td code,
+th code {
+  display: inline;
+  padding: 0 3px;
+  border: 1px solid #eaedf0;
+  border-radius: 4px;
+  background: #f6f8fa;
+  color: inherit;
+  font-family: 'Geist Mono', 'SF Mono', Menlo, Monaco, monospace;
+  font-size: 0.875em;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+pre,
+code,
+kbd {
+  font-family: 'Geist Mono', 'SF Mono', Menlo, Monaco, monospace;
+}
+
+pre {
+  font-size: 0.875rem;
+  font-weight: 400;
+  line-height: 1.7;
+}
+
+.highlight {
+  margin: 1.25rem 0;
+}
+
+.highlight pre {
+  padding: 1rem;
+  overflow: auto;
+  border-radius: 8px;
+  font-weight: 500;
+}
+
+.content {
+  max-width: 840px;
+}
+
+.content table {
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.content th,
+.content td {
+  padding-top: 0.75rem;
+  padding-bottom: 0.75rem;
+}
+
+@media (min-width: 768px) {
+  .content {
+    margin: 60px 80px;
+    padding: 40px 48px;
+  }
+
+  #TOC {
+    margin-top: 0;
+    padding: 30px 60px 30px 40px;
+    color: #1e1e1e;
+    font-size: 15px;
+  }
+}
+
+#TOC ul ul {
+  margin: 0;
+}
+
+#TOC a {
+  padding-left: 0;
+}
+
+#TOC li {
+  line-height: 22px;
+}
+
+#TOC ul ul li {
+  line-height: 26px;
+}
+
+#TOC code {
+  font-size: 14px;
+  font-weight: 400;
+}
+
+#TOC a.active {
+  color: #cf222e;
+}
+
+#TOC > nav > ul > li > a {
+  margin-top: 8px;
+  margin-bottom: 2px;
+  color: #1e1e1e;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+#TOC > nav > ul > li:first-child > a {
+  margin-top: 0;
+}
+
+#TOC .github {
+  justify-content: flex-start;
+  margin-top: 40px;
+  font-size: 13px;
+}
+
+#TOC .github a {
+  color: #171717;
+}
+
+@media (max-width: 767px) {
+  #main {
+    padding-right: 16px;
+    padding-left: 16px;
+  }
+
+  .content {
+    margin: 20px 0;
+    padding: 24px;
+  }
+
+  .Image {
+    margin: 16px 0 32px;
+  }
+
+  #TOC {
+    padding: 8px 40px 40px;
+  }
+}

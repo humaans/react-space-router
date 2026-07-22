@@ -1,43 +1,11 @@
+// Core <Router>/<Routes> behavior: context wiring, rendering and param
+// injection, transformRoute, route map changes, and router options.
 import test from 'ava'
 import { act, useEffect, useState } from 'react'
 import ReactDOM from 'react-dom/client'
-import { JSDOM } from 'jsdom'
-import {
-  Router,
-  RouterContext,
-  Routes,
-  Link,
-  Navigate,
-  useInternalRouterInstance,
-  useLinkProps,
-  qs,
-} from '../src/index.tsx'
-
-;(globalThis as any).IS_REACT_ACT_ENVIRONMENT = true
-
-const g = globalThis as any
-
-function setup() {
-  const dom = new JSDOM('<!doctype html><div id="root"></div>')
-  g.window = dom.window
-  g.window.scrollTo = () => {}
-  g.document = dom.window.document
-  g.history = {
-    pushState(_state: unknown, _title: string, url: string) {
-      g.location.href = url
-      g.location.pathname = url
-
-      const popstate = new dom.window.PopStateEvent('popstate')
-      dom.window.dispatchEvent(popstate)
-    },
-  }
-  g.location = {
-    href: '/',
-    pathname: '/',
-    search: '',
-    hash: '',
-  }
-}
+import { renderToString } from 'react-dom/server'
+import { Router, Routes, Link, Navigate, useNavigate, useSpaceRouter, useRoute, qs, type Route } from '../src/index.tsx'
+import { g, setup } from './helpers.ts'
 
 test.serial('usage', async function (t) {
   setup()
@@ -50,17 +18,19 @@ test.serial('usage', async function (t) {
   ]
 
   let router
+  let routeOutsideRoutes: Route | null = null
 
   function Home() {
     return (
       <div>
-        <Link to='/stuff'>Stuff</Link>Hello
+        <Link href='/stuff'>Stuff</Link>Hello
       </div>
     )
   }
 
   function InitialNav() {
-    const _router = useInternalRouterInstance()
+    const _router = useSpaceRouter()
+    routeOutsideRoutes = useRoute()
 
     useEffect(() => {
       router = _router
@@ -71,9 +41,9 @@ test.serial('usage', async function (t) {
 
   function App() {
     return (
-      <Router sync>
+      <Router sync routes={routes}>
         <InitialNav />
-        <Routes routes={routes} />
+        <Routes />
       </Router>
     )
   }
@@ -83,10 +53,8 @@ test.serial('usage', async function (t) {
     r.render(<App />)
   })
 
-  t.is(
-    window.document.body.innerHTML,
-    '<div id="root"><div><a aria-current="page" to="/stuff" href="/">Stuff</a>Hello</div></div>',
-  )
+  t.is(window.document.body.innerHTML, '<div id="root"><div><a href="/stuff">Stuff</a>Hello</div></div>')
+  t.is(routeOutsideRoutes?.url, '/')
 
   act(() => {
     router.navigate('/stuff')
@@ -95,46 +63,70 @@ test.serial('usage', async function (t) {
   t.is(window.document.body.innerHTML, '<div id="root"><div>Stuff</div></div>')
 })
 
-test.serial('useLinkProps()', async function (t) {
+test.serial('Router and Link render without browser globals', (t) => {
+  const previous = {
+    window: g.window,
+    document: g.document,
+    history: g.history,
+    location: g.location,
+  }
+
+  delete g.window
+  delete g.document
+  delete g.history
+  delete g.location
+
+  try {
+    const html = renderToString(
+      <Router routes={[{ path: '/', component: () => <div>Home</div> }]}>
+        <Link href='/x'>X</Link>
+        <Routes />
+      </Router>,
+    )
+
+    t.is(html, '<a href="/x">X</a>')
+  } finally {
+    g.window = previous.window
+    g.document = previous.document
+    g.history = previous.history
+    g.location = previous.location
+  }
+})
+
+test.serial('Navigate follows to prop changes while mounted', async (t) => {
   setup()
 
   const root = document.getElementById('root')
+  let setTarget
 
   const routes = [
-    { path: '/', component: () => <Navigate to='/stuff' /> },
-    { path: '/stuff', component: Stuff },
+    { path: '/a', component: () => <div>A</div> },
+    { path: '/b', component: () => <div>B</div> },
   ]
 
-  let linkProps
-
-  function Stuff() {
-    const _linkProps = useLinkProps('/stuff')
-    useEffect(() => {
-      linkProps = _linkProps
-    }, [])
-
-    return <div>Stuff</div>
-  }
-
   function App() {
+    const [target, _setTarget] = useState('/a')
+    setTarget = _setTarget
     return (
-      <Router sync>
-        <Routes routes={routes} />
+      <Router sync routes={routes}>
+        <Navigate to={{ url: target }} />
+        <Routes />
       </Router>
     )
   }
 
-  act(() => {
+  await act(async () => {
     const r = ReactDOM.createRoot(root)
     r.render(<App />)
   })
 
-  t.deepEqual(linkProps, {
-    'aria-current': 'page',
-    href: '/stuff',
-    onClick: linkProps.onClick,
+  t.is(window.document.body.innerHTML, '<div id="root"><div>A</div></div>')
+
+  await act(async () => {
+    setTarget('/b')
   })
-  t.is(typeof linkProps.onClick, 'function')
+
+  t.is(window.document.body.innerHTML, '<div id="root"><div>B</div></div>')
 })
 
 test('qs', async (t) => {
@@ -142,22 +134,14 @@ test('qs', async (t) => {
   t.deepEqual(qs.parse('a=1'), { a: '1' })
 })
 
-test.serial('useInternalRouterInstance throws outside Router', (t) => {
+test.serial('useSpaceRouter throws outside Router', (t) => {
   setup()
 
   const root = document.getElementById('root')
 
   function NoRouter() {
-    useInternalRouterInstance()
+    useSpaceRouter()
     return null
-  }
-
-  function App() {
-    return (
-      <RouterContext.Provider value={undefined}>
-        <NoRouter />
-      </RouterContext.Provider>
-    )
   }
 
   const originalConsoleError = console.error
@@ -168,7 +152,7 @@ test.serial('useInternalRouterInstance throws outside Router', (t) => {
       () => {
         act(() => {
           const r = ReactDOM.createRoot(root)
-          r.render(<App />)
+          r.render(<NoRouter />)
         })
       },
       { message: /Application must be wrapped in <Router \/>/ },
@@ -178,98 +162,98 @@ test.serial('useInternalRouterInstance throws outside Router', (t) => {
   }
 })
 
-test.serial('Link click navigates and invokes to.onClick', (t) => {
+test.serial('useRoute throws outside Router', (t) => {
   setup()
 
   const root = document.getElementById('root')
-  let onClickCalls = 0
 
-  const routes = [
-    {
-      path: '/',
-      component: () => (
-        <div>
-          <Link href='/stuff'>StringHref</Link>
-          <Link href={{ url: '/stuff', onClick: () => onClickCalls++ }}>ObjectHref</Link>
-        </div>
-      ),
-    },
-    { path: '/stuff', component: () => <div>Stuff</div> },
-  ]
-
-  function App() {
-    return (
-      <Router sync>
-        <Routes routes={routes} />
-      </Router>
-    )
+  function NoRouter() {
+    useRoute()
+    return null
   }
 
-  act(() => {
-    const r = ReactDOM.createRoot(root)
-    r.render(<App />)
-  })
+  const originalConsoleError = console.error
+  console.error = () => {}
 
-  const [stringLink, objectLink] = window.document.querySelectorAll('a')
-
-  act(() => {
-    objectLink.click()
-  })
-
-  t.is(onClickCalls, 1)
-  t.is(window.document.body.innerHTML, '<div id="root"><div>Stuff</div></div>')
-
-  // also exercise the string-href Link path (re-render home first)
-  act(() => {
-    history.pushState({}, '', '/')
-  })
-
-  act(() => {
-    const newStringLink = window.document.querySelector('a')
-    newStringLink.click()
-  })
-
-  t.is(window.document.body.innerHTML, '<div id="root"><div>Stuff</div></div>')
-
-  // sanity: stringLink reference is from before the re-render and detached now
-  t.truthy(stringLink)
+  try {
+    t.throws(
+      () => {
+        act(() => {
+          const r = ReactDOM.createRoot(root)
+          r.render(<NoRouter />)
+        })
+      },
+      { message: /Application must be wrapped in <Router \/>/ },
+    )
+  } finally {
+    console.error = originalConsoleError
+  }
 })
 
-test.serial('onNavigating is awaited before onNavigated', async (t) => {
+test.serial('useRoute throws when the current URL is unmatched', (t) => {
+  setup()
+
+  function UnmatchedRouteConsumer() {
+    useRoute()
+    return null
+  }
+
+  const error = t.throws(() =>
+    renderToString(
+      <Router routes={[{ path: '/matched', component: () => null }]}>
+        <UnmatchedRouteConsumer />
+      </Router>,
+    ),
+  )
+
+  t.regex(error.message, /useRoute\(\) requires a matched route/)
+})
+
+test.serial('transformRoute rewrites the route before commit and syncs the URL', async (t) => {
   setup()
 
   const root = document.getElementById('root')
-  const events = []
+  let preparedStatus
+  let preparedUrl
 
   const routes = [
     { path: '/', component: () => <div>Home</div> },
-    { path: '/stuff', component: () => <div>Stuff</div> },
+    {
+      path: '/people',
+      prepare: ({ query, url }) => {
+        preparedStatus = query.status
+        preparedUrl = url
+      },
+      component: () => {
+        const r = useRoute()
+        return <div data-testid='people'>status={String(r?.query?.status ?? 'none')}</div>
+      },
+    },
   ]
 
   let router
-
   function Capture() {
-    const r = useInternalRouterInstance()
+    const r = useSpaceRouter()
     useEffect(() => {
       router = r
     }, [r])
     return null
   }
 
-  async function onNavigating(route) {
-    events.push(`navigating:${route.pathname}`)
-    await Promise.resolve()
-  }
-
-  function onNavigated(route) {
-    events.push(`navigated:${route.pathname}`)
+  // Simulate persisted-query restoration: if /people has no `status`, inject one.
+  function transformRoute(route: Route): Route | void {
+    if (route.pathname === '/people' && !(route as any).query?.status) {
+      const query = { ...(route as any).query, status: 'active' }
+      const search = '?status=active'
+      return { ...route, query, search, url: '/people' + search } as Route
+    }
   }
 
   function App() {
     return (
-      <Router sync onNavigating={onNavigating} onNavigated={onNavigated}>
+      <Router sync transformRoute={transformRoute} routes={routes}>
         <Capture />
-        <Routes routes={routes} />
+        <Routes />
       </Router>
     )
   }
@@ -280,127 +264,244 @@ test.serial('onNavigating is awaited before onNavigated', async (t) => {
   })
 
   await act(async () => {
-    router.navigate('/stuff')
+    router.navigate('/people')
   })
 
-  t.true(events.includes('navigating:/stuff'))
-  t.true(events.includes('navigated:/stuff'))
-  t.is(events.indexOf('navigating:/stuff') < events.indexOf('navigated:/stuff'), true)
+  t.regex(window.document.body.innerHTML, /status=active/)
+  t.is(preparedStatus, 'active')
+  t.is(preparedUrl, '/people?status=active')
 })
 
-test.serial('Routes resolves ESM-default components and skips null components', (t) => {
+test.serial('navigation coalesces only consecutive identical outstanding requests from one route', async (t) => {
   setup()
+
+  const root = document.getElementById('root')
+  const pushed: string[] = []
+  const originalPushState = history.pushState
+  let navigate
+  let router
+  const navigateReferences: unknown[] = []
+
+  history.pushState = (state: unknown, title: string, url: string) => {
+    pushed.push(url)
+    originalPushState.call(history, state, title, url)
+  }
+
+  function Capture() {
+    navigate = useNavigate()
+    router = useSpaceRouter()
+    navigateReferences.push(navigate)
+    return null
+  }
+
+  try {
+    await act(async () => {
+      const r = ReactDOM.createRoot(root)
+      r.render(
+        <Router
+          sync
+          routes={[
+            { path: '/', component: () => <div>Home</div> },
+            { path: '/a', component: () => <div>A</div> },
+            { path: '/b', component: () => <div>B</div> },
+          ]}
+        >
+          <Capture />
+          <Routes />
+        </Router>,
+      )
+    })
+    const initialNavigate = navigate
+
+    await act(async () => {
+      navigate('/a')
+      navigate('/a')
+      navigate('/a')
+    })
+    t.deepEqual(pushed, ['/a'])
+    t.is(window.document.body.textContent, 'A')
+
+    // A committed same-URL navigation is intentional and remains allowed.
+    await act(async () => {
+      navigate('/a')
+    })
+    t.deepEqual(pushed, ['/a', '/a'])
+
+    // A callback captured on the initial route remains stable, but merge is
+    // resolved from the latest committed route rather than that old closure.
+    await act(async () => {
+      initialNavigate({ query: { scope: 'team' }, merge: true })
+    })
+    t.deepEqual(pushed, ['/a', '/a', '/a?scope=team'])
+
+    // An intervening target makes A -> B -> A two distinct requests, even
+    // before either one has committed. The public router follows the same
+    // guarded path as useNavigate, Link, and Navigate.
+    await act(async () => {
+      router.navigate('/b')
+      router.navigate('/a')
+    })
+    t.deepEqual(pushed, ['/a', '/a', '/a?scope=team', '/b', '/a'])
+    t.is(window.document.body.textContent, 'A')
+
+    // Unmatched targets cannot commit, so their short-lived guard is cleared
+    // and the same request can be retried.
+    await act(async () => {
+      navigate('/missing')
+    })
+    await act(async () => {
+      navigate('/missing')
+    })
+    t.deepEqual(pushed, ['/a', '/a', '/a?scope=team', '/b', '/a', '/missing', '/missing'])
+
+    t.true(navigateReferences.every((reference) => reference === navigateReferences[0]))
+  } finally {
+    history.pushState = originalPushState
+  }
+})
+
+test.serial('transformRoute applies before initial route prepare', async (t) => {
+  setup()
+  history.pushState({}, '', '/people')
+
+  const root = document.getElementById('root')
+  let preparedStatus
+  let preparedUrl
+
+  const routes = [
+    {
+      path: '/people',
+      prepare: ({ query, url }) => {
+        preparedStatus = query.status
+        preparedUrl = url
+      },
+      component: () => {
+        const r = useRoute()
+        return <div>status={String(r?.query?.status ?? 'none')}</div>
+      },
+    },
+  ]
+
+  function transformRoute(route: Route): Route | void {
+    if (route.pathname === '/people' && !(route as any).query?.status) {
+      const query = { ...(route as any).query, status: 'active' }
+      const search = '?status=active'
+      return { ...route, query, search, url: '/people' + search } as Route
+    }
+  }
+
+  function App() {
+    return (
+      <Router sync transformRoute={transformRoute} routes={routes}>
+        <Routes />
+      </Router>
+    )
+  }
+
+  await act(async () => {
+    const r = ReactDOM.createRoot(root)
+    r.render(<App />)
+  })
+
+  t.regex(window.document.body.innerHTML, /status=active/)
+  t.is(preparedStatus, 'active')
+  t.is(preparedUrl, '/people?status=active')
+})
+
+test.serial('transformRoute syncs the URL behind the # in hash mode', async (t) => {
+  setup()
+  // The app lives at /app?embed=1; the route url lives in the fragment.
+  g.location.pathname = '/app'
+  g.location.search = '?embed=1'
+  g.location.hash = '#/people'
+
+  const replaceStateCalls: string[] = []
+  g.history.replaceState = (_state: unknown, _title: string, url: string) => {
+    replaceStateCalls.push(url)
+  }
 
   const root = document.getElementById('root')
 
   const routes = [
     {
-      path: '/',
-      component: ({ children }) => <section>{children}</section>,
-      routes: [
-        // simulates a dynamically imported module: { default: Component }
-        { path: '/esm', component: { default: () => <div>ESM</div> } },
-        // null component renders nothing for this segment
-        { path: '/empty', component: null },
-      ],
+      path: '/people',
+      component: () => {
+        const r = useRoute()
+        return <div>status={String(r?.query?.status ?? 'none')}</div>
+      },
     },
   ]
 
+  function transformRoute(route: Route): Route | void {
+    if (route.pathname === '/people' && !(route as any).query?.status) {
+      const query = { ...(route as any).query, status: 'active' }
+      const search = '?status=active'
+      return { ...route, query, search, url: '/people' + search } as Route
+    }
+  }
+
+  function App() {
+    return (
+      <Router sync mode='hash' transformRoute={transformRoute} routes={routes}>
+        <Routes />
+      </Router>
+    )
+  }
+
+  await act(async () => {
+    const r = ReactDOM.createRoot(root)
+    r.render(<App />)
+  })
+
+  t.regex(window.document.body.innerHTML, /status=active/)
+  // The sync wrote a bare fragment url — the page's pathname and search are
+  // left for the browser to preserve, and the route url stays behind the #.
+  t.deepEqual(replaceStateCalls, ['#/people?status=active'])
+})
+
+test.serial('transformRoute leaves browser history untouched in memory mode', async (t) => {
+  setup()
+
+  const replaceStateCalls: string[] = []
+  g.history.replaceState = (_state: unknown, _title: string, url: string) => {
+    replaceStateCalls.push(url)
+  }
+
+  const root = document.getElementById('root')
   let router
 
   function Capture() {
-    const r = useInternalRouterInstance()
+    const r = useSpaceRouter()
     useEffect(() => {
       router = r
     }, [r])
     return null
   }
 
-  function App() {
-    return (
-      <Router sync>
-        <Capture />
-        <Routes routes={routes} />
-      </Router>
-    )
-  }
-
-  act(() => {
-    const r = ReactDOM.createRoot(root)
-    r.render(<App />)
-  })
-
-  act(() => {
-    router.navigate('/esm')
-  })
-  t.is(window.document.body.innerHTML, '<div id="root"><section><div>ESM</div></section></div>')
-
-  act(() => {
-    router.navigate('/empty')
-  })
-  t.is(window.document.body.innerHTML, '<div id="root"><section></section></div>')
-})
-
-test.serial('Link honours current override and function className/style/extraProps', (t) => {
-  setup()
-
   const routes = [
+    { path: '/', component: () => <div>Home</div> },
     {
-      path: '/',
-      component: () => (
-        <div>
-          <Link
-            href='/stuff'
-            current={true}
-            className={(isCurrent) => (isCurrent ? 'on' : 'off')}
-            style={(isCurrent) => ({ color: isCurrent ? 'red' : 'blue' })}
-            extraProps={(isCurrent) => ({ 'data-active': isCurrent ? 'yes' : 'no' })}
-          >
-            Forced
-          </Link>
-          <Link href='/stuff' current={false}>
-            Disabled
-          </Link>
-        </div>
-      ),
+      path: '/people',
+      component: () => {
+        const r = useRoute()
+        return <div>status={String(r?.query?.status ?? 'none')}</div>
+      },
     },
-    { path: '/stuff', component: () => <div>Stuff</div> },
   ]
 
-  function App() {
-    return (
-      <Router sync>
-        <Routes routes={routes} />
-      </Router>
-    )
+  function transformRoute(route: Route): Route | void {
+    if (route.pathname === '/people' && !(route as any).query?.status) {
+      const query = { ...(route as any).query, status: 'active' }
+      const search = '?status=active'
+      return { ...route, query, search, url: '/people' + search } as Route
+    }
   }
 
-  const root = document.getElementById('root')
-  act(() => {
-    const r = ReactDOM.createRoot(root)
-    r.render(<App />)
-  })
-
-  const [forced, disabled] = window.document.querySelectorAll('a')
-  t.is(forced.getAttribute('aria-current'), 'page')
-  t.is(forced.getAttribute('class'), 'on')
-  t.is(forced.getAttribute('style'), 'color: red;')
-  t.is(forced.getAttribute('data-active'), 'yes')
-  t.is(disabled.getAttribute('aria-current'), null)
-})
-
-test.serial('Link rendered alongside Routes in async mode does not crash', async (t) => {
-  setup()
-
-  const root = document.getElementById('root')
-
-  const routes = [{ path: '/', component: () => <div>Home</div> }]
-
   function App() {
     return (
-      <Router>
-        <Link href='/somewhere'>Nav</Link>
-        <Routes routes={routes} />
+      <Router sync mode='memory' transformRoute={transformRoute} routes={routes}>
+        <Capture />
+        <Routes />
       </Router>
     )
   }
@@ -410,10 +511,15 @@ test.serial('Link rendered alongside Routes in async mode does not crash', async
     r.render(<App />)
   })
 
-  // before the bug fix this crashed during render with "Cannot read properties of null (reading 'pathname')"
-  const link = window.document.querySelector('a')
-  t.is(link?.getAttribute('href'), '/somewhere')
-  t.is(link?.getAttribute('aria-current'), null)
+  await act(async () => {
+    router.navigate('/people')
+  })
+
+  t.regex(window.document.body.innerHTML, /status=active/)
+  // The sync stayed inside the router's memory stack...
+  t.is(router.getUrl(), '/people?status=active')
+  // ...and never touched real browser history.
+  t.deepEqual(replaceStateCalls, [])
 })
 
 test.serial('Routes passes children through when a middle segment has no component', (t) => {
@@ -423,7 +529,6 @@ test.serial('Routes passes children through when a middle segment has no compone
 
   const routes = [
     {
-      path: '/',
       component: ({ children }) => <section>{children}</section>,
       routes: [
         {
@@ -437,7 +542,7 @@ test.serial('Routes passes children through when a middle segment has no compone
   let router
 
   function Capture() {
-    const r = useInternalRouterInstance()
+    const r = useSpaceRouter()
     useEffect(() => {
       router = r
     }, [r])
@@ -446,9 +551,9 @@ test.serial('Routes passes children through when a middle segment has no compone
 
   function App() {
     return (
-      <Router sync>
+      <Router sync routes={routes}>
         <Capture />
-        <Routes routes={routes} />
+        <Routes />
       </Router>
     )
   }
@@ -465,27 +570,32 @@ test.serial('Routes passes children through when a middle segment has no compone
   t.is(window.document.body.innerHTML, '<div id="root"><section><article>Inner</article></section></div>')
 })
 
-test.serial('Link with target=_blank lets the browser open in a new tab', (t) => {
+test.serial('Routes injects path params as component props', (t) => {
   setup()
 
   const root = document.getElementById('root')
 
-  const routes = [
-    {
-      path: '/',
-      component: () => (
-        <Link href='/foo' target='_blank'>
-          NewTab
-        </Link>
-      ),
-    },
-    { path: '/foo', component: () => <div>Foo</div> },
-  ]
+  function Item({ id }: { id?: string }) {
+    return <div>item={id ?? 'missing'}</div>
+  }
+
+  const routes = [{ path: '/items/:id', component: Item }]
+
+  let router
+
+  function Capture() {
+    const r = useSpaceRouter()
+    useEffect(() => {
+      router = r
+    }, [r])
+    return null
+  }
 
   function App() {
     return (
-      <Router sync>
-        <Routes routes={routes} />
+      <Router sync routes={routes}>
+        <Capture />
+        <Routes />
       </Router>
     )
   }
@@ -495,31 +605,50 @@ test.serial('Link with target=_blank lets the browser open in a new tab', (t) =>
     r.render(<App />)
   })
 
-  const link = window.document.querySelector('a')!
   act(() => {
-    link.click()
+    router.navigate('/items/beacon')
   })
 
-  // navigation should NOT have happened — the browser handles target=_blank
-  t.is(location.pathname, '/')
+  t.is(window.document.body.innerHTML, '<div id="root"><div>item=beacon</div></div>')
 })
 
-test.serial('Link with cross-origin URL lets the browser handle it', (t) => {
+test.serial('Routes parses query hash splat optional params and wildcard routes', (t) => {
   setup()
 
   const root = document.getElementById('root')
 
+  function Inspector() {
+    const route = useRoute()
+    return (
+      <div>
+        path={route.pathname}; params={JSON.stringify(route.params)}; query={JSON.stringify(route.query)}; hash=
+        {route.hash}
+      </div>
+    )
+  }
+
   const routes = [
-    {
-      path: '/',
-      component: () => <Link href='https://example.com/foo'>External</Link>,
-    },
+    { path: '/files/:path+', component: Inspector },
+    { path: '/needs/:id+', component: Inspector },
+    { path: '/optional/:id?', component: Inspector },
+    { path: '*', component: Inspector },
   ]
+
+  let router
+
+  function Capture() {
+    const r = useSpaceRouter()
+    useEffect(() => {
+      router = r
+    }, [r])
+    return null
+  }
 
   function App() {
     return (
-      <Router sync>
-        <Routes routes={routes} />
+      <Router sync mode='memory' routes={routes}>
+        <Capture />
+        <Routes />
       </Router>
     )
   }
@@ -529,50 +658,154 @@ test.serial('Link with cross-origin URL lets the browser handle it', (t) => {
     r.render(<App />)
   })
 
-  const link = window.document.querySelector('a')!
   act(() => {
-    link.click()
+    router.navigate('/files/a/b?q=1#top')
   })
 
-  // SPA navigation should be skipped for cross-origin URLs
-  t.is(location.pathname, '/')
+  t.regex(window.document.body.innerHTML, /path=\/files\/a\/b/)
+  t.regex(window.document.body.innerHTML, /"path":"a\/b"/)
+  t.regex(window.document.body.innerHTML, /"q":"1"/)
+  t.regex(window.document.body.innerHTML, /hash=#top/)
+
+  act(() => {
+    router.navigate('/needs')
+  })
+
+  t.regex(window.document.body.innerHTML, /path=\/needs/)
+  t.notRegex(window.document.body.innerHTML, /"id":/)
+
+  act(() => {
+    router.navigate('/optional')
+  })
+
+  t.regex(window.document.body.innerHTML, /"id":""/)
+
+  act(() => {
+    router.navigate('/anything-else')
+  })
+
+  t.regex(window.document.body.innerHTML, /path=\/anything-else/)
 })
 
-test.serial('Link with download attribute lets the browser handle it', (t) => {
+test.serial('Router rematches the current URL when the route map changes in memory mode', async (t) => {
   setup()
 
   const root = document.getElementById('root')
+  let router
+  let setRoutes
 
-  const routes = [
-    {
-      path: '/',
-      component: () => (
-        <Link href='/file.pdf' download>
-          Download
-        </Link>
-      ),
-    },
-  ]
+  function Capture() {
+    const r = useSpaceRouter()
+    useEffect(() => {
+      router = r
+    }, [r])
+    return null
+  }
 
   function App() {
+    const [routes, _setRoutes] = useState<RouteDefinition[]>([{ path: '/swap', component: () => <div>A</div> }])
+    setRoutes = _setRoutes
     return (
-      <Router sync>
-        <Routes routes={routes} />
+      <Router sync mode='memory' routes={routes}>
+        <Capture />
+        <Routes />
       </Router>
     )
   }
 
-  act(() => {
+  await act(async () => {
     const r = ReactDOM.createRoot(root)
     r.render(<App />)
   })
 
-  const link = window.document.querySelector('a')!
-  act(() => {
-    link.click()
+  await act(async () => {
+    router.navigate('/swap')
   })
 
-  t.is(location.pathname, '/')
+  t.is(window.document.body.innerHTML, '<div id="root"><div>A</div></div>')
+
+  await act(async () => {
+    setRoutes([{ path: '/swap', component: () => <div>B</div> }])
+  })
+
+  t.is(window.document.body.innerHTML, '<div id="root"><div>B</div></div>')
+
+  await act(async () => {
+    setRoutes([])
+  })
+
+  t.is(window.document.body.innerHTML, '<div id="root"></div>')
+
+  await act(async () => {
+    setRoutes([{ path: '/swap', component: () => <div>C</div> }])
+  })
+
+  t.is(window.document.body.innerHTML, '<div id="root"><div>C</div></div>')
+})
+
+test.serial('Router prepares a route-map update once in history mode', async (t) => {
+  setup()
+  g.location.href = '/swap'
+  g.location.pathname = '/swap'
+
+  const root = document.getElementById('root')
+  const prepared: string[] = []
+  const released: string[] = []
+  let setRoutes
+
+  const makeRoutes = (label: string) => [
+    {
+      path: '/swap',
+      component: () => <div>{label}</div>,
+      prepare: () => {
+        prepared.push(label)
+        return [
+          {
+            promise: Promise.resolve(),
+            release: () => released.push(label),
+          },
+        ]
+      },
+    },
+  ]
+
+  function App() {
+    const [routes, _setRoutes] = useState(makeRoutes('A'))
+    setRoutes = _setRoutes
+    return (
+      <Router sync routes={routes}>
+        <Routes />
+      </Router>
+    )
+  }
+
+  await act(async () => {
+    ReactDOM.createRoot(root).render(<App />)
+  })
+
+  await act(async () => {
+    setRoutes(makeRoutes('B'))
+  })
+
+  t.deepEqual(prepared, ['A', 'B'])
+  t.deepEqual(released, ['A'])
+  t.is(window.document.body.innerHTML, '<div id="root"><div>B</div></div>')
+
+  await act(async () => {
+    setRoutes([])
+  })
+
+  t.deepEqual(prepared, ['A', 'B'])
+  t.deepEqual(released, ['A', 'B'])
+  t.is(window.document.body.innerHTML, '<div id="root"></div>')
+
+  await act(async () => {
+    setRoutes(makeRoutes('C'))
+  })
+
+  t.deepEqual(prepared, ['A', 'B', 'C'])
+  t.deepEqual(released, ['A', 'B'])
+  t.is(window.document.body.innerHTML, '<div id="root"><div>C</div></div>')
 })
 
 test.serial('Router recreates router when mode prop changes', (t) => {
@@ -580,9 +813,10 @@ test.serial('Router recreates router when mode prop changes', (t) => {
 
   const root = document.getElementById('root')
   const seenRouters = new Set()
+  const routes = []
 
   function Capture() {
-    const r = useInternalRouterInstance()
+    const r = useSpaceRouter()
     seenRouters.add(r)
     return null
   }
@@ -593,7 +827,7 @@ test.serial('Router recreates router when mode prop changes', (t) => {
     const [mode, _setMode] = useState('history')
     setMode = _setMode
     return (
-      <Router sync mode={mode}>
+      <Router routes={routes} sync mode={mode}>
         <Capture />
       </Router>
     )

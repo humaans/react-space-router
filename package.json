@@ -1,28 +1,29 @@
 {
   "name": "react-space-router",
   "description": "Space router bindings for React.",
-  "version": "0.6.6",
+  "version": "1.0.0-pre.7",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
       "default": "./dist/index.js"
     },
     "./package.json": "./package.json"
   },
   "files": [
     "dist",
-    "src"
+    "src",
+    "CHANGELOG.md",
+    "MIGRATION.md"
   ],
-  "license": "ICS",
+  "sideEffects": false,
+  "license": "ISC",
   "repository": {
     "type": "git",
-    "url": "git://github.com/humaans/react-space-router.git"
-  },
-  "engines": {
-    "node": ">=20.0.0"
+    "url": "https://github.com/humaans/react-space-router.git"
   },
   "keywords": [
     "react",
@@ -35,31 +36,38 @@
   ],
   "author": "Karolis Narkevicius",
   "scripts": {
-    "test": "npm run build && oxlint --ignore-pattern examples --ignore-pattern dist --ignore-pattern docs && oxfmt --check --ignore-path=.gitignore --ignore-path=.oxfmtignore '**/*.{ts,tsx,js,css,yml}' && c8 ava",
+    "test": "npm run build && oxlint --ignore-pattern demo --ignore-pattern dist --ignore-pattern docs && oxfmt --check --ignore-path=.gitignore --ignore-path=.oxfmtignore '**/*.{ts,tsx,js,css,yml}' && c8 ava",
+    "test:browser": "playwright test",
     "format": "oxfmt --ignore-path=.gitignore --ignore-path=.oxfmtignore '**/*.{ts,tsx,js,css,yml}'",
+    "demo": "npm run build && npm --prefix demo run dev",
+    "demo:build": "npm run build && npm --prefix demo run build",
     "coverage": "c8 --reporter=html ava",
     "build": "rm -rf dist && tsc",
+    "prepack": "npm run build",
     "watch": "tsc -w",
-    "release": "np --no-release-draft",
-    "release:beta": "np --tag=beta --no-release-draft",
-    "release:docs": "hugo -s docs && gh-pages -d docs/public"
+    "release": "np --no-publish && npm publish",
+    "release:next": "np --tag=next --any-branch --no-release-draft --no-publish && npm publish --tag=next",
+    "docs:watch": "hugo server -s docs",
+    "docs:build": "hugo -s docs",
+    "release:docs": "npm run docs:build && gh-pages -d docs/public"
   },
   "dependencies": {
-    "space-router": "^1.0.0"
+    "space-router": "^2.0.0"
   },
   "devDependencies": {
-    "@swc-node/register": "^1.11.1",
-    "@swc/core": "^1.15.30",
-    "@types/react": "^19.0.0",
-    "ava": "^7.0.0",
-    "c8": "^11.0.0",
+    "@playwright/test": "^1.61.1",
+    "@swc-node/register": "^1.12.1",
+    "@swc/core": "^1.15.46",
+    "@types/react": "^19.2.17",
+    "ava": "^8.0.1",
+    "c8": "^12.0.0",
     "gh-pages": "^6.3.0",
-    "jsdom": "^29.0.2",
-    "oxfmt": "^0.46.0",
-    "oxlint": "^1.61.0",
-    "react": "^19.2.5",
-    "react-dom": "^19.2.5",
-    "typescript": "^5.9.0"
+    "jsdom": "^29.1.1",
+    "oxfmt": "^0.59.0",
+    "oxlint": "^1.74.0",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "typescript": "^6.0.3"
   },
   "peerDependencies": {
     "react": ">=18"
@@ -68,12 +76,15 @@
     "files": [
       "test/*.test.*"
     ],
-    "extensions": {
-      "ts": "module",
-      "tsx": "module"
-    },
+    "extensions": [
+      "ts",
+      "tsx"
+    ],
     "nodeArguments": [
       "--import=@swc-node/register/esm-register"
     ]
+  },
+  "allowScripts": {
+    "@swc/core@1.15.43": true
   }
 }
