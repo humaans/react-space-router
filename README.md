@@ -28,7 +28,7 @@ If you need SSR, use a framework/router designed around request-time rendering. 
 ## Install
 
 ```sh
-$ npm install react-space-router
+$ npm install react-space-router@next
 ```
 
 ## Docs

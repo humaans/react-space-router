@@ -27,7 +27,7 @@ React Space Router is designed for client-rendered single-page applications. Ser
 ## Install
 
 ```sh
-$ npm install react-space-router
+$ npm install react-space-router@next
 ```
 
 ## Quick start
