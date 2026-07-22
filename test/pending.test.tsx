@@ -1,7 +1,7 @@
 // Pending navigation state: usePending, usePendingRoute, DelayedSuspense
 // holds, and async-mode popstate transition semantics.
 import test from 'ava'
-import { act, Suspense, useEffect } from 'react'
+import { act, Suspense, useEffect, useLayoutEffect, useRef } from 'react'
 import ReactDOM from 'react-dom/client'
 import {
   Router,
@@ -281,6 +281,101 @@ test.serial('committed DelayedSuspense fallback remains visible during the next 
   })
 
   t.true(window.document.body.innerHTML.includes('Destination page'))
+})
+
+test.serial('layout-effect navigation keeps its own delayed fallback hold', async (t) => {
+  setup()
+
+  const root = document.getElementById('root')
+  let resolveSlow: (() => void) | null = null
+  const slowGate = new Promise<void>((resolve) => {
+    resolveSlow = resolve
+  })
+
+  function BridgePage() {
+    const router = useSpaceRouter()
+    const queued = useRef(false)
+
+    useLayoutEffect(() => {
+      if (queued.current) return
+      queued.current = true
+      // Start the next navigation after this route commits but before the
+      // previous transition's passive settle effect runs.
+      router.navigate('/slow')
+    }, [router])
+
+    return <div>Bridge page</div>
+  }
+
+  function SlowChild() {
+    if (!(SlowChild as any).ready) {
+      throw slowGate.then(() => {
+        ;(SlowChild as any).ready = true
+      })
+    }
+    return <div>Slow page</div>
+  }
+
+  function SlowPage() {
+    return (
+      <DelayedSuspense fallback={<div>Inner fallback</div>}>
+        <SlowChild />
+      </DelayedSuspense>
+    )
+  }
+
+  const routes = [
+    { path: '/', component: () => <div>Home</div> },
+    { path: '/bridge', component: BridgePage },
+    { path: '/slow', component: SlowPage },
+  ]
+
+  let router
+
+  function Capture() {
+    const r = useSpaceRouter()
+    useEffect(() => {
+      router = r
+    }, [r])
+    return null
+  }
+
+  function App() {
+    return (
+      <Router sync pendingDelayMs={100} routes={routes}>
+        <Capture />
+        <Suspense fallback={<div>Outer fallback</div>}>
+          <Routes />
+        </Suspense>
+      </Router>
+    )
+  }
+
+  await act(async () => {
+    ReactDOM.createRoot(root).render(<App />)
+  })
+
+  await act(async () => {
+    router.navigate('/bridge')
+  })
+
+  t.true(window.document.body.innerHTML.includes('Bridge page'))
+  t.false(window.document.body.innerHTML.includes('Inner fallback'))
+  t.false(window.document.body.innerHTML.includes('Outer fallback'))
+
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 150))
+  })
+
+  t.true(window.document.body.innerHTML.includes('Inner fallback'))
+
+  await act(async () => {
+    resolveSlow!()
+    await Promise.resolve()
+    await Promise.resolve()
+  })
+
+  t.true(window.document.body.innerHTML.includes('Slow page'))
 })
 
 test.serial('usePendingRoute exposes the transformed in-flight route and clears on settle', async (t) => {

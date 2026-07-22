@@ -845,33 +845,37 @@ export function Router({
   // `<DelayedSuspense>` fallback on screen, which must remain visible while
   // the next route suspends.
   const nextHoldGeneration = useRef(0)
-  const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const holdTimer = useRef<{
+    generation: number
+    timeout: ReturnType<typeof setTimeout>
+  } | null>(null)
   const [renderHoldGeneration, setRenderHoldGeneration] = useState(0)
   const [releasedHoldGeneration, setReleasedHoldGeneration] = useState(0)
   const holding = renderHoldGeneration > releasedHoldGeneration
 
   const startHold = useCallback(() => {
     const generation = ++nextHoldGeneration.current
-    if (holdTimer.current !== null) clearTimeout(holdTimer.current)
-    holdTimer.current = setTimeout(() => {
-      holdTimer.current = null
+    if (holdTimer.current !== null) clearTimeout(holdTimer.current.timeout)
+    const timeout = setTimeout(() => {
+      if (holdTimer.current?.generation === generation) holdTimer.current = null
       setReleasedHoldGeneration((released) => Math.max(released, generation))
     }, pendingDelayMs)
+    holdTimer.current = { generation, timeout }
     return generation
   }, [pendingDelayMs])
 
   useEffect(() => {
     if (isPending) return
-    if (holdTimer.current !== null) {
-      clearTimeout(holdTimer.current)
+    if (holdTimer.current !== null && holdTimer.current.generation <= renderHoldGeneration) {
+      clearTimeout(holdTimer.current.timeout)
       holdTimer.current = null
     }
-    setReleasedHoldGeneration((released) => Math.max(released, nextHoldGeneration.current))
-  }, [isPending])
+    setReleasedHoldGeneration((released) => Math.max(released, renderHoldGeneration))
+  }, [isPending, renderHoldGeneration])
 
   useEffect(
     () => () => {
-      if (holdTimer.current !== null) clearTimeout(holdTimer.current)
+      if (holdTimer.current !== null) clearTimeout(holdTimer.current.timeout)
     },
     [],
   )
