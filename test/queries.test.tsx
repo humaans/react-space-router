@@ -11,18 +11,18 @@ function hover(el: Element) {
   el.dispatchEvent(new window.MouseEvent('mouseover', { bubbles: true }))
 }
 
-// A minimal figbird-shaped adapter that records how it was driven.
+// A minimal data adapter that records the opaque requests it receives.
 function makeAdapter() {
-  const prepared: Array<[unknown, unknown]> = []
-  const prefetched: Array<[unknown, unknown]> = []
-  const released: Array<[unknown, unknown]> = []
+  const prepared: unknown[] = []
+  const prefetched: unknown[] = []
+  const released: unknown[] = []
   const adapter: DataAdapter = {
-    prepare(def, args) {
-      prepared.push([def, args])
-      return { promise: Promise.resolve(), release: () => released.push([def, args]) }
+    prepare(request) {
+      prepared.push(request)
+      return { promise: Promise.resolve(), release: () => released.push(request) }
     },
-    prefetch(def, args) {
-      prefetched.push([def, args])
+    prefetch(request) {
+      prefetched.push(request)
     },
   }
   return { adapter, prepared, prefetched, released }
@@ -41,6 +41,7 @@ test.serial(
     const root = document.getElementById('root')
     const { adapter, prepared, prefetched } = makeAdapter()
     const issueDetail = { name: 'issueDetail' }
+    const issueRequest = (id: number) => ({ definition: issueDetail, args: { id } })
 
     const routes = [
       {
@@ -54,7 +55,7 @@ test.serial(
       {
         path: '/issues/:id',
         component: () => <div>Issue</div>,
-        queries: ({ params }: RoutePrepareContext) => [[issueDetail, { id: +params.id }]],
+        queries: ({ params }: RoutePrepareContext) => [issueRequest(+params.id)],
       },
     ]
 
@@ -71,14 +72,14 @@ test.serial(
     act(() => {
       hover(window.document.querySelector('a')!)
     })
-    t.deepEqual(prefetched, [[issueDetail, { id: 42 }]])
+    t.deepEqual(prefetched, [issueRequest(42)])
     t.deepEqual(prepared, [])
 
     // committing the navigation runs the same declaration through prepare
     await act(async () => {
       currentRouter.navigate('/issues/42')
     })
-    t.deepEqual(prepared, [[issueDetail, { id: 42 }]])
+    t.deepEqual(prepared, [issueRequest(42)])
   },
 )
 
@@ -91,8 +92,8 @@ test.serial('queries handles are pinned on navigation and released on the next',
 
   const routes = [
     { path: '/', component: () => <div>Home</div> },
-    { path: '/a', component: () => <div>A</div>, queries: () => [[a, { k: 1 }]] },
-    { path: '/b', component: () => <div>B</div>, queries: () => [[b, { k: 2 }]] },
+    { path: '/a', component: () => <div>A</div>, queries: [a] },
+    { path: '/b', component: () => <div>B</div>, queries: [b] },
   ]
 
   await act(async () => {
@@ -107,18 +108,15 @@ test.serial('queries handles are pinned on navigation and released on the next',
   await act(async () => {
     currentRouter.navigate('/a')
   })
-  t.deepEqual(prepared, [[a, { k: 1 }]])
+  t.deepEqual(prepared, [a])
   t.deepEqual(released, [])
 
   await act(async () => {
     currentRouter.navigate('/b')
   })
-  t.deepEqual(prepared, [
-    [a, { k: 1 }],
-    [b, { k: 2 }],
-  ])
+  t.deepEqual(prepared, [a, b])
   // the /a lease is released once /b commits
-  t.deepEqual(released, [[a, { k: 1 }]])
+  t.deepEqual(released, [a])
 })
 
 test.serial('prefetchable:false vetoes speculation but still prepares on navigation', async (t) => {
@@ -144,7 +142,7 @@ test.serial('prefetchable:false vetoes speculation but still prepares on navigat
         resolverCalls++
         return Promise.resolve({ default: () => <div>Heavy</div> })
       },
-      queries: () => [[heavy, { big: true }]],
+      queries: [heavy],
     },
   ]
 
@@ -168,7 +166,7 @@ test.serial('prefetchable:false vetoes speculation but still prepares on navigat
   await act(async () => {
     currentRouter.navigate('/heavy')
   })
-  t.deepEqual(prepared, [[heavy, { big: true }]])
+  t.deepEqual(prepared, [heavy])
   t.is(resolverCalls, 1)
 })
 
@@ -178,7 +176,7 @@ test.serial('a queries route without a data adapter throws loudly', (t) => {
   g.location.pathname = '/x'
   const root = document.getElementById('root')
 
-  const routes = [{ path: '/x', component: () => <div>X</div>, queries: () => [[{}, {}]] }]
+  const routes = [{ path: '/x', component: () => <div>X</div>, queries: [{}] }]
 
   const err = t.throws(() => {
     act(() => {

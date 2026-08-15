@@ -13,6 +13,8 @@ The router is now built around React's transition machinery: navigations run ins
 
 ### New
 
+- Synchronous parent-first route `guard(ctx)` checks can redirect before resolver loading, data preparation, prefetching, or rendering. This lets applications resolve already-known admission policy without coupling the router to authentication or a data layer.
+- Route `queries` are now flat arrays of opaque data-layer requests, declared statically or derived from route context. The router forwards each request unchanged to `data.prepare(request)` and `data.prefetch(request)`, leaving argument binding and validation to the adapter.
 - Suspense-aware navigation: the previous route stays on screen and interactive while the destination suspends. Pending state comes for free — `usePending()` for "is a navigation happening", `usePendingRoute()` for "where to", and a per-link `data-pending` attribute (plus `useLinkState(to)`) for "was it this link" — for clicks, programmatic navigation, and browser back/forward alike.
 - `usePreviousRoute()` for the route preceding the current successful commit. It is available on a destination's first render and ignores pending, suspended, superseded, and unmatched destinations.
 - Code-split routes via `resolver: () => import('./Page')`, preloaded at navigation time and rendered through `React.lazy`.
@@ -29,6 +31,7 @@ The router is now built around React's transition machinery: navigations run ins
 
 ### Fixed
 
+- Cold loads and speculative prefetches now resolve existing route redirects before preparing the redirect source, matching normal navigation behavior.
 - Navigation blocking now distinguishes hash-mode route traversal (`#/route`) from ordinary fragments, so Back/Forward guards work in hash-routed applications without taking ownership of `#section` links.
 - Rejected route resolvers no longer remain permanently cached; resetting an error boundary can retry transient chunk-load failures, while the documentation explains full-page reload recovery for stale deployments.
 - App-created navigation to a cross-page hash fragment now scrolls to the destination element after commit, falling back to the top when it is absent. Back/Forward and same-page hash links remain browser-owned.
