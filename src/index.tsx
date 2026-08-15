@@ -79,13 +79,6 @@ export type RoutePrefetch = (ctx: RoutePrepareContext) => unknown
 export type RouteQueries = readonly unknown[] | ((ctx: RoutePrepareContext) => readonly unknown[])
 
 /**
- * Synchronous route admission check. Return a destination to redirect before
- * resolver or data preparation begins; return `undefined` to admit the route.
- * Guards run parent-first and may redirect only to another route in this router.
- */
-export type RouteGuard = (ctx: RoutePrepareContext) => To | void
-
-/**
  * Bridges route `queries` to a data layer. Requests are deliberately opaque:
  * the adapter owns their shape, argument binding, and validation. `prepare`
  * returns a caller-managed lease; `prefetch` warms speculatively and its return
@@ -103,7 +96,6 @@ export type RouteResolver = () => Promise<ResolverModule>
 export interface RouteData {
   path?: string
   redirect?: Redirect<RouteData>
-  guard?: RouteGuard
   component?: ComponentType<any> | { default: ComponentType<any> } | null
   resolver?: RouteResolver
   prepare?: RoutePrepare
@@ -1299,14 +1291,14 @@ function resolveRouteBeforePrepare(
       return { route: transform(route), matched: initiallyMatched }
     }
     if (redirects === MAX_ROUTE_REDIRECTS) {
-      throw new Error('react-space-router: too many route redirects or guards')
+      throw new Error('react-space-router: too many route redirects')
     }
 
     const href = router.href(target, route)
     const routeUrl = router.routeUrl(href)
     const redirected = routeUrl === null ? undefined : matcher.match(routeUrl)
     if (!redirected) {
-      throw new Error(`react-space-router: route guard redirected to unmatched URL "${href}"`)
+      throw new Error(`react-space-router: route redirected to unmatched URL "${href}"`)
     }
     route = redirected
   }
@@ -1315,13 +1307,11 @@ function resolveRouteBeforePrepare(
 }
 
 function routeRedirect(route: Route<RouteData>): To | undefined {
-  const ctx = routePrepareContext(route)
   for (const segment of route.data) {
     if (segment.redirect) {
-      return typeof segment.redirect === 'function' ? segment.redirect(route) : segment.redirect
+      const target = typeof segment.redirect === 'function' ? segment.redirect(route) : segment.redirect
+      if (target !== undefined) return target
     }
-    const guarded = segment.guard?.(ctx)
-    if (guarded !== undefined) return guarded
   }
   return undefined
 }

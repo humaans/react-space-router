@@ -166,7 +166,7 @@ const routes = [
   {
     path: '/issues/:id',
     resolver: () => import('./pages/IssueDetail'),
-    queries: ({ params }) => [issueDetail.withArgs({ id: +params.id })],
+    queries: ({ params }) => [issueDetail({ id: +params.id })],
   },
 ]
 
@@ -175,6 +175,19 @@ const routes = [
 ```
 
 On navigation, each opaque query request runs through `data.prepare(request)` and the returned handles stay pinned until the route changes. On prefetch, the same request runs through `data.prefetch(request)` and the return value is ignored. The data layer owns argument binding and validation; the router only owns when requests are prepared and released. Resolver chunks are warmed too.
+
+The router invokes the outer `queries(ctx)` resolver, never the values inside its returned array. Function-valued requests remain opaque. This lets a data layer such as Figbird accept argumentless definitions directly while application code binds route-dependent definitions itself:
+
+```js
+// Static, argumentless definitions are forwarded as-is.
+queries: [customFieldsQuery, rolesQuery]
+
+// Only this outer resolver is invoked by the router.
+queries: ({ params }) => [
+  personQuery({ personId: params.id }),
+  permissionsQuery({ personId: params.id }),
+]
+```
 
 `<Link prefetch>` means cancellable hover intent (50ms by default) plus immediate focus/touch. Use `prefetch='visible'` for viewport-based prefetching, `<Router prefetchLinks>` to make prefetching the default for all links, and `prefetch={false}` to opt one link out. Configure the hover delay with `<Router prefetchHoverDelayMs={50}>`; `0` restores immediate hover prefetching. A route segment can set `prefetchable: false` to skip its own speculative work while still preparing normally on real navigation. Other matched segments still prefetch unless they also opt out.
 
@@ -248,8 +261,7 @@ const routes = [
 Pass the array to `<Router routes={routes}>`. Each definition can use these fields:
 
 - `path` an optional, complete URL pattern. See [Path patterns](#path-patterns).
-- `redirect` a navigation target, or `(route) => target`. Redirects replace the current history entry before the route reaches React. See [Redirects](#redirects).
-- `guard(ctx)` a synchronous admission check. Return a navigation target to redirect before preparation, or `undefined` to admit the route. See [Route guards](#route-guards).
+- `redirect` a navigation target, or `(route) => target | undefined`. Returning `undefined` admits the segment and continues checking its children. Redirects replace the current history entry before the route reaches React. See [Redirects](#redirects).
 - `component` a React component to render. It also accepts an ESM-default module shape such as `{ default: Component }`.
 - `resolver` a dynamic import such as `() => import('./Screen')`. The router preloads it at navigation time and renders it with `React.lazy`. A cold import suspends at the destination's Suspense boundary.
 - `queries` declares the route's data needs once as a static array of opaque requests, or as `queries(ctx)` when requests depend on route context. The `<Router data>` adapter prepares them on navigation and prefetches them during speculation. Requires a `data` adapter. See [Prefetching](#prefetching).
@@ -301,13 +313,11 @@ A function receives the matched route and can preserve params, query, or other s
 
 Redirects are resolved before component loading, data preparation, or React rendering and always replace the current history entry. A redirect can be declared on any segment in a matched nested branch. Redirect loops throw after ten redirects.
 
-#### Route guards
-
-Use `guard(ctx)` when admission depends on synchronous application state that is already known before the router mounts. Guards receive `{ pathname, url, params, query }` and run parent-first:
+For synchronous admission policy, return `undefined` from a functional redirect to admit the route. Redirects run parent-first, so a parent can protect an entire nested branch:
 
 ```js
 {
-  guard: ({ url }) => session.user
+  redirect: ({ url }) => session.user
     ? undefined
     : { pathname: '/login', query: { returnPath: url } },
   routes: [
@@ -316,9 +326,7 @@ Use `guard(ctx)` when admission depends on synchronous application state that is
 }
 ```
 
-Like redirects, guards resolve before resolver loading, route preparation, query preparation, speculative prefetching, or rendering. Redirected destinations are resolved through their own guards, with loops rejected after ten redirects.
-
-Guards may run during rendering and prefetching, so they must be pure, synchronous, and safe to repeat. Resolve asynchronous prerequisites such as restoring a persisted session before mounting `<Router>`; use guards only to apply the resulting synchronous policy.
+Functional redirects may run during rendering and prefetching, so they must be pure, synchronous, and safe to repeat. Resolve asynchronous prerequisites such as restoring a persisted session before mounting `<Router>`; use the redirect only to apply the resulting synchronous policy. Redirected destinations are checked in turn, with loops rejected after ten redirects.
 
 #### Prepared handles
 

@@ -13,7 +13,7 @@ The router is now built around React's transition machinery: navigations run ins
 
 ### New
 
-- Synchronous parent-first route `guard(ctx)` checks can redirect before resolver loading, data preparation, prefetching, or rendering. This lets applications resolve already-known admission policy without coupling the router to authentication or a data layer.
+- Functional route redirects may return `undefined` to admit a route, enabling synchronous parent-first admission checks before resolver loading, data preparation, prefetching, or rendering.
 - Route `queries` are now flat arrays of opaque data-layer requests, declared statically or derived from route context. The router forwards each request unchanged to `data.prepare(request)` and `data.prefetch(request)`, leaving argument binding and validation to the adapter.
 - Suspense-aware navigation: the previous route stays on screen and interactive while the destination suspends. Pending state comes for free — `usePending()` for "is a navigation happening", `usePendingRoute()` for "where to", and a per-link `data-pending` attribute (plus `useLinkState(to)`) for "was it this link" — for clicks, programmatic navigation, and browser back/forward alike.
 - `usePreviousRoute()` for the route preceding the current successful commit. It is available on a destination's first render and ignores pending, suspended, superseded, and unmatched destinations.

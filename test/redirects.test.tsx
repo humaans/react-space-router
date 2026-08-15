@@ -2,7 +2,7 @@ import test from 'ava'
 import { act } from 'react'
 import ReactDOM from 'react-dom/client'
 import { renderToString } from 'react-dom/server'
-import { Link, Router, Routes, useSpaceRouter, type DataAdapter, type RoutePrepareContext } from '../src/index.tsx'
+import { Link, Router, Routes, useSpaceRouter, type DataAdapter, type Route } from '../src/index.tsx'
 import { g, setup } from './helpers.ts'
 
 function makeAdapter() {
@@ -20,7 +20,7 @@ function makeAdapter() {
   return { adapter, prepared, prefetched }
 }
 
-test.serial('guards redirect the initial route before resolver and query preparation', (t) => {
+test.serial('conditional redirects resolve the initial route before resolver and query preparation', (t) => {
   setup()
   g.location.href = '/private'
   g.location.pathname = '/private'
@@ -29,7 +29,7 @@ test.serial('guards redirect the initial route before resolver and query prepara
 
   const routes = [
     {
-      guard: ({ url }: RoutePrepareContext) => ({
+      redirect: ({ url }: Route) => ({
         pathname: '/login',
         query: { returnPath: url },
       }),
@@ -62,7 +62,7 @@ test.serial('guards redirect the initial route before resolver and query prepara
   t.deepEqual(prepared, ['login'])
 })
 
-test.serial('guards are re-evaluated for navigation after application state changes', async (t) => {
+test.serial('conditional redirects are re-evaluated after application state changes', async (t) => {
   setup()
   const root = document.getElementById('root')
   const { adapter, prepared } = makeAdapter()
@@ -77,7 +77,7 @@ test.serial('guards are re-evaluated for navigation after application state chan
   const routes = [
     { path: '/', component: () => <div>Home</div> },
     {
-      guard: () => (admitted ? undefined : '/login'),
+      redirect: () => (admitted ? undefined : '/login'),
       routes: [
         {
           path: '/private',
@@ -91,7 +91,7 @@ test.serial('guards are re-evaluated for navigation after application state chan
 
   await act(async () => {
     ReactDOM.createRoot(root).render(
-      <Router routes={routes} data={adapter} sync>
+      <Router routes={routes} data={adapter} mode='memory' sync>
         <CaptureRouter />
         <Routes />
       </Router>,
@@ -108,7 +108,7 @@ test.serial('guards are re-evaluated for navigation after application state chan
   t.deepEqual(prepared, ['private'])
 })
 
-test.serial('prefetch resolves guards before warming route data', async (t) => {
+test.serial('prefetch resolves conditional redirects before warming route data', async (t) => {
   setup()
   const root = document.getElementById('root')
   const { adapter, prefetched } = makeAdapter()
@@ -123,7 +123,7 @@ test.serial('prefetch resolves guards before warming route data', async (t) => {
       ),
     },
     {
-      guard: () => '/login',
+      redirect: () => '/login',
       routes: [
         {
           path: '/private',
@@ -154,14 +154,17 @@ test.serial('prefetch resolves guards before warming route data', async (t) => {
   t.deepEqual(prefetched, ['login'])
 })
 
-test.serial('initial static redirects resolve before source preparation', (t) => {
+test.serial('an admitted parent continues to a child redirect before initial preparation', (t) => {
   setup()
   g.location.href = '/old'
   g.location.pathname = '/old'
   const { adapter, prepared } = makeAdapter()
 
   const routes = [
-    { path: '/old', redirect: '/new', queries: ['old'] },
+    {
+      redirect: () => undefined,
+      routes: [{ path: '/old', redirect: '/new', queries: ['old'] }],
+    },
     {
       path: '/new',
       component: () => <div>New</div>,

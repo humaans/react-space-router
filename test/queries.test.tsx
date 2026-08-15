@@ -87,7 +87,11 @@ test.serial('queries handles are pinned on navigation and released on the next',
   setup()
   const root = document.getElementById('root')
   const { adapter, prepared, released } = makeAdapter()
-  const a = { name: 'a' }
+  let requestCalls = 0
+  const a = () => {
+    requestCalls++
+    return { name: 'unexpected' }
+  }
   const b = { name: 'b' }
 
   const routes = [
@@ -109,6 +113,7 @@ test.serial('queries handles are pinned on navigation and released on the next',
     currentRouter.navigate('/a')
   })
   t.deepEqual(prepared, [a])
+  t.is(requestCalls, 0, 'function-valued requests must remain opaque')
   t.deepEqual(released, [])
 
   await act(async () => {
@@ -117,6 +122,7 @@ test.serial('queries handles are pinned on navigation and released on the next',
   t.deepEqual(prepared, [a, b])
   // the /a lease is released once /b commits
   t.deepEqual(released, [a])
+  t.is(requestCalls, 0, 'the router must never invoke array items')
 })
 
 test.serial('prefetchable:false vetoes speculation but still prepares on navigation', async (t) => {
