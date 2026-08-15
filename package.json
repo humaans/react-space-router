@@ -55,18 +55,18 @@
     "space-router": "^2.1.0"
   },
   "devDependencies": {
-    "@playwright/test": "^1.61.1",
+    "@playwright/test": "^1.62.1",
     "@swc-node/register": "^1.12.1",
-    "@swc/core": "^1.15.46",
-    "@types/react": "^19.2.17",
+    "@swc/core": "^1.16.0",
+    "@types/react": "^19.2.18",
     "ava": "^8.0.1",
     "c8": "^12.0.0",
     "gh-pages": "^6.3.0",
-    "jsdom": "^29.1.1",
-    "oxfmt": "^0.59.0",
-    "oxlint": "^1.74.0",
-    "react": "^19.2.7",
-    "react-dom": "^19.2.7",
+    "jsdom": "^30.0.1",
+    "oxfmt": "^0.63.0",
+    "oxlint": "^1.78.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
     "typescript": "^6.0.3"
   },
   "peerDependencies": {
@@ -85,6 +85,6 @@
     ]
   },
   "allowScripts": {
-    "@swc/core@1.15.43": true
+    "@swc/core@1.16.0": true
   }
 }
