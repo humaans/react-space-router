@@ -166,7 +166,7 @@ const routes = [
   {
     path: '/issues/:id',
     resolver: () => import('./pages/IssueDetail'),
-    queries: ({ params }) => [[issueDetail, { id: +params.id }]],
+    queries: ({ params }) => [issueDetail({ id: +params.id })],
   },
 ]
 
@@ -174,7 +174,20 @@ const routes = [
 <Link href={`/issues/${id}`} prefetch />
 ```
 
-On navigation, each query runs through `data.prepare(def, args)` and the returned handles stay pinned until the route changes. On prefetch, the same query runs through `data.prefetch(def, args)` and the return value is ignored. Resolver chunks are warmed too.
+On navigation, each opaque query request runs through `data.prepare(request)` and the returned handles stay pinned until the route changes. On prefetch, the same request runs through `data.prefetch(request)` and the return value is ignored. The data layer owns argument binding and validation; the router only owns when requests are prepared and released. Resolver chunks are warmed too.
+
+The router invokes the outer `queries(ctx)` resolver, never the values inside its returned array. Function-valued requests remain opaque. This lets a data layer such as Figbird accept argumentless definitions directly while application code binds route-dependent definitions itself:
+
+```js
+// Static, argumentless definitions are forwarded as-is.
+queries: [customFieldsQuery, rolesQuery]
+
+// Only this outer resolver is invoked by the router.
+queries: ({ params }) => [
+  personQuery({ personId: params.id }),
+  permissionsQuery({ personId: params.id }),
+]
+```
 
 `<Link prefetch>` means cancellable hover intent (50ms by default) plus immediate focus/touch. Use `prefetch='visible'` for viewport-based prefetching, `<Router prefetchLinks>` to make prefetching the default for all links, and `prefetch={false}` to opt one link out. Configure the hover delay with `<Router prefetchHoverDelayMs={50}>`; `0` restores immediate hover prefetching. A route segment can set `prefetchable: false` to skip its own speculative work while still preparing normally on real navigation. Other matched segments still prefetch unless they also opt out.
 
@@ -220,7 +233,7 @@ Props:
 - `sync` if `true`, the underlying space-router fires synchronous transitions (useful in tests).
 - `transformRoute(route)` an optional pure, synchronous route transform. See [Route transform](#route-transform).
 - `transformQuery(query, { to, sourceRoute, targetRoute })` an optional pure, synchronous mapping for the query of app-created destinations. It returns the query serialized by the configured `qs` codec, or `null` to remove the query. See [Query transform](#query-transform).
-- `data` a data adapter of shape `{ prepare(def, args), prefetch(def, args) }` that bridges route `queries` to a data layer (see [Prefetching](#prefetching)). `prepare` returns a `PreparedHandle`; `prefetch` warms speculatively. figbird's kit satisfies this directly. Should be referentially stable; required only if a route uses `queries`.
+- `data` a data adapter of shape `{ prepare(request), prefetch(request) }` that bridges route `queries` to a data layer (see [Prefetching](#prefetching)). Requests are opaque to the router; `prepare` returns a `PreparedHandle` and `prefetch` warms speculatively. Should be referentially stable; required only if a route uses `queries`.
 - `prefetchLinks` default prefetch trigger for every link: `true`/`'hover'` or `'visible'`. Individual links override with their own `prefetch` prop, including `prefetch={false}` to opt out. Off by default.
 - `prefetchHoverDelayMs` cancellable hover-intent delay for prefetching links. Focus and touchstart remain immediate. Default: `50`; set to `0` for immediate hover prefetching.
 - `pendingDelayMs` how long `<DelayedSuspense>` holds the previous route before rendering its fallback during an in-flight navigation. Default: `1000`.
@@ -249,9 +262,10 @@ Pass the array to `<Router routes={routes}>`. Each definition can use these fiel
 
 - `path` an optional, complete URL pattern. See [Path patterns](#path-patterns).
 - `redirect` a navigation target, or `(route) => target`. Redirects replace the current history entry before the route reaches React. See [Redirects](#redirects).
+- `guard(route)` a synchronous admission check. Return a navigation target to redirect before preparation, or `undefined` to admit the route. See [Route guards](#route-guards).
 - `component` a React component to render. It also accepts an ESM-default module shape such as `{ default: Component }`.
 - `resolver` a dynamic import such as `() => import('./Screen')`. The router preloads it at navigation time and renders it with `React.lazy`. A cold import suspends at the destination's Suspense boundary.
-- `queries(ctx)` declares the route's data needs once as `[def, args]` pairs. The `<Router data>` adapter prepares them on navigation and prefetches them during speculation. Requires a `data` adapter. See [Prefetching](#prefetching).
+- `queries` declares the route's data needs once as a static array of opaque requests, or as `queries(ctx)` when requests depend on route context. The `<Router data>` adapter prepares them on navigation and prefetches them during speculation. Requires a `data` adapter. See [Prefetching](#prefetching).
 - `prepare(ctx)` is the low-level alternative to `queries` for navigation. It receives `{ pathname, url, params, query }` and returns handles that stay pinned for the committed navigation. Setup is synchronous and must not throw; surface request errors later through the data cache's Suspense read path.
 - `prefetch(ctx)` is the low-level alternative to `queries` for prefetching. It runs when a prefetching link warms the route, may run at any frequency, and ignores its return value.
 - `prefetchable` set to `false` skips speculative resolver, `prefetch`, and query work for this segment while preserving normal preparation during navigation. Other matched segments still prefetch unless they also opt out. It overrides an explicit `<Link prefetch>` for this segment.
@@ -299,6 +313,25 @@ A function receives the matched route and can preserve params, query, or other s
 ```
 
 Redirects are resolved before component loading, data preparation, or React rendering and always replace the current history entry. A redirect can be declared on any segment in a matched nested branch. Redirect loops throw after ten redirects.
+
+#### Route guards
+
+Use `guard(route)` when admission depends on synchronous application state that is already known before the router mounts. Guards receive the matched route, run parent-first, and can protect an entire nested branch:
+
+```js
+{
+  guard: ({ url }) => session.user
+    ? undefined
+    : { pathname: '/login', query: { returnPath: url } },
+  routes: [
+    { path: '/settings', component: Settings },
+  ],
+}
+```
+
+Like redirects, guards resolve before resolver loading, route preparation, query preparation, speculative prefetching, or rendering. Redirected destinations are resolved through their own guards, with loops rejected after ten redirects or guards.
+
+Guards may run during rendering and prefetching, so they must be pure, synchronous, and safe to repeat. Resolve asynchronous prerequisites such as restoring a persisted session before mounting `<Router>`; use guards only to apply the resulting synchronous policy.
 
 #### Prepared handles
 

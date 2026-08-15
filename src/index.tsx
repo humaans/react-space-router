@@ -20,9 +20,12 @@ import {
 import {
   createMatcher,
   createRouter,
+  getRouteRedirect,
+  type Guard,
   type Mode,
   type NavigationInfo,
   type NavigateTarget,
+  type Matcher,
   type Qs,
   type Redirect,
   type Route,
@@ -69,30 +72,30 @@ export type RoutePrepare = (ctx: RoutePrepareContext) => readonly PreparedHandle
 export type RoutePrefetch = (ctx: RoutePrepareContext) => unknown
 
 /**
- * A query to warm: a `[definition, args]` pair. Opaque to the router — it
- * flows straight through the `<Router data>` adapter. `args` is optional for
- * arg-less queries.
- */
-export type QueryDescriptor = readonly [def: unknown, args?: unknown]
-
-/**
  * Declares a route segment's data needs *once*, independent of lifecycle. The
- * router runs each descriptor through the `<Router data>` adapter — `prepare`
- * on navigation, `prefetch` on speculation — so a single declaration drives
- * both. Requires a `data` adapter; a `queries` route without one throws.
+ * router forwards each opaque request through the `<Router data>` adapter —
+ * `prepare` on navigation, `prefetch` on speculation — so a single declaration
+ * drives both. Static arrays cover fixed requests; a resolver can derive
+ * requests from route context. Requires a `data` adapter.
  */
-export type RouteQueries = (ctx: RoutePrepareContext) => readonly QueryDescriptor[]
+export type RouteQueries = readonly unknown[] | ((ctx: RoutePrepareContext) => readonly unknown[])
 
 /**
- * Bridges route `queries` to a data layer, co-designed with figbird's kit the
- * same way `PreparedHandle` was: `prepare(def, args)` returns a pinnable handle
- * (caller-managed lease), `prefetch(def, args)` warms speculatively and its
- * return is ignored. figbird's `prepare`/`prefetch` satisfy this shape as-is —
- * `<Router data={{ prepare, prefetch }} />`.
+ * Synchronous route admission check. Return a destination to redirect before
+ * resolver or data preparation begins; return `undefined` to admit the route.
+ * Guards run parent-first and may redirect only to another route in this router.
+ */
+export type RouteGuard = Guard<RouteData>
+
+/**
+ * Bridges route `queries` to a data layer. Requests are deliberately opaque:
+ * the adapter owns their shape, argument binding, and validation. `prepare`
+ * returns a caller-managed lease; `prefetch` warms speculatively and its return
+ * is ignored.
  */
 export interface DataAdapter {
-  prepare(def: unknown, args: unknown): PreparedHandle
-  prefetch(def: unknown, args: unknown): unknown
+  prepare(request: unknown): PreparedHandle
+  prefetch(request: unknown): unknown
 }
 
 export type ResolverModule = { default: ComponentType<any> }
@@ -102,6 +105,7 @@ export type RouteResolver = () => Promise<ResolverModule>
 export interface RouteData {
   path?: string
   redirect?: Redirect<RouteData>
+  guard?: RouteGuard
   component?: ComponentType<any> | { default: ComponentType<any> } | null
   resolver?: RouteResolver
   prepare?: RoutePrepare
@@ -762,11 +766,10 @@ export interface RouterProps {
    */
   transformQuery?: TransformQuery
   /**
-   * Data adapter bridging route `queries` to a data layer. `prepare(def,
-   * args)` returns a pinnable `PreparedHandle`, `prefetch(def, args)` warms
-   * speculatively. figbird's kit satisfies this directly: `data={{ prepare,
-   * prefetch }}`. Should be referentially stable (a module-level object or
-   * the figbird instance). Required only if any route uses `queries`.
+   * Data adapter bridging route `queries` to a data layer. Each opaque request
+   * is passed to `prepare(request)` or `prefetch(request)` unchanged. Should be
+   * referentially stable (a module-level object or data-layer instance).
+   * Required only if any route uses `queries`.
    */
   data?: DataAdapter
   /**
@@ -891,6 +894,10 @@ export function Router({
   }, [])
 
   const matcher = useMemo(() => createMatcher(routes, { qs }), [routes, qs])
+  const resolveRoute = useCallback(
+    (matched: Route<RouteData>) => resolveRouteBeforePrepare(matched, matcher, router, applyTransform),
+    [matcher, router, applyTransform],
+  )
   const blockers = useMemo(() => createNavigationBlockerRegistry(router), [router])
 
   const targetRouter = useTargetRouter({
@@ -931,23 +938,22 @@ export function Router({
   )
 
   // Begin a fresh navigation: release the superseded pending preparation,
-  // prepare the transformed destination, and commit that exact prepared
-  // object. URL identity is never used to transfer lease ownership.
+  // prepare the resolved destination, and commit that exact prepared object.
+  // URL identity is never used to transfer lease ownership.
   const beginNavigation = useCallback(
-    (
-      matched: Route<RouteData>,
-      transformed: Route<RouteData> = applyTransform(matched),
-      source: NavigationSource = 'navigation',
-    ) => {
+    (resolvedRoute: ResolvedRoute, source: NavigationSource = 'navigation') => {
       const superseded = pendingPrepared.current
       pendingPrepared.current = null
       if (superseded) releaseHandles(superseded.handles)
 
-      const prepared = { route: transformed, matched, handles: prepareRoute(transformed, data) }
+      const prepared = {
+        ...resolvedRoute,
+        handles: prepareRoute(resolvedRoute.route, data),
+      }
       pendingPrepared.current = prepared
       commit(prepared, source)
     },
-    [applyTransform, commit, data],
+    [commit, data],
   )
 
   const beginUnmatched = useCallback(() => {
@@ -985,8 +991,8 @@ export function Router({
   const initialRoute = useMemo<Pick<PreparedRoute, 'route' | 'matched'> | null>(() => {
     if (resolved) return null
     const matched = matcher.match(router.getUrl())
-    return matched ? { route: applyTransform(matched), matched } : null
-  }, [resolved, router, matcher, applyTransform])
+    return matched ? resolveRoute(matched) : null
+  }, [resolved, router, matcher, resolveRoute])
 
   // Prepare the initial destination during render so its components can read
   // seeded data on their first render and code/data loading overlaps. The
@@ -1031,11 +1037,11 @@ export function Router({
 
       // Transform fresh on every navigation because application state may
       // change the result even when the matched URL is identical.
-      const transformed = applyTransform(matched)
+      const resolvedRoute = resolveRoute(matched)
 
       // The listener's first emit adopts the preparation created during the
       // initial render. Every later same-URL emit is a real navigation.
-      if (!hasResolvedRoute.current && committed.current?.route.url === transformed.url) {
+      if (!hasResolvedRoute.current && committed.current?.route.url === resolvedRoute.route.url) {
         const superseded = pendingPrepared.current
         pendingPrepared.current = null
         if (superseded) releaseHandles(superseded.handles)
@@ -1043,10 +1049,10 @@ export function Router({
         return
       }
 
-      beginNavigation(matched, transformed, source)
+      beginNavigation(resolvedRoute, source)
     }
     return router.listen(routes, transition)
-  }, [router, routes, applyTransform, commit, beginNavigation, beginUnmatched])
+  }, [router, routes, resolveRoute, commit, beginNavigation, beginUnmatched])
 
   useEffect(() => {
     if (previousRoutes.current === routes) return
@@ -1059,9 +1065,9 @@ export function Router({
 
     const currentUrl = currRoute?.url ?? committed.current?.route.url ?? router.getUrl()
     const matched = currentUrl ? matcher.match(currentUrl) : undefined
-    if (matched) beginNavigation(matched)
+    if (matched) beginNavigation(resolveRoute(matched))
     else beginUnmatched()
-  }, [routes, router, routerOpts.mode, matcher, beginNavigation, beginUnmatched, currRoute?.url])
+  }, [routes, router, routerOpts.mode, matcher, resolveRoute, beginNavigation, beginUnmatched, currRoute?.url])
 
   useEffect(() => {
     const prepared = pendingPrepared.current
@@ -1088,9 +1094,9 @@ export function Router({
   const prefetchResolved = useCallback(
     (target: ResolvedTarget) => {
       const matched = target.routeUrl === null ? undefined : matcher.match(target.routeUrl)
-      if (matched) prefetchRoute(applyTransform(matched), data)
+      if (matched) prefetchRoute(resolveRoute(matched).route, data)
     },
-    [matcher, applyTransform, data],
+    [matcher, resolveRoute, data],
   )
 
   const targets = useMemo<RouterTargets>(
@@ -1194,6 +1200,8 @@ interface PreparedRoute {
   handles: PreparedHandle[]
 }
 
+type ResolvedRoute = Pick<PreparedRoute, 'route' | 'matched'>
+
 interface InitialPreparedRoute {
   prepared: PreparedRoute
   routes: RouteDefinition<RouteData>[]
@@ -1273,6 +1281,37 @@ function routePrepareContext(route: Route<RouteData>): RoutePrepareContext {
   return { pathname: route.pathname, url: route.url, params: route.params, query: route.query }
 }
 
+const MAX_ROUTE_REDIRECTS = 10
+
+function resolveRouteBeforePrepare(
+  initiallyMatched: Route<RouteData>,
+  matcher: Matcher<RouteData>,
+  router: SpaceRouter<RouteData>,
+  transform: (route: Route<RouteData>) => Route<RouteData>,
+): ResolvedRoute {
+  let route = initiallyMatched
+
+  for (let redirects = 0; redirects <= MAX_ROUTE_REDIRECTS; redirects++) {
+    const target = getRouteRedirect(route)
+    if (target === undefined) {
+      return { route: transform(route), matched: initiallyMatched }
+    }
+    if (redirects === MAX_ROUTE_REDIRECTS) {
+      throw new Error('react-space-router: too many route redirects or guards')
+    }
+
+    const href = router.href(target, route)
+    const routeUrl = router.routeUrl(href)
+    const redirected = routeUrl === null ? undefined : matcher.match(routeUrl)
+    if (!redirected) {
+      throw new Error(`react-space-router: route redirect or guard targeted unmatched URL "${href}"`)
+    }
+    route = redirected
+  }
+
+  throw new Error('react-space-router: failed to resolve route')
+}
+
 function requireAdapter(data: DataAdapter | undefined): DataAdapter {
   if (!data) {
     throw new Error(
@@ -1280,6 +1319,10 @@ function requireAdapter(data: DataAdapter | undefined): DataAdapter {
     )
   }
   return data
+}
+
+function resolveRouteQueries(queries: RouteQueries, ctx: RoutePrepareContext): readonly unknown[] {
+  return typeof queries === 'function' ? queries(ctx) : queries
 }
 
 function prepareRoute(route: Route<RouteData>, data: DataAdapter | undefined): PreparedHandle[] {
@@ -1297,8 +1340,8 @@ function prepareRoute(route: Route<RouteData>, data: DataAdapter | undefined): P
       }
       if (segment.queries) {
         const adapter = requireAdapter(data)
-        for (const [def, args] of segment.queries(ctx)) {
-          handles.push(adapter.prepare(def, args))
+        for (const request of resolveRouteQueries(segment.queries, ctx)) {
+          handles.push(adapter.prepare(request))
         }
       }
     }
@@ -1323,8 +1366,8 @@ function prefetchRoute(route: Route<RouteData>, data: DataAdapter | undefined) {
     segment.prefetch?.(ctx)
     if (segment.queries) {
       const adapter = requireAdapter(data)
-      for (const [def, args] of segment.queries(ctx)) {
-        adapter.prefetch(def, args)
+      for (const request of resolveRouteQueries(segment.queries, ctx)) {
+        adapter.prefetch(request)
       }
     }
   }

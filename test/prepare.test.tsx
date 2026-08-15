@@ -50,7 +50,7 @@ test.serial('Router releases acquired handles when later route preparation fails
       routes: [
         {
           path: '/broken',
-          queries: () => [['missing-adapter']],
+          queries: ['missing-adapter'],
           component: () => null,
         },
       ],
