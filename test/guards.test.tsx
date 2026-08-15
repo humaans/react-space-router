@@ -20,7 +20,7 @@ function makeAdapter() {
   return { adapter, prepared, prefetched }
 }
 
-test.serial('conditional redirects resolve the initial route before resolver and query preparation', (t) => {
+test.serial('guards redirect the initial route before resolver and query preparation', (t) => {
   setup()
   g.location.href = '/private'
   g.location.pathname = '/private'
@@ -29,7 +29,7 @@ test.serial('conditional redirects resolve the initial route before resolver and
 
   const routes = [
     {
-      redirect: ({ url }: Route) => ({
+      guard: ({ url }: Route) => ({
         pathname: '/login',
         query: { returnPath: url },
       }),
@@ -62,7 +62,7 @@ test.serial('conditional redirects resolve the initial route before resolver and
   t.deepEqual(prepared, ['login'])
 })
 
-test.serial('conditional redirects are re-evaluated after application state changes', async (t) => {
+test.serial('guards are re-evaluated after application state changes', async (t) => {
   setup()
   const root = document.getElementById('root')
   const { adapter, prepared } = makeAdapter()
@@ -77,7 +77,7 @@ test.serial('conditional redirects are re-evaluated after application state chan
   const routes = [
     { path: '/', component: () => <div>Home</div> },
     {
-      redirect: () => (admitted ? undefined : '/login'),
+      guard: () => (admitted ? undefined : '/login'),
       routes: [
         {
           path: '/private',
@@ -108,7 +108,7 @@ test.serial('conditional redirects are re-evaluated after application state chan
   t.deepEqual(prepared, ['private'])
 })
 
-test.serial('prefetch resolves conditional redirects before warming route data', async (t) => {
+test.serial('prefetch resolves guards before warming route data', async (t) => {
   setup()
   const root = document.getElementById('root')
   const { adapter, prefetched } = makeAdapter()
@@ -123,7 +123,7 @@ test.serial('prefetch resolves conditional redirects before warming route data',
       ),
     },
     {
-      redirect: () => '/login',
+      guard: () => '/login',
       routes: [
         {
           path: '/private',
@@ -154,7 +154,7 @@ test.serial('prefetch resolves conditional redirects before warming route data',
   t.deepEqual(prefetched, ['login'])
 })
 
-test.serial('an admitted parent continues to a child redirect before initial preparation', (t) => {
+test.serial('parent guards run before child redirects during initial preparation', (t) => {
   setup()
   g.location.href = '/old'
   g.location.pathname = '/old'
@@ -162,9 +162,39 @@ test.serial('an admitted parent continues to a child redirect before initial pre
 
   const routes = [
     {
-      redirect: () => undefined,
+      guard: () => '/login',
       routes: [{ path: '/old', redirect: '/new', queries: ['old'] }],
     },
+    {
+      path: '/login',
+      component: () => <div>Login</div>,
+      queries: ['login'],
+    },
+    {
+      path: '/new',
+      component: () => <div>New</div>,
+      queries: ['new'],
+    },
+  ]
+
+  const html = renderToString(
+    <Router routes={routes} data={adapter} sync>
+      <Routes />
+    </Router>,
+  )
+
+  t.is(html, '<div>Login</div>')
+  t.deepEqual(prepared, ['login'])
+})
+
+test.serial('initial static redirects resolve before source preparation', (t) => {
+  setup()
+  g.location.href = '/old'
+  g.location.pathname = '/old'
+  const { adapter, prepared } = makeAdapter()
+
+  const routes = [
+    { path: '/old', redirect: '/new', queries: ['old'] },
     {
       path: '/new',
       component: () => <div>New</div>,

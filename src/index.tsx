@@ -20,6 +20,8 @@ import {
 import {
   createMatcher,
   createRouter,
+  getRouteRedirect,
+  type Guard,
   type Mode,
   type NavigationInfo,
   type NavigateTarget,
@@ -79,6 +81,13 @@ export type RoutePrefetch = (ctx: RoutePrepareContext) => unknown
 export type RouteQueries = readonly unknown[] | ((ctx: RoutePrepareContext) => readonly unknown[])
 
 /**
+ * Synchronous route admission check. Return a destination to redirect before
+ * resolver or data preparation begins; return `undefined` to admit the route.
+ * Guards run parent-first and may redirect only to another route in this router.
+ */
+export type RouteGuard = Guard<RouteData>
+
+/**
  * Bridges route `queries` to a data layer. Requests are deliberately opaque:
  * the adapter owns their shape, argument binding, and validation. `prepare`
  * returns a caller-managed lease; `prefetch` warms speculatively and its return
@@ -96,6 +105,7 @@ export type RouteResolver = () => Promise<ResolverModule>
 export interface RouteData {
   path?: string
   redirect?: Redirect<RouteData>
+  guard?: RouteGuard
   component?: ComponentType<any> | { default: ComponentType<any> } | null
   resolver?: RouteResolver
   prepare?: RoutePrepare
@@ -1286,34 +1296,24 @@ function resolveRouteBeforePrepare(
   let route = initiallyMatched
 
   for (let redirects = 0; redirects <= MAX_ROUTE_REDIRECTS; redirects++) {
-    const target = routeRedirect(route)
+    const target = getRouteRedirect(route)
     if (target === undefined) {
       return { route: transform(route), matched: initiallyMatched }
     }
     if (redirects === MAX_ROUTE_REDIRECTS) {
-      throw new Error('react-space-router: too many route redirects')
+      throw new Error('react-space-router: too many route redirects or guards')
     }
 
     const href = router.href(target, route)
     const routeUrl = router.routeUrl(href)
     const redirected = routeUrl === null ? undefined : matcher.match(routeUrl)
     if (!redirected) {
-      throw new Error(`react-space-router: route redirected to unmatched URL "${href}"`)
+      throw new Error(`react-space-router: route redirect or guard targeted unmatched URL "${href}"`)
     }
     route = redirected
   }
 
   throw new Error('react-space-router: failed to resolve route')
-}
-
-function routeRedirect(route: Route<RouteData>): To | undefined {
-  for (const segment of route.data) {
-    if (segment.redirect) {
-      const target = typeof segment.redirect === 'function' ? segment.redirect(route) : segment.redirect
-      if (target !== undefined) return target
-    }
-  }
-  return undefined
 }
 
 function requireAdapter(data: DataAdapter | undefined): DataAdapter {

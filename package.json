@@ -52,7 +52,7 @@
     "release:docs": "npm run docs:build && gh-pages -d docs/public"
   },
   "dependencies": {
-    "space-router": "^2.0.0"
+    "space-router": "^2.1.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.61.1",

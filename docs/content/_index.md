@@ -261,7 +261,8 @@ const routes = [
 Pass the array to `<Router routes={routes}>`. Each definition can use these fields:
 
 - `path` an optional, complete URL pattern. See [Path patterns](#path-patterns).
-- `redirect` a navigation target, or `(route) => target | undefined`. Returning `undefined` admits the segment and continues checking its children. Redirects replace the current history entry before the route reaches React. See [Redirects](#redirects).
+- `redirect` a navigation target, or `(route) => target`. Redirects replace the current history entry before the route reaches React. See [Redirects](#redirects).
+- `guard(route)` a synchronous admission check. Return a navigation target to redirect before preparation, or `undefined` to admit the route. See [Route guards](#route-guards).
 - `component` a React component to render. It also accepts an ESM-default module shape such as `{ default: Component }`.
 - `resolver` a dynamic import such as `() => import('./Screen')`. The router preloads it at navigation time and renders it with `React.lazy`. A cold import suspends at the destination's Suspense boundary.
 - `queries` declares the route's data needs once as a static array of opaque requests, or as `queries(ctx)` when requests depend on route context. The `<Router data>` adapter prepares them on navigation and prefetches them during speculation. Requires a `data` adapter. See [Prefetching](#prefetching).
@@ -313,11 +314,13 @@ A function receives the matched route and can preserve params, query, or other s
 
 Redirects are resolved before component loading, data preparation, or React rendering and always replace the current history entry. A redirect can be declared on any segment in a matched nested branch. Redirect loops throw after ten redirects.
 
-For synchronous admission policy, return `undefined` from a functional redirect to admit the route. Redirects run parent-first, so a parent can protect an entire nested branch:
+#### Route guards
+
+Use `guard(route)` when admission depends on synchronous application state that is already known before the router mounts. Guards receive the matched route, run parent-first, and can protect an entire nested branch:
 
 ```js
 {
-  redirect: ({ url }) => session.user
+  guard: ({ url }) => session.user
     ? undefined
     : { pathname: '/login', query: { returnPath: url } },
   routes: [
@@ -326,7 +329,9 @@ For synchronous admission policy, return `undefined` from a functional redirect 
 }
 ```
 
-Functional redirects may run during rendering and prefetching, so they must be pure, synchronous, and safe to repeat. Resolve asynchronous prerequisites such as restoring a persisted session before mounting `<Router>`; use the redirect only to apply the resulting synchronous policy. Redirected destinations are checked in turn, with loops rejected after ten redirects.
+Like redirects, guards resolve before resolver loading, route preparation, query preparation, speculative prefetching, or rendering. Redirected destinations are resolved through their own guards, with loops rejected after ten redirects or guards.
+
+Guards may run during rendering and prefetching, so they must be pure, synchronous, and safe to repeat. Resolve asynchronous prerequisites such as restoring a persisted session before mounting `<Router>`; use guards only to apply the resulting synchronous policy.
 
 #### Prepared handles
 
