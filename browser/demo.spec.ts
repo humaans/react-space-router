@@ -49,6 +49,22 @@ test('reveals delayed fallbacks after the configured threshold', async ({ page }
   await expect(page.getByText(/You might also like/)).toBeVisible({ timeout: 5_000 })
 })
 
+test('prepares opaque query requests for detail routes', async ({ page }) => {
+  await page.goto('/mode-d/atlas')
+
+  await expect(page.getByRole('heading', { name: 'Atlas' })).toBeVisible({ timeout: 5_000 })
+  await expect(page.getByText('item-atlas', { exact: true })).toBeVisible()
+
+  const beacon = page.getByRole('link', { name: /Beacon/ })
+  await beacon.click()
+
+  await expect(page).toHaveURL('/mode-d/beacon')
+  await expect(beacon).toHaveAttribute('data-pending', '')
+  await expect(page.getByRole('heading', { name: 'Atlas' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Beacon' })).toBeVisible({ timeout: 5_000 })
+  await expect(page.getByText('item-beacon', { exact: true })).toBeVisible()
+})
+
 test('navigation blocking demo can stay or discard and leave', async ({ page }) => {
   await openDemo(page)
   await page.getByRole('link', { name: /Navigation blocking/ }).click()

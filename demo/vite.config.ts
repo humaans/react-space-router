@@ -11,7 +11,7 @@ export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: {
-      'react-space-router': path.resolve(__dirname, '../dist/index.js'),
+      'react-space-router': path.resolve(import.meta.dirname, '../dist/index.js'),
     },
     dedupe: ['react', 'react-dom'],
   },

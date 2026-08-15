@@ -7,7 +7,7 @@
 // Cache lives in-module — refreshing the page resets it, exactly what the
 // demo expects.
 
-import type { PreparedHandle } from 'react-space-router'
+import type { DataAdapter, PreparedHandle } from 'react-space-router'
 
 type Value = {
   key: string
@@ -97,20 +97,26 @@ export function slowImport<T>(ms: number, factory: () => Promise<T>): () => Prom
   return () => new Promise((resolve) => setTimeout(resolve, ms)).then(factory)
 }
 
-// A demo query definition: turns args into a cache key + latency. This is the
-// `def` half of the router's `[def, args]` descriptors — the stand-in for
-// figbird's `defineQuery`.
+// This demo represents one data-layer request as `[definition, args]`. The
+// router treats that tuple as an opaque value; only this adapter understands
+// its shape and invokes the definition.
 export type QueryDef<A = unknown> = (args: A) => { key: string; latency: number }
+type QueryRequest = readonly [def: QueryDef, args: unknown]
 
-// The `<Router data>` adapter: bridges route `queries` to this data layer.
-// figbird's kit exposes an object of exactly this shape.
+function resolveQuery(request: unknown) {
+  const [def, args] = request as QueryRequest
+  return def(args)
+}
+
+// The `<Router data>` adapter: bridges the demo's opaque query requests to its
+// cache. A real data layer can use any request shape behind the same contract.
 export const data = {
-  prepare(def: QueryDef, args: unknown) {
-    const { key, latency } = def(args)
+  prepare(request: unknown) {
+    const { key, latency } = resolveQuery(request)
     return prepare(key, latency)
   },
-  prefetch(def: QueryDef, args: unknown) {
-    const { key, latency } = def(args)
+  prefetch(request: unknown) {
+    const { key, latency } = resolveQuery(request)
     prefetch(key, latency)
   },
-}
+} satisfies DataAdapter
