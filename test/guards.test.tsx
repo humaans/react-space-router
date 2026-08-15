@@ -187,6 +187,45 @@ test.serial('parent guards run before child redirects during initial preparation
   t.deepEqual(prepared, ['login'])
 })
 
+test.serial('guards reject unmatched destinations before preparation', (t) => {
+  setup()
+  g.location.href = '/private'
+  g.location.pathname = '/private'
+
+  const routes = [{ path: '/private', guard: () => '/missing', component: () => <div>Private</div> }]
+
+  const error = t.throws(() =>
+    renderToString(
+      <Router routes={routes} sync>
+        <Routes />
+      </Router>,
+    ),
+  )
+
+  t.regex(error!.message, /guard targeted unmatched URL/)
+})
+
+test.serial('guard cycles fail before preparation', (t) => {
+  setup()
+  g.location.href = '/a'
+  g.location.pathname = '/a'
+
+  const routes = [
+    { path: '/a', guard: () => '/b' },
+    { path: '/b', guard: () => '/a' },
+  ]
+
+  const error = t.throws(() =>
+    renderToString(
+      <Router routes={routes} sync>
+        <Routes />
+      </Router>,
+    ),
+  )
+
+  t.regex(error!.message, /too many route redirects or guards/)
+})
+
 test.serial('initial static redirects resolve before source preparation', (t) => {
   setup()
   g.location.href = '/old'

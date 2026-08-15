@@ -938,14 +938,10 @@ export function Router({
   )
 
   // Begin a fresh navigation: release the superseded pending preparation,
-  // prepare the transformed destination, and commit that exact prepared
-  // object. URL identity is never used to transfer lease ownership.
+  // prepare the resolved destination, and commit that exact prepared object.
+  // URL identity is never used to transfer lease ownership.
   const beginNavigation = useCallback(
-    (
-      matched: Route<RouteData>,
-      resolvedRoute: ResolvedRoute = resolveRoute(matched),
-      source: NavigationSource = 'navigation',
-    ) => {
+    (resolvedRoute: ResolvedRoute, source: NavigationSource = 'navigation') => {
       const superseded = pendingPrepared.current
       pendingPrepared.current = null
       if (superseded) releaseHandles(superseded.handles)
@@ -957,7 +953,7 @@ export function Router({
       pendingPrepared.current = prepared
       commit(prepared, source)
     },
-    [resolveRoute, commit, data],
+    [commit, data],
   )
 
   const beginUnmatched = useCallback(() => {
@@ -1053,7 +1049,7 @@ export function Router({
         return
       }
 
-      beginNavigation(matched, resolvedRoute, source)
+      beginNavigation(resolvedRoute, source)
     }
     return router.listen(routes, transition)
   }, [router, routes, resolveRoute, commit, beginNavigation, beginUnmatched])
@@ -1069,9 +1065,9 @@ export function Router({
 
     const currentUrl = currRoute?.url ?? committed.current?.route.url ?? router.getUrl()
     const matched = currentUrl ? matcher.match(currentUrl) : undefined
-    if (matched) beginNavigation(matched)
+    if (matched) beginNavigation(resolveRoute(matched))
     else beginUnmatched()
-  }, [routes, router, routerOpts.mode, matcher, beginNavigation, beginUnmatched, currRoute?.url])
+  }, [routes, router, routerOpts.mode, matcher, resolveRoute, beginNavigation, beginUnmatched, currRoute?.url])
 
   useEffect(() => {
     const prepared = pendingPrepared.current
