@@ -52,7 +52,22 @@ Replace async component loading previously performed in `onNavigating` with a ro
 { path: '/issues/:id', resolver: () => import('./pages/IssueDetail') }
 ```
 
-Start route data through `prepare`, `queries`, or your data adapter. `prepare` must return synchronously and must not throw; asynchronous failures should surface through the data layer's Suspense read path.
+Start route data with low-level `prepare(ctx)`, or declare it once with `queries` and provide a `<Router data>` adapter:
+
+```tsx
+const routes = [
+  {
+    path: '/issues/:id',
+    queries: ({ params }) => [issueDetail({ id: Number(params.id) })],
+  },
+]
+
+<Router routes={routes} data={{ prepare, prefetch }}>
+  <Routes />
+</Router>
+```
+
+Each value returned by `queries` is an opaque request forwarded unchanged to `data.prepare(request)` during navigation and `data.prefetch(request)` during speculation. Route and adapter `prepare` functions must return synchronously and must not throw; asynchronous failures should surface through the data layer's Suspense read path.
 
 Use `transformRoute` only when the matched route itself must be rewritten before commit. Use `transformQuery` for query policy applied to app-created destinations.
 

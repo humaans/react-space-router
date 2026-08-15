@@ -636,7 +636,7 @@ const prefetch = usePrefetch()
 prefetch('/issues/42')
 ```
 
-Returns a function that warms a navigation target without navigating: applies `transformQuery`, matches the resulting URL, applies `transformRoute`, preloads matched `resolver` chunks, and calls each matched segment's `prefetch(ctx)`. Fire-and-forget and safe to call repeatedly — the data layer owns freshness. Unmatched URLs are a no-op.
+Returns a function that warms a navigation target without navigating: applies `transformQuery`, matches the resulting URL, applies `transformRoute`, preloads matched `resolver` chunks, calls each matched segment's `prefetch(ctx)`, and forwards its `queries` through `data.prefetch(request)`. Fire-and-forget and safe to call repeatedly — the data layer owns freshness. Unmatched URLs are a no-op.
 
 `<Link prefetch>` uses this internally; call it directly for custom triggers — a form submit that predicts the next screen, viewport logic the router doesn't own:
 
