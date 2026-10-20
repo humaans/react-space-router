@@ -73,6 +73,7 @@
     "react": ">=18"
   },
   "ava": {
+    "workerThreads": false,
     "files": [
       "test/*.test.*"
     ],
